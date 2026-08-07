@@ -6,11 +6,11 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Bearing — A calm command center for meaningful work",
-  description: "Organize tasks by area and project, keep notes with the work, and reset your bearing each week.",
+  title: "Mission Control — Direct the work that matters",
+  description: "Organize, rename, sort, and reorder areas, projects, and tasks from one focused command center.",
   metadataBase: new URL("https://bearing-weekly.scjmoro.chatgpt.site"),
-  openGraph: { title: "Bearing", description: "Make the week answer to what matters.", images: [{ url: "/og.png", width: 1536, height: 1024 }] },
-  twitter: { card: "summary_large_image", title: "Bearing", description: "Make the week answer to what matters.", images: ["/og.png"] },
+  openGraph: { title: "Mission Control", description: "Direct the work that matters.", images: [{ url: "/og.png", width: 1536, height: 1024 }] },
+  twitter: { card: "summary_large_image", title: "Mission Control", description: "Direct the work that matters.", images: ["/og.png"] },
   icons: { icon: "/favicon.svg" },
 };
 

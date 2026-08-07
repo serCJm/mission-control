@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-07T02:51:22Z",
+  "title": "Design System: Mission Control",
+  "extensions": {
+    "colorMeta": {
+      "deep-forest": {
+        "role": "primary",
+        "displayName": "Deep Forest",
+        "canonical": "#173d33",
+        "tonalRamp": ["oklch(15% 0.035 166)", "oklch(25% 0.045 166)", "oklch(35% 0.055 166)", "oklch(45% 0.055 166)", "oklch(58% 0.045 166)", "oklch(72% 0.032 166)", "oklch(85% 0.018 166)", "oklch(95% 0.008 166)"]
+      },
+      "forest-action": {
+        "role": "primary",
+        "displayName": "Forest Action",
+        "canonical": "#245548",
+        "tonalRamp": ["oklch(15% 0.04 166)", "oklch(25% 0.05 166)", "oklch(35% 0.06 166)", "oklch(45% 0.065 166)", "oklch(58% 0.052 166)", "oklch(72% 0.036 166)", "oklch(85% 0.02 166)", "oklch(95% 0.009 166)"]
+      },
+      "signal-lime": {
+        "role": "secondary",
+        "displayName": "Signal Lime",
+        "canonical": "#d8e99e",
+        "tonalRamp": ["oklch(15% 0.045 116)", "oklch(25% 0.07 116)", "oklch(35% 0.09 116)", "oklch(48% 0.105 116)", "oklch(62% 0.11 116)", "oklch(75% 0.1 116)", "oklch(86% 0.08 116)", "oklch(95% 0.035 116)"]
+      },
+      "signal-lime-soft": {
+        "role": "secondary",
+        "displayName": "Soft Signal Field",
+        "canonical": "#edf4d3",
+        "tonalRamp": ["oklch(15% 0.025 116)", "oklch(25% 0.04 116)", "oklch(35% 0.05 116)", "oklch(48% 0.06 116)", "oklch(62% 0.065 116)", "oklch(75% 0.06 116)", "oklch(86% 0.045 116)", "oklch(95% 0.025 116)"]
+      },
+      "warm-paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "#f3f3ed",
+        "tonalRamp": ["oklch(15% 0.005 100)", "oklch(25% 0.006 100)", "oklch(35% 0.007 100)", "oklch(48% 0.008 100)", "oklch(62% 0.009 100)", "oklch(75% 0.01 100)", "oklch(86% 0.011 100)", "oklch(95% 0.012 100)"]
+      },
+      "quiet-panel": {
+        "role": "neutral",
+        "displayName": "Quiet Panel",
+        "canonical": "#fbfbf7",
+        "tonalRamp": ["oklch(15% 0.003 100)", "oklch(25% 0.004 100)", "oklch(35% 0.005 100)", "oklch(48% 0.006 100)", "oklch(62% 0.007 100)", "oklch(75% 0.008 100)", "oklch(86% 0.009 100)", "oklch(95% 0.01 100)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#18211e",
+        "tonalRamp": ["oklch(15% 0.012 166)", "oklch(25% 0.014 166)", "oklch(35% 0.016 166)", "oklch(48% 0.015 166)", "oklch(62% 0.012 166)", "oklch(75% 0.009 166)", "oklch(86% 0.006 166)", "oklch(95% 0.003 166)"]
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#65706b",
+        "tonalRamp": ["oklch(15% 0.01 166)", "oklch(25% 0.012 166)", "oklch(35% 0.014 166)", "oklch(48% 0.015 166)", "oklch(62% 0.013 166)", "oklch(75% 0.01 166)", "oklch(86% 0.006 166)", "oklch(95% 0.003 166)"]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#d9dcd4",
+        "tonalRamp": ["oklch(15% 0.005 120)", "oklch(25% 0.006 120)", "oklch(35% 0.007 120)", "oklch(48% 0.008 120)", "oklch(62% 0.009 120)", "oklch(75% 0.01 120)", "oklch(86% 0.011 120)", "oklch(95% 0.006 120)"]
+      },
+      "danger": {
+        "role": "primary",
+        "displayName": "Danger",
+        "canonical": "#8b3f36",
+        "tonalRamp": ["oklch(15% 0.04 30)", "oklch(25% 0.065 30)", "oklch(35% 0.085 30)", "oklch(48% 0.1 30)", "oklch(62% 0.085 30)", "oklch(75% 0.06 30)", "oklch(86% 0.035 30)", "oklch(95% 0.015 30)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page names and editable area or project headings." },
+      "headline": { "displayName": "Headline", "purpose": "Section headings and prominent panel titles." },
+      "title": { "displayName": "Title", "purpose": "Entity names and primary compact controls." },
+      "body": { "displayName": "Body", "purpose": "General operational copy and task context." },
+      "label": { "displayName": "Instrument Label", "purpose": "Counts, timing, status, and uppercase metadata." }
+    },
+    "shadows": [
+      { "name": "forest-ambient", "value": "0 14px 35px rgba(23,61,51,.14)", "purpose": "Calm lift for the featured day brief." },
+      { "name": "command-mark", "value": "0 8px 20px rgba(4,24,18,.18)", "purpose": "Compact lift for the lime orbit tile." },
+      { "name": "drawer-lift", "value": "16px 0 40px rgba(16,30,25,.22)", "purpose": "Separates the mobile navigation drawer from its scrim." },
+      { "name": "toast-lift", "value": "0 12px 30px rgba(18,31,26,.22)", "purpose": "Temporary confirmation and undo feedback." }
+    ],
+    "motion": [
+      { "name": "drawer", "value": "transform .2s ease-out", "purpose": "Moves the mobile rail into and out of view." },
+      { "name": "disclosure", "value": "transform .16s ease-out", "purpose": "Rotates project-tree disclosure indicators." },
+      { "name": "reveal", "value": "opacity .16s ease-out", "purpose": "Reveals compact row editing affordances." },
+      { "name": "reduced-motion", "value": "none", "purpose": "Disables transitions when prefers-reduced-motion is set." }
+    ],
+    "breakpoints": [
+      { "name": "drawer", "value": "920px" },
+      { "name": "touch-list", "value": "720px" },
+      { "name": "stacked-mobile", "value": "580px" },
+      { "name": "compact-list", "value": "460px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Deep forest action for creation and task capture.",
+      "html": "<button class=\"ds-btn-primary\">Create project</button>",
+      "css": ".ds-btn-primary { border: 0; border-radius: 8px; background: var(--forest, #173d33); color: #fff; padding: 11px 14px; font: 700 11px/1.35 var(--font-geist-sans, Arial, sans-serif); cursor: pointer; transition: background .16s ease-out; } .ds-btn-primary:hover { background: var(--forest-2, #245548); } .ds-btn-primary:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Restrained bordered action for secondary workflow choices.",
+      "html": "<button class=\"ds-btn-secondary\">New project</button>",
+      "css": ".ds-btn-secondary { border: 1px solid #c5cbc2; border-radius: 9px; background: var(--panel, #fbfbf7); color: var(--ink, #18211e); padding: 10px 14px; font: 650 14px/1.35 var(--font-geist-sans, Arial, sans-serif); cursor: pointer; transition: background .16s ease-out, border-color .16s ease-out; } .ds-btn-secondary:hover { background: #fff; border-color: #9faa9f; } .ds-btn-secondary:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-btn-secondary:active { background: #f3f3ed; }"
+    },
+    {
+      "name": "Quick Capture",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Joined input and action for capturing a task from anywhere.",
+      "html": "<form class=\"ds-quick-add\"><label class=\"ds-sr-only\" for=\"ds-task\">Add a task</label><input id=\"ds-task\" placeholder=\"What needs your attention?\"><button>Add task <span>to Inbox</span></button></form>",
+      "css": ".ds-quick-add { width: min(620px, 100%); display: grid; grid-template-columns: minmax(0,1fr) auto; font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-quick-add input { min-width: 0; border: 1px solid #cfd4ca; border-right: 0; background: #fff; color: var(--ink, #18211e); border-radius: 10px 0 0 10px; padding: 11px 14px; } .ds-quick-add input:focus-visible, .ds-quick-add button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-quick-add button { border: 0; border-radius: 0 10px 10px 0; background: var(--forest, #173d33); color: #fff; padding: 0 16px; font-size: 12px; font-weight: 700; cursor: pointer; } .ds-quick-add button:hover { background: var(--forest-2, #245548); } .ds-quick-add button span { color: #d3e5aa; font-weight: 500; } .ds-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }"
+    },
+    {
+      "name": "Active Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-active",
+      "description": "Warm-paper selection state inside the fixed forest rail.",
+      "html": "<nav class=\"ds-nav\"><button>Today <small>5</small></button><button class=\"ds-active\">Inbox <small>3</small></button><button>Weekly review <small>2/5</small></button></nav>",
+      "css": ".ds-nav { display: grid; gap: 4px; width: 220px; padding: 12px; border-radius: 12px; background: var(--forest, #173d33); font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-nav button { display: flex; justify-content: space-between; width: 100%; border: 0; border-radius: 9px; background: transparent; color: #c5d0ca; padding: 10px 11px; text-align: left; cursor: pointer; } .ds-nav button:hover { background: #21493e; color: #fff; } .ds-nav button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-nav button.ds-active { background: #f0f3e7; color: var(--forest, #173d33); font-weight: 680; } .ds-nav small { font: 600 10px/1 var(--font-geist-mono, monospace); opacity: .72; }"
+    },
+    {
+      "name": "Working Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat bordered surface for a task or project work group.",
+      "html": "<section class=\"ds-panel\"><header><h2>Up next</h2><span>3 open</span></header><p>Review the trading journal and name the next test.</p></section>",
+      "css": ".ds-panel { max-width: 520px; border: 1px solid var(--line, #d9dcd4); border-radius: 14px; background: var(--panel, #fbfbf7); color: var(--ink, #18211e); padding: 23px; font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-panel header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; } .ds-panel h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; } .ds-panel header span { color: var(--muted, #65706b); font-size: 10px; } .ds-panel p { margin: 0; border-top: 1px solid #e4e6df; padding-top: 12px; font-size: 12px; } .ds-panel:focus-within { border-color: #aab6ab; }"
+    },
+    {
+      "name": "Hierarchy List Row",
+      "kind": "custom",
+      "description": "Signature entity row with explicit reordering, editing, status, and open controls.",
+      "html": "<div class=\"ds-entity-row\"><div class=\"ds-order\"><button aria-label=\"Drag to change order\"><i></i><i></i><i></i><i></i></button><span><button aria-label=\"Move up\">⌃</button><button aria-label=\"Move down\">⌄</button></span></div><div class=\"ds-copy\"><strong>Trading Practice</strong><small>Execute, review, and improve the process.</small></div><em>4 open</em><button class=\"ds-edit\">Edit</button><button class=\"ds-open\">Open</button></div>",
+      "css": ".ds-entity-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; align-items: center; gap: 10px; max-width: 680px; border-bottom: 1px solid #e2e4dd; padding: 9px 0; color: var(--ink, #18211e); font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-order { display: flex; align-items: center; gap: 3px; } .ds-order > button { width: 26px; height: 30px; display: grid; grid-template-columns: 3px 3px; place-content: center; gap: 3px; border: 0; border-radius: 7px; background: transparent; cursor: grab; } .ds-order i { width: 3px; height: 3px; border-radius: 50%; background: #8e9892; } .ds-order span { display: grid; grid-template-columns: 18px 18px; } .ds-order span button { width: 18px; height: 24px; border: 0; border-radius: 5px; background: transparent; color: #65706b; } .ds-order button:hover, .ds-edit:hover { background: #e9ece4; } .ds-copy { min-width: 0; display: grid; } .ds-copy strong { font-size: 12px; line-height: 1.35; } .ds-copy small { margin-top: 3px; overflow: hidden; color: var(--muted, #65706b); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; } .ds-entity-row em { color: #56645d; font: normal 600 9px/1 var(--font-geist-mono, monospace); white-space: nowrap; } .ds-edit, .ds-open { min-height: 32px; border-radius: 7px; padding: 6px 8px; font-size: 10px; font-weight: 700; cursor: pointer; } .ds-edit { border: 0; background: transparent; color: #365b4d; } .ds-open { border: 1px solid #d5dad1; background: transparent; color: #405d52; } .ds-open:hover { border-color: #c5d49f; background: #edf2e1; } .ds-entity-row button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; }"
+    },
+    {
+      "name": "Command Mark",
+      "kind": "custom",
+      "description": "CSS-built concentric-orbit identity tile and compact two-line wordmark.",
+      "html": "<div class=\"ds-brand\"><span class=\"ds-mark\" aria-hidden=\"true\"><i class=\"ds-orbit ds-one\"></i><i class=\"ds-orbit ds-two\"></i><i class=\"ds-core\"></i><i class=\"ds-signal\"></i></span><span class=\"ds-name\"><strong>Mission</strong><small>Control</small></span></div>",
+      "css": ".ds-brand { display: flex; align-items: center; gap: 11px; width: fit-content; border-radius: 12px; background: var(--forest, #173d33); padding: 12px; color: #fff; font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-mark { position: relative; width: 34px; height: 34px; overflow: hidden; border-radius: 10px; background: var(--lime, #d8e99e); box-shadow: 0 8px 20px rgba(4,24,18,.18); } .ds-orbit { position: absolute; border: 1px solid var(--forest, #173d33); border-radius: 50%; opacity: .55; } .ds-one { width: 24px; height: 24px; left: 5px; top: 5px; } .ds-two { width: 14px; height: 14px; left: 10px; top: 10px; } .ds-core { position: absolute; width: 5px; height: 5px; left: 14.5px; top: 14.5px; border-radius: 50%; background: var(--forest, #173d33); } .ds-signal { position: absolute; width: 4px; height: 4px; right: 5px; top: 8px; border-radius: 50%; background: var(--forest, #173d33); box-shadow: 0 0 0 2px var(--lime, #d8e99e); } .ds-name { display: grid; line-height: .92; } .ds-name strong { font-size: 15px; font-weight: 760; letter-spacing: -.035em; } .ds-name small { margin-top: 4px; color: #b9ccc4; font: 650 8px/1 var(--font-geist-mono, monospace); letter-spacing: .18em; text-transform: uppercase; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Operations Desk",
+    "overview": "Mission Control feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.\n\nThis is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the navigation becomes a drawer or the content stacks.",
+    "keyCharacteristics": [
+      "Warm paper canvas with crisp, nearly white working panels.",
+      "Deep forest navigation and callouts, with signal lime used selectively.",
+      "Hierarchy-first lists with visible Edit, A–Z sorting, drag handles, and move fallbacks.",
+      "Compact Geist and Geist Mono typography, with rare Georgia editorial accents.",
+      "Restrained borders, selective ambient shadow, and generous buffer space.",
+      "A CSS-built concentric-orbit command mark paired with a compact two-line wordmark."
+    ],
+    "rules": [
+      { "name": "The Scarce Signal Rule", "body": "Signal lime marks identity, state, or a consequential cue; it never becomes a broad decorative fill across ordinary work surfaces.", "section": "colors" },
+      { "name": "The Forest Anchor Rule", "body": "Deep forest owns the navigation rail and the strongest operational actions so the application always has a stable visual bearing.", "section": "colors" },
+      { "name": "The Instrument Label Rule", "body": "Use Geist Mono for terse values, timing, counts, and uppercase metadata—not for paragraphs or primary task names.", "section": "typography" },
+      { "name": "The Editorial Pause Rule", "body": "Georgia is a rare reflective accent for principles and prompts; it never replaces Geist as the operating typeface.", "section": "typography" },
+      { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, sorting, and a non-drag move fallback.", "section": "layout" },
+      { "name": "The Buffer Is Structural Rule", "body": "Do not fill every viewport seam. Open paper around the work queue is part of the product's ability to absorb change.", "section": "layout" },
+      { "name": "The Flat-by-Default Rule", "body": "Borders and tonal contrast organize ordinary work; shadows are reserved for overlays, transient feedback, and the single featured brief.", "section": "elevation" },
+      { "name": "The Nested Radius Rule", "body": "Smaller controls sit inside larger surfaces with visibly tighter corners; do not give every object the same radius.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do use Warm Paper for the canvas and Quiet Panel for primary work surfaces.",
+      "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, A–Z sort, drag, and step-move affordances.",
+      "Do preserve the 252px rail on desktop and convert it to a drawer below 920px.",
+      "Do use signal lime sparingly for identity, status, and consequential cues.",
+      "Do keep touch actions at least 44px tall in compact list layouts.",
+      "Do preserve the concentric-orbit mark and compact two-line Mission Control wordmark as the core identity lockup."
+    ],
+    "donts": [
+      "Don't turn every row into an elevated card or add shadow to ordinary panels.",
+      "Don't hide essential reordering or editing behind hover-only behavior on touch layouts.",
+      "Don't introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.",
+      "Don't use Georgia for operational copy, task names, or navigation.",
+      "Don't let responsive layouts remove Open, Edit, sorting, or the non-drag move fallback.",
+      "Don't use signal lime as a large decorative background when forest or a neutral surface can carry the structure."
+    ]
+  }
+}
