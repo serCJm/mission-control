@@ -1,188 +1,289 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type Area = "Trading" | "Personal Growth" | "Family" | "Business / Chores" | "Buffer";
-type Task = { id: number; title: string; area: Area; impact: string; done?: boolean };
-type InboxItem = { id: number; text: string };
+type Area = { id: string; name: string; cue: string };
+type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
+type Task = { id: string; title: string; areaId?: string; projectId?: string; done: boolean; createdAt: number };
+type Selection =
+  | { kind: "today" | "inbox" | "review" }
+  | { kind: "area"; id: string }
+  | { kind: "project"; id: string };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[] };
 
-const areas: { name: Area; window: string; tone: string; detail: string }[] = [
-  { name: "Trading", window: "08:00–11:00", tone: "amber", detail: "Execute + review" },
-  { name: "Personal Growth", window: "11:30–13:00", tone: "blue", detail: "Deep study" },
-  { name: "Family", window: "15:30–18:30", tone: "rose", detail: "Protected time" },
-  { name: "Business / Chores", window: "13:30–15:00", tone: "green", detail: "Keep life moving" },
-  { name: "Buffer", window: "18:30–19:30", tone: "slate", detail: "Absorb the unexpected" },
+const seed: Workspace = {
+  areas: [
+    { id: "trading", name: "Trading", cue: "Protect capital" },
+    { id: "growth", name: "Personal growth", cue: "Compound skill" },
+    { id: "family", name: "Family", cue: "Be present" },
+    { id: "life", name: "Business & life", cue: "Close loops" },
+  ],
+  projects: [
+    { id: "execution", areaId: "trading", name: "A-Setup Execution", outcome: "Execute and review 20 valid trades while following defined risk rules.", notes: "Entries after the second impulse are consistently late.\n\nNext review: add MFE / MAE and compare first-hour results." },
+    { id: "replay", areaId: "trading", name: "Market Replay Lab", outcome: "Complete 12 focused replay sessions and extract one rule refinement from each.", notes: "Replay Tuesday’s failed breakout. Capture the earliest invalidation signal." },
+    { id: "practice", areaId: "growth", name: "Deliberate Practice", outcome: "Finish eight lessons and apply each idea in a focused practice session.", notes: "Short feedback loops beat longer passive study. Define success before the next session." },
+    { id: "weekends", areaId: "family", name: "Present Weekends", outcome: "Plan and protect four device-light family blocks this month.", notes: "One anchor activity leaves enough room for spontaneity. Ask Maya: beach or museum?" },
+    { id: "loops", areaId: "life", name: "Close the Loops", outcome: "Complete nagging administrative tasks in two weekly batches.", notes: "Keep the batch under 45 minutes. Stop when the timer ends." },
+  ],
+  tasks: [
+    { id: "t1", title: "Mark pre-market levels and invalidation", areaId: "trading", projectId: "execution", done: false, createdAt: 1 },
+    { id: "t2", title: "Review yesterday’s AAPL trade", areaId: "trading", projectId: "execution", done: false, createdAt: 2 },
+    { id: "t3", title: "Replay one failed-breakout setup", areaId: "trading", projectId: "replay", done: false, createdAt: 3 },
+    { id: "t4", title: "Complete deliberate-practice lesson", areaId: "growth", projectId: "practice", done: false, createdAt: 4 },
+    { id: "t5", title: "Plan Saturday with Maya", areaId: "family", projectId: "weekends", done: false, createdAt: 5 },
+    { id: "t6", title: "Send Q3 invoice", areaId: "life", projectId: "loops", done: false, createdAt: 6 },
+    { id: "i1", title: "Compare new broker fee schedule", done: false, createdAt: 7 },
+    { id: "i2", title: "Book annual dental appointments", done: false, createdAt: 8 },
+  ],
+};
+
+const reviewSteps = [
+  ["Notice what moved", "Look for evidence of practice, not just outcomes."],
+  ["Process the inbox", "Give every loose task a home or let it go."],
+  ["Prune the irrelevant", "Remove work that no longer earns attention."],
+  ["Choose the week", "Name the few outcomes that would actually matter."],
+  ["Protect some slack", "Leave room for what the plan cannot predict."],
 ];
 
-const seedTasks: Task[] = [
-  { id: 1, title: "Mark pre-market levels and invalidation", area: "Trading", impact: "Protects capital" },
-  { id: 2, title: "Review yesterday’s AAPL trade", area: "Trading", impact: "Builds skill" },
-  { id: 3, title: "Replay one failed-breakout setup", area: "Trading", impact: "Builds skill" },
-  { id: 4, title: "Complete deliberate-practice lesson", area: "Personal Growth", impact: "Compounds skill" },
-  { id: 5, title: "Plan Saturday with Maya", area: "Family", impact: "Strengthens relationships" },
-  { id: 6, title: "Send Q3 invoice", area: "Business / Chores", impact: "Protects cash flow" },
-  { id: 7, title: "Replace hallway light", area: "Business / Chores", impact: "Reduces friction" },
-];
-
-const projects = [
-  { area: "Trading", name: "A-Setup Execution", progress: 12, total: 20, goal: "Execute and thoroughly review 20 valid trades while following defined risk rules.", next: "Tag the next five reviews with entry-quality notes.", accent: "amber" },
-  { area: "Trading", name: "Market Replay Lab", progress: 7, total: 12, goal: "Complete 12 focused replay sessions and extract one rule refinement from each.", next: "Replay Tuesday’s failed breakout.", accent: "amber" },
-  { area: "Personal Growth", name: "Deliberate Practice", progress: 4, total: 8, goal: "Finish eight lessons and apply each idea in a 30-minute practice session.", next: "Lesson 5: tighter feedback loops.", accent: "blue" },
-  { area: "Family", name: "Present Weekends", progress: 3, total: 4, goal: "Plan and protect four device-light family blocks this month.", next: "Agree on Saturday’s outing.", accent: "rose" },
-  { area: "Business / Chores", name: "Close the Loops", progress: 9, total: 14, goal: "Complete 14 nagging administrative tasks in two weekly batches.", next: "Send the Q3 invoice.", accent: "green" },
-];
-
-const noteGroups = [
-  { project: "A-Setup Execution", updated: "Today", references: ["Risk playbook · v3", "Screenshot library · 28 examples"], insights: ["Entries after the second impulse are consistently late.", "A smaller stop is not safer when structure is unclear."], actions: ["Add MFE/MAE to review template", "Compare first-hour vs afternoon results"] },
-  { project: "Deliberate Practice", updated: "Yesterday", references: ["Peak · Anders Ericsson", "Practice log"], insights: ["Short feedback loops beat longer passive study."], actions: ["Define success before the next session"] },
-  { project: "Present Weekends", updated: "Mon", references: ["Shared family ideas list"], insights: ["One anchor activity leaves enough room for spontaneity."], actions: ["Ask Maya to choose between beach and museum"] },
-];
-
-const nav = ["Today", "Projects", "Notes", "Weekly Review"] as const;
-type View = (typeof nav)[number];
+function makeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export default function Home() {
-  const [view, setView] = useState<View>("Today");
-  const [tasks, setTasks] = useState<Task[]>(seedTasks);
-  const [selected, setSelected] = useState<number[]>([1, 2]);
-  const [inbox, setInbox] = useState<InboxItem[]>([
-    { id: 1, text: "Compare new broker fee schedule" },
-    { id: 2, text: "Book annual dental appointments" },
-    { id: 3, text: "Idea: Sunday meal-prep shortcut" },
-  ]);
+  const [workspace, setWorkspace] = useState<Workspace>(seed);
+  const [selection, setSelection] = useState<Selection>({ kind: "today" });
   const [capture, setCapture] = useState("");
-  const [activeArea, setActiveArea] = useState<Area>("Trading");
+  const [newArea, setNewArea] = useState("");
+  const [newProject, setNewProject] = useState("");
+  const [showAreaForm, setShowAreaForm] = useState(false);
+  const [showProjectForm, setShowProjectForm] = useState(false);
   const [reviewed, setReviewed] = useState<number[]>([]);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [toast, setToast] = useState("");
+  const [undoWorkspace, setUndoWorkspace] = useState<Workspace | null>(null);
+  const [expandedAreas, setExpandedAreas] = useState<string[]>(seed.areas.map((area) => area.id));
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("bearing-state-v1");
-      if (saved) {
-        const state = JSON.parse(saved);
-        if (state.tasks) setTasks(state.tasks);
-        if (state.selected) setSelected(state.selected);
-        if (state.inbox) setInbox(state.inbox);
-        if (state.reviewed) setReviewed(state.reviewed);
-      }
-    } catch { /* keep useful defaults */ }
+      const saved = localStorage.getItem("bearing-workspace-v2");
+      if (saved) setWorkspace(JSON.parse(saved));
+    } catch { /* Use the useful starter workspace. */ }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem("bearing-state-v1", JSON.stringify({ tasks, selected, inbox, reviewed }));
-  }, [hydrated, inbox, reviewed, selected, tasks]);
+    if (hydrated) localStorage.setItem("bearing-workspace-v2", JSON.stringify(workspace));
+  }, [hydrated, workspace]);
 
-  const contextTasks = useMemo(() => tasks.filter((task) => task.area === activeArea), [activeArea, tasks]);
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); }, 5000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
-  function toggleSelected(id: number) {
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
+  const activeArea = selection.kind === "area"
+    ? workspace.areas.find((area) => area.id === selection.id)
+    : selection.kind === "project"
+      ? workspace.areas.find((area) => area.id === workspace.projects.find((project) => project.id === selection.id)?.areaId)
+      : undefined;
+  const activeProject = selection.kind === "project" ? workspace.projects.find((project) => project.id === selection.id) : undefined;
+  const inboxTasks = useMemo(() => workspace.tasks.filter((task) => !task.areaId && !task.projectId), [workspace.tasks]);
+  const openTasks = useMemo(() => workspace.tasks.filter((task) => !task.done), [workspace.tasks]);
+  const completeCount = workspace.tasks.filter((task) => task.done).length;
+
+  const captureDestination = activeProject?.name ?? activeArea?.name ?? "Inbox";
+
+  function navigate(next: Selection) {
+    setSelection(next);
+    setMobileMenu(false);
+    setShowProjectForm(false);
   }
 
-  function addInbox(event: React.FormEvent) {
+  function addTask(event: FormEvent) {
     event.preventDefault();
-    const text = capture.trim();
-    if (!text) return;
-    setInbox((items) => [...items, { id: Date.now(), text }]);
+    const title = capture.trim();
+    if (!title) return;
+    const task: Task = {
+      id: makeId("task"), title, done: false, createdAt: Date.now(),
+      ...(activeArea ? { areaId: activeArea.id } : {}),
+      ...(activeProject ? { projectId: activeProject.id } : {}),
+    };
+    setWorkspace((current) => ({ ...current, tasks: [task, ...current.tasks] }));
     setCapture("");
+    setUndoWorkspace(null);
+    setToast(`Added to ${captureDestination}`);
   }
 
-  const completed = tasks.filter((task) => task.done).length;
+  function addArea(event: FormEvent) {
+    event.preventDefault();
+    const name = newArea.trim();
+    if (!name) return;
+    const area = { id: makeId("area"), name, cue: "Define what matters" };
+    setWorkspace((current) => ({ ...current, areas: [...current.areas, area] }));
+    setExpandedAreas((current) => [...current, area.id]);
+    setNewArea("");
+    setShowAreaForm(false);
+    navigate({ kind: "area", id: area.id });
+  }
+
+  function addProject(event: FormEvent) {
+    event.preventDefault();
+    if (!activeArea) return;
+    const name = newProject.trim();
+    if (!name) return;
+    const project = { id: makeId("project"), areaId: activeArea.id, name, outcome: "Define the outcome this project will create.", notes: "" };
+    setWorkspace((current) => ({ ...current, projects: [...current.projects, project] }));
+    setNewProject("");
+    setShowProjectForm(false);
+    navigate({ kind: "project", id: project.id });
+  }
+
+  function removeArea(areaId: string) {
+    const area = workspace.areas.find((item) => item.id === areaId);
+    const projectIds = workspace.projects.filter((project) => project.areaId === areaId).map((project) => project.id);
+    setUndoWorkspace(workspace);
+    setWorkspace((current) => ({
+      areas: current.areas.filter((item) => item.id !== areaId),
+      projects: current.projects.filter((project) => project.areaId !== areaId),
+      tasks: current.tasks.filter((task) => task.areaId !== areaId && !projectIds.includes(task.projectId ?? "")),
+    }));
+    navigate({ kind: "today" });
+    setToast(`${area?.name ?? "Area"} removed`);
+  }
+
+  function removeProject(projectId: string) {
+    const project = workspace.projects.find((item) => item.id === projectId);
+    setUndoWorkspace(workspace);
+    setWorkspace((current) => ({
+      ...current,
+      projects: current.projects.filter((item) => item.id !== projectId),
+      tasks: current.tasks.filter((task) => task.projectId !== projectId),
+    }));
+    navigate(project ? { kind: "area", id: project.areaId } : { kind: "today" });
+    setToast(`${project?.name ?? "Project"} removed`);
+  }
+
+  function toggleTask(id: string) {
+    setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task) }));
+  }
+
+  function moveTask(id: string, value: string) {
+    setUndoWorkspace(null);
+    setWorkspace((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => {
+        if (task.id !== id) return task;
+        if (value === "inbox") return { ...task, areaId: undefined, projectId: undefined };
+        if (value.startsWith("area:")) return { ...task, areaId: value.slice(5), projectId: undefined };
+        const project = current.projects.find((item) => item.id === value.slice(8));
+        return project ? { ...task, areaId: project.areaId, projectId: project.id } : task;
+      }),
+    }));
+    setToast("Task moved");
+  }
+
+  function updateProject(patch: Partial<Project>) {
+    if (!activeProject) return;
+    setWorkspace((current) => ({ ...current, projects: current.projects.map((project) => project.id === activeProject.id ? { ...project, ...patch } : project) }));
+  }
+
+  const contextualTasks = workspace.tasks.filter((task) => activeProject ? task.projectId === activeProject.id : activeArea ? task.areaId === activeArea.id : false);
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <button className="brand" onClick={() => setView("Today")} aria-label="Bearing home">
-          <span className="brand-mark">B</span><span>Bearing</span>
-        </button>
-        <nav aria-label="Main navigation">
-          {nav.map((item) => <button key={item} className={view === item ? "nav-item active" : "nav-item"} onClick={() => setView(item)}><span className="nav-dot" />{item}</button>)}
-        </nav>
-        <div className="sidebar-foot">
-          <div className="week-ring" aria-label={`${completed} tasks completed`}><span>{completed}</span><small>/ 7</small></div>
-          <div><strong>Week 32</strong><span>Steady over busy</span></div>
+      <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
+        <div className="brand-row">
+          <button className="brand" onClick={() => navigate({ kind: "today" })} aria-label="Bearing home"><span className="brand-mark">B</span><span>Bearing</span></button>
+          <button className="close-menu" onClick={() => setMobileMenu(false)}>Close</button>
         </div>
+
+        <nav className="primary-nav" aria-label="Workspace">
+          <button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length}</small></button>
+          <button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button>
+        </nav>
+
+        <div className="tree-head"><span>Areas</span><button onClick={() => setShowAreaForm((value) => !value)}>{showAreaForm ? "Cancel" : "Add area"}</button></div>
+        {showAreaForm && <form className="rail-form" onSubmit={addArea}><input autoFocus value={newArea} onChange={(event) => setNewArea(event.target.value)} placeholder="Area name" aria-label="New area name" /><button>Add</button></form>}
+        <nav className="area-tree" aria-label="Areas and projects">
+          {workspace.areas.map((area) => {
+            const areaProjects = workspace.projects.filter((project) => project.areaId === area.id);
+            const isOpen = expandedAreas.includes(area.id);
+            return <div className="area-branch" key={area.id}>
+              <div className="area-row"><button className={`area-link ${selection.kind === "area" && selection.id === area.id ? "active" : ""}`} onClick={() => navigate({ kind: "area", id: area.id })}><span>{area.name}</span><small>{workspace.tasks.filter((task) => task.areaId === area.id && !task.done).length}</small></button>{areaProjects.length > 0 && <button className={`disclosure ${isOpen ? "expanded" : ""}`} onClick={() => setExpandedAreas((current) => current.includes(area.id) ? current.filter((id) => id !== area.id) : [...current, area.id])} aria-label={`${isOpen ? "Collapse" : "Expand"} ${area.name} projects`} aria-expanded={isOpen}><span /></button>}</div>
+              {isOpen && areaProjects.length > 0 && <div className="project-links">{areaProjects.map((project) => <button key={project.id} className={selection.kind === "project" && selection.id === project.id ? "active" : ""} onClick={() => navigate({ kind: "project", id: project.id })}>{project.name}</button>)}</div>}
+            </div>;
+          })}
+        </nav>
+
+        <button className={`review-link ${selection.kind === "review" ? "active" : ""}`} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{reviewed.length}/5</small></button>
+        <div className="sidebar-foot"><div><strong>Week 32</strong><span>{completeCount} tasks completed</span></div><p>Steady over busy.</p></div>
       </aside>
+
+      {mobileMenu && <button className="scrim" onClick={() => setMobileMenu(false)} aria-label="Close menu" />}
 
       <main>
         <header className="topbar">
-          <div className="mobile-brand"><span className="brand-mark">B</span><strong>Bearing</strong></div>
-          <div className="date-lockup"><span>THU</span><strong>August 6</strong></div>
-          <p className="mantra">Make the week answer to what matters.</p>
-          <button className="capture-shortcut" onClick={() => document.getElementById("capture")?.focus()}>＋ Capture</button>
+          <button className="menu-button" onClick={() => setMobileMenu(true)}>Menu</button>
+          <form className="quick-add" onSubmit={addTask}>
+            <label htmlFor="quick-task" className="sr-only">Add a task to {captureDestination}</label>
+            <input id="quick-task" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder={`Add a task to ${captureDestination}…`} />
+            <button disabled={!capture.trim()}>Add task <span>to {captureDestination}</span></button>
+          </form>
         </header>
 
-        <div className="mobile-nav" aria-label="Mobile navigation">{nav.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item === "Weekly Review" ? "Review" : item}</button>)}</div>
-
-        {view === "Today" && <div className="page today-page">
-          <section className="hero-row">
-            <div><p className="eyebrow">TODAY’S BEARING</p><h1>Choose the work<br />that fits the moment.</h1></div>
-            <div className="focus-stat"><span>2h 45m</span><p>protected focus left</p></div>
-          </section>
-
-          <section className="schedule-card">
-            <div className="section-heading"><div><p className="eyebrow">AREA BLOCKS</p><h2>A broad shape for the day</h2></div><span>Context, not a cage</span></div>
-            <div className="area-strip">
-              {areas.map((area) => <button key={area.name} className={`area-block ${area.tone} ${activeArea === area.name ? "selected" : ""}`} onClick={() => setActiveArea(area.name)}>
-                <span>{area.window}</span><strong>{area.name}</strong><small>{area.detail}</small>
-              </button>)}
-            </div>
-          </section>
-
-          <div className="dashboard-grid">
-            <section className="context-card panel">
-              <div className="section-heading compact"><div><p className="eyebrow">START THE BLOCK</p><h2>{activeArea}</h2></div><span>{selected.length}/3 chosen</span></div>
-              <p className="helper">Choose up to three tasks for the context you have now.</p>
-              <div className="task-list">
-                {contextTasks.length ? contextTasks.map((task) => {
-                  const isChosen = selected.includes(task.id);
-                  return <button key={task.id} className={`task-row ${isChosen ? "chosen" : ""}`} onClick={() => toggleSelected(task.id)} aria-pressed={isChosen}>
-                    <span className="check">{isChosen ? "✓" : ""}</span><span><strong>{task.title}</strong><small>{task.impact}</small></span><span className="impact">{task.area === "Trading" ? "CAPITAL + SKILL" : task.area.toUpperCase()}</span>
-                  </button>;
-                }) : <div className="empty-state">No queued tasks. Keep this block open or use it as buffer.</div>}
-              </div>
-              {selected.length === 3 && <p className="limit-note">Three is enough. Finish or release one before adding another.</p>}
-            </section>
-
-            <section className="inbox-card panel">
-              <div className="section-heading compact"><div><p className="eyebrow">PARKING LOT</p><h2>Inbox</h2></div><span>{inbox.length} unprocessed</span></div>
-              <form onSubmit={addInbox} className="capture-form"><label htmlFor="capture" className="sr-only">Capture a task or idea</label><input id="capture" value={capture} onChange={(e) => setCapture(e.target.value)} placeholder="Capture a stray task or idea…" /><button aria-label="Add to inbox">↵</button></form>
-              <ul className="inbox-list">{inbox.slice(-4).reverse().map((item) => <li key={item.id}><span>↗</span>{item.text}<button onClick={() => setInbox((items) => items.filter((entry) => entry.id !== item.id))} aria-label={`Remove ${item.text}`}>×</button></li>)}</ul>
-              <p className="inbox-hint">Capture now. Clarify during the weekly review.</p>
-            </section>
-          </div>
-
-          <section className="principle-banner"><span>01</span><p><strong>Process over prediction.</strong> Judge the day by whether you followed the practice—not by a fragile outcome you couldn’t fully control.</p><button onClick={() => setView("Projects")}>See active goals →</button></section>
-        </div>}
-
-        {view === "Projects" && <div className="page">
-          <div className="page-title"><div><p className="eyebrow">ACTIVE PROJECTS</p><h1>Keep the field small.</h1><p>One or two projects per area. Every goal describes a process you can control.</p></div><div className="count-card"><strong>5</strong><span>active projects</span><small>across 4 areas</small></div></div>
-          <div className="project-grid">{projects.map((project) => <article className={`project-card ${project.accent}`} key={project.name}>
-            <div className="project-meta"><span>{project.area}</span><span>{project.progress}/{project.total}</span></div><h2>{project.name}</h2><p className="goal-label">CONTROLLABLE GOAL</p><p className="goal-copy">“{project.goal}”</p>
-            <div className="progress-track"><span style={{ width: `${project.progress / project.total * 100}%` }} /></div><div className="next-action"><span>NEXT ACTION</span><strong>{project.next}</strong></div>
-          </article>)}</div>
-          <div className="capacity-rule"><strong>The capacity rule</strong><p>If a new project matters more, pause an existing one first. WIP is a choice.</p><span>1–2 / area</span></div>
-        </div>}
-
-        {view === "Notes" && <div className="page">
-          <div className="page-title"><div><p className="eyebrow">PROJECT MEMORY</p><h1>Notes that lead somewhere.</h1><p>References, insights, and actions stay attached to the work they serve.</p></div></div>
-          <div className="notes-layout"><div className="note-index">{noteGroups.map((group, index) => <button key={group.project} className={index === 0 ? "active" : ""}><span>{String(index + 1).padStart(2, "0")}</span><strong>{group.project}</strong><small>Updated {group.updated}</small></button>)}</div>
-          <article className="note-sheet"><div className="note-head"><div><span>TRADING · PROJECT NOTES</span><h2>{noteGroups[0].project}</h2></div><button aria-label="More note options">•••</button></div>
-            <div className="note-section"><h3>References & resources <span>{noteGroups[0].references.length}</span></h3>{noteGroups[0].references.map((item) => <p key={item} className="resource-link">↗ {item}</p>)}</div>
-            <div className="note-section"><h3>Insights <span>{noteGroups[0].insights.length}</span></h3>{noteGroups[0].insights.map((item) => <blockquote key={item}>{item}</blockquote>)}</div>
-            <div className="note-section"><h3>Next actions <span>{noteGroups[0].actions.length}</span></h3>{noteGroups[0].actions.map((item) => <label className="note-action" key={item}><input type="checkbox" /> <span>{item}</span></label>)}</div>
-          </article></div>
-        </div>}
-
-        {view === "Weekly Review" && <div className="page review-page">
-          <div className="page-title"><div><p className="eyebrow">WEEKLY REVIEW · 20 MIN</p><h1>Clear the deck.<br />Reset your bearing.</h1><p>Make the system lighter before you ask it to carry another week.</p></div><div className="review-progress"><strong>{reviewed.length}/5</strong><span>review steps</span></div></div>
-          <div className="review-grid"><section className="review-list">{[
-            ["Assess progress", "Look for evidence of practice, not just outcomes."], ["Process the inbox", `Clarify or discard ${inbox.length} parked items.`], ["Prune the irrelevant", "Remove tasks and notes that no longer earn attention."], ["Adjust priorities", "Weigh consequences for capital, skills, and relationships."], ["Protect buffer", "Leave capacity for what the plan cannot predict."],
-          ].map(([title, copy], index) => <button key={title} className={reviewed.includes(index) ? "complete" : ""} onClick={() => setReviewed((items) => items.includes(index) ? items.filter((i) => i !== index) : [...items, index])}><span className="review-check">{reviewed.includes(index) ? "✓" : index + 1}</span><span><strong>{title}</strong><small>{copy}</small></span><span>→</span></button>)}</section>
-          <aside className="priority-card"><p className="eyebrow">PRIORITY FILTER</p><h2>If this slips,<br />what changes?</h2><div className="stakes"><span><i className="capital" />Capital<strong>High</strong></span><span><i className="skills" />Skills<strong>High</strong></span><span><i className="relations" />Relationships<strong>Protected</strong></span><span><i className="noise" />Everything else<strong>Flexible</strong></span></div><p>Consequences create priority. Urgency alone does not.</p></aside></div>
-          {reviewed.length === 5 && <div className="review-complete"><span>✓</span><div><strong>The deck is clear.</strong><p>You’ve made room for the week to bend without breaking.</p></div><button onClick={() => { setReviewed([]); setView("Today"); }}>Begin the week →</button></div>}
-        </div>}
+        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} navigate={navigate} />}
+        {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} moveTask={moveTask} />}
+        {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} removeArea={removeArea} />}
+        {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} updateProject={updateProject} removeProject={removeProject} />}
+        {selection.kind === "review" && <Review reviewed={reviewed} setReviewed={setReviewed} inboxCount={inboxTasks.length} />}
       </main>
+      {toast && <div className="toast" role="status"><span>{toast}</span>{undoWorkspace && <button onClick={() => { setWorkspace(undoWorkspace); setUndoWorkspace(null); setToast("Restored"); }}>Undo removal</button>}</div>}
     </div>
   );
+}
+
+function TaskRows({ tasks, toggleTask, empty }: { tasks: Task[]; toggleTask: (id: string) => void; empty: string }) {
+  if (!tasks.length) return <div className="empty-state"><strong>Nothing waiting here.</strong><p>{empty}</p></div>;
+  return <div className="task-list">{tasks.map((task) => <label className={`task-row ${task.done ? "done" : ""}`} key={task.id}><input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} /><span>{task.title}</span></label>)}</div>;
+}
+
+function Today({ workspace, inboxTasks, toggleTask, navigate }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; navigate: (next: Selection) => void }) {
+  const nextTasks = workspace.tasks.filter((task) => task.areaId && !task.done).slice(0, 5);
+  return <div className="page today-page">
+    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p></div><div className="date"><span>Thursday</span><strong>August 6</strong></div></div>
+    <div className="today-grid">
+      <section className="work-queue"><div className="section-title"><h2>Up next</h2><span>{nextTasks.length} open</span></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} empty="Add a task above, or leave the space open." /></section>
+      <aside className="day-brief"><blockquote>Process over prediction.</blockquote><p>Judge the day by whether you followed the practice—not by a fragile outcome you could not fully control.</p><div className="brief-rule"><strong>2h 45m</strong><span>protected focus remains</span></div></aside>
+    </div>
+    <section className="area-overview"><div className="section-title"><h2>Areas</h2><span>Work in its proper context</span></div><div className="area-table">{workspace.areas.map((area) => <button key={area.id} onClick={() => navigate({ kind: "area", id: area.id })}><span className="area-initial">{area.name.charAt(0)}</span><span><strong>{area.name}</strong><small>{area.cue}</small></span><span className="area-count">{workspace.tasks.filter((task) => task.areaId === area.id && !task.done).length} open</span></button>)}</div></section>
+    {inboxTasks.length > 0 && <button className="inbox-callout" onClick={() => navigate({ kind: "inbox" })}><span><strong>{inboxTasks.length} items need a home</strong><small>Process your inbox while context is fresh.</small></span><span>Open inbox</span></button>}
+  </div>;
+}
+
+function Inbox({ workspace, tasks, toggleTask, moveTask }: { workspace: Workspace; tasks: Task[]; toggleTask: (id: string) => void; moveTask: (id: string, value: string) => void }) {
+  return <div className="page"><div className="page-heading"><div><h1>Inbox</h1><p>Capture first. Give each item a proper home when you are ready.</p></div><div className="quiet-count">{tasks.length}<span>unprocessed</span></div></div>
+    <section className="inbox-workspace">{tasks.length ? tasks.map((task) => <div className="inbox-row" key={task.id}><label><input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} /><span>{task.title}</span></label><select defaultValue="inbox" onChange={(event) => moveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="inbox">Move to…</option>{workspace.areas.map((area) => <optgroup label={area.name} key={area.id}><option value={`area:${area.id}`}>{area.name} · no project</option>{workspace.projects.filter((project) => project.areaId === area.id).map((project) => <option key={project.id} value={`project:${project.id}`}>{project.name}</option>)}</optgroup>)}</select></div>) : <div className="empty-state spacious"><strong>Your inbox is clear.</strong><p>New tasks added outside an area or project will land here.</p></div>}</section>
+  </div>;
+}
+
+function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, newProject, setNewProject, addProject, navigate, toggleTask, removeArea }: { area: Area; projects: Project[]; tasks: Task[]; showProjectForm: boolean; setShowProjectForm: (value: boolean) => void; newProject: string; setNewProject: (value: string) => void; addProject: (event: FormEvent) => void; navigate: (next: Selection) => void; toggleTask: (id: string) => void; removeArea: (id: string) => void }) {
+  return <div className="page"><div className="breadcrumb">Area</div><div className="page-heading"><div><h1>{area.name}</h1><p>{area.cue}. Tasks added above will come directly here.</p></div><button className="secondary-button" onClick={() => setShowProjectForm(!showProjectForm)}>{showProjectForm ? "Cancel" : "New project"}</button></div>
+    {showProjectForm && <form className="inline-create" onSubmit={addProject}><div><strong>Create a project in {area.name}</strong><span>Name a concrete body of work, not an ongoing responsibility.</span></div><input autoFocus value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Project name" aria-label="Project name" /><button disabled={!newProject.trim()}>Create project</button></form>}
+    <section className="project-section"><div className="section-title"><h2>Projects</h2><span>{projects.length} active</span></div>{projects.length ? <div className="project-list">{projects.map((project) => <button key={project.id} onClick={() => navigate({ kind: "project", id: project.id })}><span><strong>{project.name}</strong><small>{project.outcome}</small></span><span>{tasks.filter((task) => task.projectId === project.id && !task.done).length} tasks</span></button>)}</div> : <div className="empty-state"><strong>No projects yet.</strong><p>Create one when this area has a finite outcome to move.</p></div>}</section>
+    <section className="loose-tasks"><div className="section-title"><h2>Area tasks</h2><span>Not assigned to a project</span></div><TaskRows tasks={tasks.filter((task) => !task.projectId)} toggleTask={toggleTask} empty="Tasks added here without a project will appear in this list." /></section>
+    <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its projects, tasks, and project notes from this device.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
+  </div>;
+}
+
+function ProjectView({ project, area, tasks, toggleTask, updateProject, removeProject }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; updateProject: (patch: Partial<Project>) => void; removeProject: (id: string) => void }) {
+  return <div className="page"><div className="breadcrumb">{area.name} / Project</div><div className="page-heading project-heading"><div><h1>{project.name}</h1><textarea className="outcome-editor" value={project.outcome} onChange={(event) => updateProject({ outcome: event.target.value })} aria-label="Project outcome" /></div><div className="quiet-count">{tasks.filter((task) => !task.done).length}<span>open tasks</span></div></div>
+    <div className="project-workspace"><section className="project-tasks"><div className="section-title"><h2>Tasks</h2><span>Add above to file here automatically</span></div><TaskRows tasks={tasks} toggleTask={toggleTask} empty="Add the next concrete action using the field above." /></section>
+    <section className="project-notes"><div className="section-title"><h2>Project notes</h2><span>Saved on this device</span></div><textarea value={project.notes} onChange={(event) => updateProject({ notes: event.target.value })} placeholder="Keep decisions, references, observations, and useful context here…" aria-label={`Notes for ${project.name}`} /><p>Notes stay with this project—never in a disconnected pile.</p></section></div>
+    <div className="danger-zone"><div><strong>Remove this project</strong><p>This also removes its tasks and notes from this device.</p></div><button onClick={() => removeProject(project.id)}>Remove project</button></div>
+  </div>;
+}
+
+function Review({ reviewed, setReviewed, inboxCount }: { reviewed: number[]; setReviewed: React.Dispatch<React.SetStateAction<number[]>>; inboxCount: number }) {
+  return <div className="page"><div className="page-heading"><div><h1>Reset your bearing.</h1><p>Make the system lighter before asking it to carry another week.</p></div><div className="quiet-count">{reviewed.length}/5<span>steps complete</span></div></div><div className="review-layout"><section className="review-steps">{reviewSteps.map(([title, copy], index) => <label className={reviewed.includes(index) ? "complete" : ""} key={title}><input type="checkbox" checked={reviewed.includes(index)} onChange={() => setReviewed((items) => items.includes(index) ? items.filter((item) => item !== index) : [...items, index])} /><span><strong>{title}</strong><small>{index === 1 ? `${inboxCount} inbox items are waiting.` : copy}</small></span></label>)}</section><aside className="review-note"><span>Priority filter</span><h2>If this slips, what changes?</h2><dl><div><dt>Capital</dt><dd>Protect</dd></div><div><dt>Skills</dt><dd>Compound</dd></div><div><dt>Relationships</dt><dd>Be present</dd></div><div><dt>Everything else</dt><dd>Stay flexible</dd></div></dl><p>Consequences create priority. Urgency alone does not.</p></aside></div></div>;
 }
