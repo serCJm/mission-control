@@ -78,7 +78,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); }, 5000);
+    const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); }, 8000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
