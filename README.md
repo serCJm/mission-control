@@ -6,14 +6,29 @@ with Cloudflare D1 and Drizzle support.
 
 ## Prerequisites
 
-- Node.js `>=22.13.0`
+- Docker with Docker Compose
 
 ## Quick Start
 
 ```bash
-npm install
-npm run dev
-npm run build
+docker-compose up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000). The source directory is
+mounted into the container, while project dependencies stay in a Docker volume.
+The container refreshes that volume automatically whenever either package
+manifest changes.
+If port 3000 is already in use, choose another host port with
+`APP_PORT=3001 docker-compose up`.
+
+Run project tooling through the container; the common commands are listed under
+[Useful Commands](#useful-commands).
+
+To add or update a dependency, run npm through the container so it updates both
+`package.json` and `package-lock.json` without installing anything on the host:
+
+```bash
+docker-compose run --rm app npm install <package>
 ```
 
 This project does not use `wrangler.jsonc`.
@@ -93,10 +108,12 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+- `docker-compose up`: start local development
+- `docker-compose run --rm app npm run build`: verify the vinext build output
+- `docker-compose run --rm app npm test`: build and run the test suite
+- `docker-compose run --rm app npm run lint`: run ESLint
+- `docker-compose run --rm app npm run db:generate`: generate Drizzle migrations
+  after schema changes
 
 ## Learn More
 

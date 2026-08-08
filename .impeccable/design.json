@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-07T02:51:22Z",
+  "generatedAt": "2026-08-08T16:44:10Z",
   "title": "Design System: Mission Control",
   "extensions": {
     "colorMeta": {
@@ -153,7 +153,7 @@
     "keyCharacteristics": [
       "Warm paper canvas with crisp, nearly white working panels.",
       "Deep forest navigation and callouts, with signal lime used selectively.",
-      "Hierarchy-first lists with visible Edit, A–Z sorting, drag handles, and move fallbacks.",
+      "Hierarchy-first lists with visible Edit, saved task sort modes, due dates, priorities, and custom-order tools where they add value.",
       "Compact Geist and Geist Mono typography, with rare Georgia editorial accents.",
       "Restrained borders, selective ambient shadow, and generous buffer space.",
       "A CSS-built concentric-orbit command mark paired with a compact two-line wordmark."
@@ -163,14 +163,14 @@
       { "name": "The Forest Anchor Rule", "body": "Deep forest owns the navigation rail and the strongest operational actions so the application always has a stable visual bearing.", "section": "colors" },
       { "name": "The Instrument Label Rule", "body": "Use Geist Mono for terse values, timing, counts, and uppercase metadata—not for paragraphs or primary task names.", "section": "typography" },
       { "name": "The Editorial Pause Rule", "body": "Georgia is a rare reflective accent for principles and prompts; it never replaces Geist as the operating typeface.", "section": "typography" },
-      { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, sorting, and a non-drag move fallback.", "section": "layout" },
+      { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Custom-order move controls.", "section": "layout" },
       { "name": "The Buffer Is Structural Rule", "body": "Do not fill every viewport seam. Open paper around the work queue is part of the product's ability to absorb change.", "section": "layout" },
       { "name": "The Flat-by-Default Rule", "body": "Borders and tonal contrast organize ordinary work; shadows are reserved for overlays, transient feedback, and the single featured brief.", "section": "elevation" },
       { "name": "The Nested Radius Rule", "body": "Smaller controls sit inside larger surfaces with visibly tighter corners; do not give every object the same radius.", "section": "shapes" }
     ],
     "dos": [
       "Do use Warm Paper for the canvas and Quiet Panel for primary work surfaces.",
-      "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, A–Z sort, drag, and step-move affordances.",
+      "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.",
       "Do preserve the 252px rail on desktop and convert it to a drawer below 920px.",
       "Do use signal lime sparingly for identity, status, and consequential cues.",
       "Do keep touch actions at least 44px tall in compact list layouts.",
@@ -178,10 +178,10 @@
     ],
     "donts": [
       "Don't turn every row into an elevated card or add shadow to ordinary panels.",
-      "Don't hide essential reordering or editing behind hover-only behavior on touch layouts.",
+      "Don't show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.",
       "Don't introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.",
       "Don't use Georgia for operational copy, task names, or navigation.",
-      "Don't let responsive layouts remove Open, Edit, sorting, or the non-drag move fallback.",
+      "Don't let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Custom-order move controls.",
       "Don't use signal lime as a large decorative background when forest or a neutral surface can carry the structure."
     ]
   }

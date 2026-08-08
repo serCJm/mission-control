@@ -1,0 +1,14 @@
+.git
+.next
+.vinext
+.wrangler
+dist
+node_modules
+output
+outputs
+work
+.playwright-cli
+coverage
+.env*
+npm-debug.log*
+.DS_Store
