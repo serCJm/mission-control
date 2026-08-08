@@ -100,7 +100,7 @@ This is an Operate-mode system. Brand character lives in the concentric-orbit co
 
 - Warm paper canvas with crisp, nearly white working panels.
 - Deep forest navigation and callouts, with signal lime used selectively.
-- Hierarchy-first lists with visible Edit, A–Z sorting, drag handles, and move fallbacks.
+- Hierarchy-first lists with visible Edit, saved task sort modes, due dates, priorities, and custom-order tools where they add value.
 - Compact Geist and Geist Mono typography, with rare Georgia editorial accents.
 - Restrained borders, selective ambient shadow, and generous buffer space.
 - A CSS-built concentric-orbit command mark paired with a compact two-line wordmark.
@@ -160,9 +160,9 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 Desktop uses a fixed 252px forest rail and a fluid content column. The sticky 72px top bar holds a centered quick-capture control, while page content is capped at 1180px with fluid horizontal padding from 24px to 60px. Primary work areas use two-column grids with 16px gaps; panels usually carry 23px internal padding and 14px corners.
 
-At 920px and below, the rail becomes an off-canvas drawer with a dimmed scrim, the menu control appears, and Today, project, and review grids stack. At 720px and below, list utilities remove explanatory microcopy, Edit and move affordances gain touch-sized targets, and list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and keeps explicit move controls available alongside drag handles.
+At 920px and below, the rail becomes an off-canvas drawer with a dimmed scrim, the menu control appears, and Today, project, and review grids stack. At 720px and below, task sort, due-date, priority, Edit, and move controls gain touch-sized targets while list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and stacks task metadata into a readable single column.
 
-**The Actions Survive Rule.** Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, sorting, and a non-drag move fallback.
+**The Actions Survive Rule.** Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Custom-order move controls.
 
 **The Buffer Is Structural Rule.** Do not fill every viewport seam. Open paper around the work queue is part of the product's ability to absorb change.
 
@@ -212,11 +212,11 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The deep forest rail uses muted cool-green labels at rest, a darker forest hover field, and a warm near-white active field with forest text. The two-line Mission Control wordmark and orbit mark anchor the top. Below 920px, navigation becomes a left drawer with a scrim and an explicit Close action.
+The deep forest rail uses muted cool-green labels at rest, a darker forest hover field, and a warm near-white active field with forest text. Areas and the projects nested within each area render alphabetically so navigation stays predictable without drag handles. The two-line Mission Control wordmark and orbit mark anchor the top. Below 920px, navigation becomes a left drawer with a scrim and an explicit Close action.
 
 ### Hierarchy Lists
 
-Rows are the core operating pattern. Each row prioritizes the entity name, retains concise metadata, and exposes Edit, Open, drag, step-move, and A–Z sorting controls. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, controls become at least 44px tall and secondary metadata yields before actions do.
+Rows are the core operating pattern. Entity rows prioritize the name and expose Edit, Open, and Custom-order controls in the main workspace. Task rows pair the title with optional due date and priority controls, plus saved Custom, A–Z, Due date, and Priority views. Drag and step-move controls appear only in Custom task order. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, editable controls become at least 44px tall and secondary metadata yields before actions do.
 
 ### Command Mark
 
@@ -227,7 +227,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 ### Do:
 
 - **Do** use Warm Paper for the canvas and Quiet Panel for primary work surfaces.
-- **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, A–Z sort, drag, and step-move affordances.
+- **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.
 - **Do** preserve the 252px rail on desktop and convert it to a drawer below 920px.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
@@ -236,8 +236,8 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 ### Don't:
 
 - **Don't** turn every row into an elevated card or add shadow to ordinary panels.
-- **Don't** hide essential reordering or editing behind hover-only behavior on touch layouts.
+- **Don't** show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.
 - **Don't** introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.
 - **Don't** use Georgia for operational copy, task names, or navigation.
-- **Don't** let responsive layouts remove Open, Edit, sorting, or the non-drag move fallback.
+- **Don't** let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Custom-order move controls.
 - **Don't** use signal lime as a large decorative background when forest or a neutral surface can carry the structure.
