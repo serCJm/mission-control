@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 
 type Area = { id: string; name: string; cue: string };
@@ -12,7 +12,9 @@ type Selection =
   | { kind: "today" | "inbox" | "review" }
   | { kind: "area"; id: string }
   | { kind: "project"; id: string };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[] };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[] };
+type SyncState = "loading" | "saving" | "saved" | "error";
+type Account = { displayName: string; email: string };
 type EntityKind = "area" | "project" | "task";
 type SortPreferences = Record<string, TaskSort>;
 type DragItem = { kind: EntityKind; id: string; scope: string };
@@ -49,8 +51,10 @@ const seed: Workspace = {
     { id: "i1", title: "Compare new broker fee schedule", done: false, createdAt: 7 },
     { id: "i2", title: "Book annual dental appointments", done: false, createdAt: 8, dueDate: "2026-08-15", priority: "low" },
   ],
+  reviewed: [],
 };
 
+const WORKSPACE_STORAGE_KEY = "mission-control-workspace-v1";
 const TASK_SORT_STORAGE_KEY = "mission-control-task-sorts-v1";
 const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
@@ -64,6 +68,13 @@ const reviewSteps = [
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeClientWorkspace(value: unknown): Workspace | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Workspace>;
+  if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks)) return null;
+  return { areas: candidate.areas, projects: candidate.projects, tasks: candidate.tasks, reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [] };
 }
 
 function reorderScoped<T extends { id: string }>(items: T[], scopeIds: string[], sourceId: string, targetId: string) {
@@ -84,6 +95,35 @@ function taskScope(task: Task) {
   return "inbox";
 }
 
+const PROJECT_TIME_ZONE = "America/Los_Angeles";
+
+function projectDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: value("year"), month: value("month"), day: value("day") };
+}
+
+function weekNumber(date: Date) {
+  const parts = projectDateParts(date);
+  const utc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  utc.setUTCDate(utc.getUTCDate() + 4 - (utc.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  return Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function dueLabel(value?: string) {
+  if (!value) return "Add timing";
+  const [year, month, day] = value.split("-").map(Number);
+  const today = projectDateParts(new Date());
+  const due = Date.UTC(year, month - 1, day);
+  const current = Date.UTC(today.year, today.month - 1, today.day);
+  const distance = Math.round((due - current) / 86400000);
+  if (distance < 0) return "Overdue";
+  if (distance === 0) return "Due today";
+  if (distance === 1) return "Due tomorrow";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(due));
+}
+
 export default function Home() {
   const [workspace, setWorkspace] = useState<Workspace>(seed);
   const [selection, setSelection] = useState<Selection>({ kind: "today" });
@@ -92,7 +132,6 @@ export default function Home() {
   const [newProject, setNewProject] = useState("");
   const [showAreaForm, setShowAreaForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
-  const [reviewed, setReviewed] = useState<number[]>([]);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [toast, setToast] = useState("");
   const [undoWorkspace, setUndoWorkspace] = useState<Workspace | null>(null);
@@ -100,27 +139,129 @@ export default function Home() {
   const [dragged, setDragged] = useState<DragItem | null>(null);
   const [taskSorts, setTaskSorts] = useState<SortPreferences>({});
   const [hydrated, setHydrated] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>("loading");
+  const [account, setAccount] = useState<Account | null>(null);
+  const lastSyncedWorkspace = useRef("");
+  const lastServerUpdatedAt = useRef(0);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    let active = true;
+
+    async function loadWorkspace() {
+      let localWorkspace = seed;
       try {
-        const saved = localStorage.getItem("mission-control-workspace-v1") ?? localStorage.getItem("bearing-workspace-v2");
-        if (saved) setWorkspace(JSON.parse(saved));
+        const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem("bearing-workspace-v2");
+        const parsed = saved ? normalizeClientWorkspace(JSON.parse(saved) as unknown) : null;
+        if (parsed) localWorkspace = parsed;
         const savedSorts = localStorage.getItem(TASK_SORT_STORAGE_KEY);
         if (savedSorts) {
           const parsed = JSON.parse(savedSorts) as Record<string, unknown>;
           const validSorts = Object.fromEntries(Object.entries(parsed).filter(([, value]) => isTaskSort(value))) as SortPreferences;
           setTaskSorts(validSorts);
         }
-      } catch { /* Use the useful starter workspace. */ }
+      } catch { /* Fall back to the starter workspace. */ }
       setHydrated(true);
-    });
-    return () => window.cancelAnimationFrame(frame);
+
+      try {
+        const response = await fetch("/api/workspace", { cache: "no-store" });
+        if (response.status === 401) {
+          window.location.assign("/signin-with-chatgpt?return_to=%2F");
+          return;
+        }
+        if (!response.ok) throw new Error("Unable to load the synced workspace.");
+        const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; user: Account };
+        if (!active) return;
+
+        const nextWorkspace = normalizeClientWorkspace(payload.workspace) ?? localWorkspace;
+        if (!payload.workspace) {
+          const createResponse = await fetch("/api/workspace", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ workspace: nextWorkspace }),
+          });
+          if (!createResponse.ok) throw new Error("Unable to create the synced workspace.");
+          const created = await createResponse.json() as { updatedAt: number };
+          payload.updatedAt = created.updatedAt;
+        }
+        if (!active) return;
+
+        const serialized = JSON.stringify(nextWorkspace);
+        lastSyncedWorkspace.current = serialized;
+        lastServerUpdatedAt.current = payload.updatedAt;
+        setWorkspace(nextWorkspace);
+        setAccount(payload.user);
+        setCloudReady(true);
+        setSyncState("saved");
+        localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+        localStorage.removeItem("bearing-workspace-v2");
+      } catch {
+        if (!active) return;
+        setWorkspace(localWorkspace);
+        setSyncState("error");
+      }
+    }
+
+    void loadWorkspace();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (hydrated) localStorage.setItem("mission-control-workspace-v1", JSON.stringify(workspace));
-  }, [hydrated, workspace]);
+    if (!cloudReady) return;
+    const serialized = JSON.stringify(workspace);
+    if (serialized === lastSyncedWorkspace.current) return;
+
+    setSyncState("saving");
+    const timeout = window.setTimeout(() => {
+      saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
+        const response = await fetch("/api/workspace", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ workspace }),
+        });
+        if (response.status === 401) {
+          window.location.assign("/signin-with-chatgpt?return_to=%2F");
+          return;
+        }
+        if (!response.ok) throw new Error("Unable to save the workspace.");
+        const payload = await response.json() as { updatedAt: number };
+        lastSyncedWorkspace.current = serialized;
+        lastServerUpdatedAt.current = payload.updatedAt;
+        setSyncState("saved");
+      }).catch(() => setSyncState("error"));
+    }, 500);
+
+    return () => window.clearTimeout(timeout);
+  }, [cloudReady, workspace]);
+
+  useEffect(() => {
+    if (!cloudReady) return;
+    let active = true;
+
+    async function refreshFromCloud() {
+      if (document.visibilityState !== "visible" || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
+      try {
+        const response = await fetch("/api/workspace", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json() as { workspace: Workspace | null; updatedAt: number };
+        const synced = normalizeClientWorkspace(payload.workspace);
+        if (!active || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
+        lastServerUpdatedAt.current = payload.updatedAt;
+        lastSyncedWorkspace.current = JSON.stringify(synced);
+        setWorkspace(synced);
+        setToast("Updated from another device");
+      } catch { /* Keep the last successfully synced workspace. */ }
+    }
+
+    window.addEventListener("focus", refreshFromCloud);
+    document.addEventListener("visibilitychange", refreshFromCloud);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshFromCloud);
+      document.removeEventListener("visibilitychange", refreshFromCloud);
+    };
+  }, [cloudReady, workspace]);
 
   useEffect(() => {
     if (hydrated) localStorage.setItem(TASK_SORT_STORAGE_KEY, JSON.stringify(taskSorts));
@@ -145,11 +286,22 @@ export default function Home() {
   const sidebarAreas = useMemo(() => [...workspace.areas].sort((a, b) => nameCollator.compare(a.name, b.name)), [workspace.areas]);
 
   function taskSortFor(scope: string): TaskSort {
-    return taskSorts[scope] ?? "custom";
+    return taskSorts[scope] ?? (scope === "today" ? "priority" : "custom");
   }
 
   function setTaskSort(scope: string, sort: TaskSort) {
     setTaskSorts((current) => ({ ...current, [scope]: sort }));
+  }
+
+  function retrySync() {
+    window.location.reload();
+  }
+
+  function toggleReviewed(index: number) {
+    setWorkspace((current) => ({
+      ...current,
+      reviewed: current.reviewed.includes(index) ? current.reviewed.filter((item) => item !== index) : [...current.reviewed, index],
+    }));
   }
 
   function navigate(next: Selection) {
@@ -327,6 +479,7 @@ export default function Home() {
 
   return (
     <div className="app-shell">
+      {!cloudReady && <div className="sync-gate" role="status"><LogoMark /><h1>{syncState === "loading" ? "Loading your workspace…" : "Your workspace could not sync."}</h1><p>{syncState === "loading" ? "Connecting to your saved Mission Control data." : "Your device data is still untouched. Try the connection again."}</p>{syncState === "error" && <button onClick={retrySync}>Try again</button>}</div>}
       <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
         <div className="brand-row">
           <button className="brand" onClick={() => navigate({ kind: "today" })} aria-label="Mission Control home">
@@ -356,8 +509,8 @@ export default function Home() {
           })}
         </nav>
 
-        <button className={`review-link ${selection.kind === "review" ? "active" : ""}`} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{reviewed.length}/5</small></button>
-        <div className="sidebar-foot"><div><strong>Week 32</strong><span>{completeCount} tasks completed</span></div><p>Steady over busy.</p></div>
+        <button className={`review-link ${selection.kind === "review" ? "active" : ""}`} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{workspace.reviewed.length}/5</small></button>
+        <div className="sidebar-foot"><div><strong>Week {weekNumber(new Date())}</strong><span>{completeCount} tasks completed</span></div><p>Steady over busy.</p></div>
       </aside>
 
       {mobileMenu && <button className="scrim" onClick={() => setMobileMenu(false)} aria-label="Close menu" />}
@@ -370,13 +523,14 @@ export default function Home() {
             <input id="quick-task" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder={`Add a task to ${captureDestination}…`} />
             <button disabled={!capture.trim()}>Add task <span>to {captureDestination}</span></button>
           </form>
+          <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
         </header>
 
         {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} renameArea={renameArea} navigate={navigate} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} renameArea={renameArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} removeProject={removeProject} />}
-        {selection.kind === "review" && <Review reviewed={reviewed} setReviewed={setReviewed} inboxCount={inboxTasks.length} />}
+        {selection.kind === "review" && <Review reviewed={workspace.reviewed} toggleReviewed={toggleReviewed} inboxCount={inboxTasks.length} />}
       </main>
       {toast && <div className="toast" role="status"><span>{toast}</span>{undoWorkspace && <button onClick={() => { setWorkspace(undoWorkspace); setUndoWorkspace(null); setToast("Restored"); }}>Undo removal</button>}</div>}
     </div>
@@ -423,9 +577,17 @@ function TaskSortControl({ value, onChange }: { value: TaskSort; onChange: (sort
 }
 
 function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void }) {
-  return <div className="task-details">
-    <label className="task-field"><span>Due</span><input type="date" value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} /></label>
-    <label className="task-field"><span>Priority</span><select value={task.priority ?? ""} onChange={(event) => updateTask(task.id, { priority: (event.target.value || undefined) as TaskPriority | undefined })} aria-label={`Priority for ${task.title}`}><option value="">None</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+  const [editing, setEditing] = useState(false);
+  const priority = task.priority ? `${task.priority.charAt(0).toUpperCase()}${task.priority.slice(1)} priority` : "Set priority";
+  return <div className="task-planning">
+    <button className={`task-plan-trigger ${task.priority ? `priority-${task.priority}` : ""}`} onClick={() => setEditing((value) => !value)} aria-expanded={editing}>
+      <span>{dueLabel(task.dueDate)}</span><span>{priority}</span><strong>{editing ? "Close" : "Plan"}</strong>
+    </button>
+    <div className="task-details" hidden={!editing}>
+      <label className="task-field"><span>Due</span><input type="date" value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} /></label>
+      <label className="task-field"><span>Priority</span><select value={task.priority ?? ""} onChange={(event) => updateTask(task.id, { priority: (event.target.value || undefined) as TaskPriority | undefined })} aria-label={`Priority for ${task.title}`}><option value="">None</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+      <button className="task-plan-done" onClick={() => setEditing(false)}>Done</button>
+    </div>
   </div>;
 }
 
@@ -446,12 +608,15 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, reorderProps, emp
 
 function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, renameArea, navigate, reorderProps, sortItems, taskSort, setTaskSort }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; renameArea: (id: string, value: string) => void; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void }) {
   const eligibleTasks = workspace.tasks.filter((task) => task.areaId && !task.done);
-  const nextTasks = (taskSort === "custom" ? eligibleTasks : sortTasks(eligibleTasks, taskSort)).slice(0, 5) as Task[];
+  const nextTasks = (taskSort === "custom" ? eligibleTasks : sortTasks(eligibleTasks, taskSort)).slice(0, 3) as Task[];
+  const now = new Date();
+  const dayName = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, weekday: "long" }).format(now);
+  const calendarDate = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "long", day: "numeric" }).format(now);
   return <div className="page today-page">
-    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p></div><div className="date"><span>Thursday</span><strong>August 6</strong></div></div>
+    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p></div><div className="date"><span>{dayName}</span><strong>{calendarDate}</strong></div></div>
     <div className="today-grid">
-      <section className="work-queue"><div className="section-title"><h2>Up next</h2><div className="section-actions"><span>{nextTasks.length} open</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope="today" taskSort={taskSort} empty="Add a task above, or leave the space open." /></section>
-      <aside className="day-brief"><blockquote>Process over prediction.</blockquote><p>Judge the day by whether you followed the practice—not by a fragile outcome you could not fully control.</p><div className="brief-rule"><strong>2h 45m</strong><span>protected focus remains</span></div></aside>
+      <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length} selected</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope="today" taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks. Change the sort to shift today’s focus.</p>}</section>
+      <aside className="day-brief"><span className="brief-label">Operating principle</span><blockquote>Process over prediction.</blockquote><p>Judge the day by whether you followed the practice—not by a fragile outcome you could not fully control.</p><div className="brief-rule"><strong>3</strong><span>meaningful actions make a full day</span></div></aside>
     </div>
     <section className="area-overview"><div className="section-title"><h2>Areas</h2><ListTools noun="areas" onSort={() => sortItems("area", "all")} /></div><div className="area-table">{workspace.areas.map((area) => {
       const descriptor = { kind: "area" as const, id: area.id, scope: "all" };
@@ -491,18 +656,18 @@ function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, 
       return <div className="entity-row project-entity" key={project.id} onDragOver={(event) => reorder.onDragOver(event, descriptor)} onDrop={(event) => reorder.onDrop(event, descriptor)}><DragHandle {...reorder} label={`Reorder ${project.name}`} /><div className="entity-copy"><NameEditor value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><small>{project.outcome}</small></div><span>{tasks.filter((task) => task.projectId === project.id && !task.done).length} tasks</span><button className="open-link" onClick={() => navigate({ kind: "project", id: project.id })}>Open</button></div>;
     })}</div> : <div className="empty-state"><strong>No projects yet.</strong><p>Create one when this area has a finite outcome to move.</p></div>}</section>
     <section className="loose-tasks"><div className="section-title"><h2>Area tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={looseTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`area:${area.id}`} taskSort={taskSort} empty="Tasks added here without a project will appear in this list." /></section>
-    <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its projects, tasks, and project notes from this device.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
+    <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its synced projects, tasks, and project notes.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
   </div>;
 }
 
 function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTask, updateTask, reorderProps, taskSort, setTaskSort, updateProject, removeProject }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; updateProject: (patch: Partial<Project>) => void; removeProject: (id: string) => void }) {
   return <div className="page"><div className="breadcrumb">{area.name} / Project</div><div className="page-heading project-heading"><div><NameEditor large value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><textarea className="outcome-editor" value={project.outcome} onChange={(event) => updateProject({ outcome: event.target.value })} aria-label="Project outcome" /></div><div className="quiet-count">{tasks.filter((task) => !task.done).length}<span>open tasks</span></div></div>
     <div className="project-workspace"><section className="project-tasks"><div className="section-title"><h2>Tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`project:${project.id}`} taskSort={taskSort} empty="Add the next concrete action using the field above." /></section>
-    <section className="project-notes"><div className="section-title"><h2>Project notes</h2><span>Saved on this device</span></div><textarea value={project.notes} onChange={(event) => updateProject({ notes: event.target.value })} placeholder="Keep decisions, references, observations, and useful context here…" aria-label={`Notes for ${project.name}`} /><p>Notes stay with this project—never in a disconnected pile.</p></section></div>
-    <div className="danger-zone"><div><strong>Remove this project</strong><p>This also removes its tasks and notes from this device.</p></div><button onClick={() => removeProject(project.id)}>Remove project</button></div>
+    <section className="project-notes"><div className="section-title"><h2>Project notes</h2><span>Synced securely</span></div><textarea value={project.notes} onChange={(event) => updateProject({ notes: event.target.value })} placeholder="Keep decisions, references, observations, and useful context here…" aria-label={`Notes for ${project.name}`} /><p>Notes stay with this project—never in a disconnected pile.</p></section></div>
+    <div className="danger-zone"><div><strong>Remove this project</strong><p>This also removes its synced tasks and notes.</p></div><button onClick={() => removeProject(project.id)}>Remove project</button></div>
   </div>;
 }
 
-function Review({ reviewed, setReviewed, inboxCount }: { reviewed: number[]; setReviewed: React.Dispatch<React.SetStateAction<number[]>>; inboxCount: number }) {
-  return <div className="page"><div className="page-heading"><div><h1>Reset your bearing.</h1><p>Make the system lighter before asking it to carry another week.</p></div><div className="quiet-count">{reviewed.length}/5<span>steps complete</span></div></div><div className="review-layout"><section className="review-steps">{reviewSteps.map(([title, copy], index) => <label aria-label={`${title}: ${index === 1 ? `${inboxCount} inbox items are waiting.` : copy}`} className={reviewed.includes(index) ? "complete" : ""} key={title}><input type="checkbox" checked={reviewed.includes(index)} onChange={() => setReviewed((items) => items.includes(index) ? items.filter((item) => item !== index) : [...items, index])} /><span><strong>{title}</strong><small>{index === 1 ? `${inboxCount} inbox items are waiting.` : copy}</small></span></label>)}</section><aside className="review-note"><span>Priority filter</span><h2>If this slips, what changes?</h2><dl><div><dt>Capital</dt><dd>Protect</dd></div><div><dt>Skills</dt><dd>Compound</dd></div><div><dt>Relationships</dt><dd>Be present</dd></div><div><dt>Everything else</dt><dd>Stay flexible</dd></div></dl><p>Consequences create priority. Urgency alone does not.</p></aside></div></div>;
+function Review({ reviewed, toggleReviewed, inboxCount }: { reviewed: number[]; toggleReviewed: (index: number) => void; inboxCount: number }) {
+  return <div className="page"><div className="page-heading"><div><h1>Reset your bearing.</h1><p>Make the system lighter before asking it to carry another week.</p></div><div className="quiet-count">{reviewed.length}/5<span>steps complete</span></div></div><div className="review-layout"><section className="review-steps">{reviewSteps.map(([title, copy], index) => <label aria-label={`${title}: ${index === 1 ? `${inboxCount} inbox items are waiting.` : copy}`} className={reviewed.includes(index) ? "complete" : ""} key={title}><input type="checkbox" checked={reviewed.includes(index)} onChange={() => toggleReviewed(index)} /><span><strong>{title}</strong><small>{index === 1 ? `${inboxCount} inbox items are waiting.` : copy}</small></span></label>)}</section><aside className="review-note"><span>Priority filter</span><h2>If this slips, what changes?</h2><dl><div><dt>Capital</dt><dd>Protect</dd></div><div><dt>Skills</dt><dd>Compound</dd></div><div><dt>Relationships</dt><dd>Be present</dd></div><div><dt>Everything else</dt><dd>Stay flexible</dd></div></dl><p>Consequences create priority. Urgency alone does not.</p></aside></div></div>;
 }
