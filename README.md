@@ -1,8 +1,8 @@
-# vinext-starter
+# Mission Control
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A calm, full-stack workspace for organizing areas, projects, and the few tasks
+that matter most. It runs on [vinext](https://github.com/cloudflare/vinext),
+with Cloudflare D1 and Drizzle support.
 
 ## Prerequisites
 
@@ -16,7 +16,11 @@ npm run dev
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+This project does not use `wrangler.jsonc`.
+
+For a Sites deployment, set your own `project_id` in
+`.openai/hosting.json`. The checked-in value is intentionally blank so the
+repository does not expose deployment-specific identifiers.
 
 ## Included Shape
 
@@ -98,3 +102,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+## License
+
+Released under the [MIT License](LICENSE).

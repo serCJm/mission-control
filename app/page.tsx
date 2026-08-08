@@ -38,7 +38,7 @@ const seed: Workspace = {
     { id: "execution", areaId: "trading", name: "A-Setup Execution", outcome: "Execute and review 20 valid trades while following defined risk rules.", notes: "Entries after the second impulse are consistently late.\n\nNext review: add MFE / MAE and compare first-hour results." },
     { id: "replay", areaId: "trading", name: "Market Replay Lab", outcome: "Complete 12 focused replay sessions and extract one rule refinement from each.", notes: "Replay Tuesday’s failed breakout. Capture the earliest invalidation signal." },
     { id: "practice", areaId: "growth", name: "Deliberate Practice", outcome: "Finish eight lessons and apply each idea in a focused practice session.", notes: "Short feedback loops beat longer passive study. Define success before the next session." },
-    { id: "weekends", areaId: "family", name: "Present Weekends", outcome: "Plan and protect four device-light family blocks this month.", notes: "One anchor activity leaves enough room for spontaneity. Ask Maya: beach or museum?" },
+    { id: "weekends", areaId: "family", name: "Present Weekends", outcome: "Plan and protect four device-light family blocks this month.", notes: "One anchor activity leaves enough room for spontaneity. Choose between the beach and a museum." },
     { id: "loops", areaId: "life", name: "Close the Loops", outcome: "Complete nagging administrative tasks in two weekly batches.", notes: "Keep the batch under 45 minutes. Stop when the timer ends." },
   ],
   tasks: [
@@ -46,7 +46,7 @@ const seed: Workspace = {
     { id: "t2", title: "Review yesterday’s AAPL trade", areaId: "trading", projectId: "execution", done: false, createdAt: 2, dueDate: "2026-08-08", priority: "medium" },
     { id: "t3", title: "Replay one failed-breakout setup", areaId: "trading", projectId: "replay", done: false, createdAt: 3, dueDate: "2026-08-10", priority: "high" },
     { id: "t4", title: "Complete deliberate-practice lesson", areaId: "growth", projectId: "practice", done: false, createdAt: 4, priority: "medium" },
-    { id: "t5", title: "Plan Saturday with Maya", areaId: "family", projectId: "weekends", done: false, createdAt: 5, dueDate: "2026-08-09", priority: "low" },
+    { id: "t5", title: "Plan a device-light Saturday", areaId: "family", projectId: "weekends", done: false, createdAt: 5, dueDate: "2026-08-09", priority: "low" },
     { id: "t6", title: "Send Q3 invoice", areaId: "life", projectId: "loops", done: false, createdAt: 6, dueDate: "2026-08-07", priority: "high" },
     { id: "i1", title: "Compare new broker fee schedule", done: false, createdAt: 7 },
     { id: "i2", title: "Book annual dental appointments", done: false, createdAt: 8, dueDate: "2026-08-15", priority: "low" },
