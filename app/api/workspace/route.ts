@@ -13,7 +13,7 @@ type Task = {
   dueDate?: string;
   priority?: "high" | "medium" | "low";
 };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[] };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
 
 const MAX_WORKSPACE_BYTES = 2_000_000;
 
@@ -51,7 +51,10 @@ function normalizeWorkspace(value: unknown): Workspace | null {
   const reviewed = Array.isArray(candidate.reviewed)
     ? candidate.reviewed.filter((step): step is number => Number.isInteger(step) && step >= 0 && step < 5)
     : [];
-  return { areas, projects, tasks, reviewed: [...new Set(reviewed)] };
+  const currentAreaId = isText(candidate.currentAreaId, 200) && areas.some((area) => area.id === candidate.currentAreaId)
+    ? candidate.currentAreaId
+    : areas[0]?.id;
+  return { areas, projects, tasks, reviewed: [...new Set(reviewed)], currentAreaId };
 }
 
 function unauthorized() {

@@ -65,11 +65,11 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.deepEqual([...areaPositions].sort((a, b) => a - b), areaPositions);
   assert.ok(sidebar.indexOf("A-Setup Execution") < sidebar.indexOf("Market Replay Lab"));
 
-  assert.match(html, /aria-label="Sort tasks"/i);
-  assert.match(html, /<option value="custom"[^>]*>Custom<\/option>/i);
-  assert.match(html, /<option value="alphabetical"[^>]*>A–Z<\/option>/i);
-  assert.match(html, /<option value="dueDate"[^>]*>Due date<\/option>/i);
-  assert.match(html, /<option value="priority"[^>]*>Priority<\/option>/i);
+  assert.match(html, /role="group" aria-label="Sort tasks"/i);
+  assert.match(html, />Manual<\/button>/i);
+  assert.match(html, />A–Z<\/button>/i);
+  assert.match(html, />Due<\/button>/i);
+  assert.match(html, />Priority<\/button>/i);
   assert.match(html, /type="date"/i);
   assert.match(html, /aria-label="Due date for /i);
   assert.match(html, /aria-label="Priority for /i);
