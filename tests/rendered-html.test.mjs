@@ -73,4 +73,10 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.match(html, /type="date"/i);
   assert.match(html, /aria-label="Due date for /i);
   assert.match(html, /aria-label="Priority for /i);
+
+  const currentAreaPicker = html.match(/<section[^>]*class="current-area-picker"[^>]*>[\s\S]*?<\/section>/i)?.[0];
+  assert.ok(currentAreaPicker, "Expected the current area picker to render");
+  assert.match(currentAreaPicker, /aria-pressed="true"/i);
+  assert.match(currentAreaPicker, /aria-label="Open Trading"/i);
+  assert.doesNotMatch(html, /class="area-overview|focus-area-button|Sort areas A–Z/i);
 });

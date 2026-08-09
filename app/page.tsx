@@ -539,7 +539,7 @@ export default function Home() {
           <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
         </header>
 
-        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} renameArea={renameArea} navigate={navigate} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
+        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} navigate={navigate} reorderProps={reorderProps} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} renameArea={renameArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} removeProject={removeProject} />}
@@ -552,6 +552,19 @@ export default function Home() {
 
 function LogoMark() {
   return <span className="brand-mark" aria-hidden="true"><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-core" /><span className="orbit-signal" /></span>;
+}
+
+function AreaIcon({ name }: { name: string }) {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("family")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9-1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 19.5v-2.2a4.3 4.3 0 0 1 4.3-4.3h1.4a4.3 4.3 0 0 1 4.3 4.3v2.2m1-7.5h1.2a4 4 0 0 1 4 4v3.5" /></svg>;
+  if (normalized.includes("growth") || normalized.includes("personal")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V9m0 4c-4.2 0-7-2.5-7-6.5 4.2 0 7 2.5 7 6.5Zm0-4c3.8 0 6.5-2.2 6.5-5.8C14.7 3.2 12 5.4 12 9Z" /></svg>;
+  if (normalized.includes("trading") || normalized.includes("finance")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5 9 12l3.5 3.5L20 7m-5 0h5v5" /></svg>;
+  if (normalized.includes("business") || normalized.includes("work")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16v10H4zM9 8.5V6h6v2.5M4 12h16m-9 0v2h2v-2" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2.5V5m9.5 7H19M12 19v2.5M5 12H2.5" /></svg>;
+}
+
+function OpenAreaIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h10v10M19 5 8 16m-3-7v10h10" /></svg>;
 }
 
 function DragHandle({ descriptor, onDragStart, onDragEnd, onMove, label }: ReorderProps & { label: string }) {
@@ -620,7 +633,7 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, reorderProps, emp
   })}</div>;
 }
 
-function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, renameArea, navigate, reorderProps, sortItems, taskSort, setTaskSort, setCurrentArea }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; renameArea: (id: string, value: string) => void; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; setCurrentArea: (id: string) => void }) {
+function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navigate, reorderProps, taskSort, setTaskSort, setCurrentArea }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; setCurrentArea: (id: string) => void }) {
   const currentArea = workspace.areas.find((area) => area.id === workspace.currentAreaId) ?? workspace.areas[0];
   const eligibleTasks = workspace.tasks.filter((task) => task.areaId === currentArea?.id && !task.done);
   const nextTasks = (taskSort === "custom" ? eligibleTasks : sortTasks(eligibleTasks, taskSort)).slice(0, 3) as Task[];
@@ -628,23 +641,19 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, rena
   const dayName = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, weekday: "long" }).format(now);
   const calendarDate = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "long", day: "numeric" }).format(now);
   return <div className="page today-page">
-    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p>{currentArea && <div className="current-area-summary"><span>Current area</span><strong>{currentArea.name}</strong><em>{currentArea.cue}</em></div>}</div><div className="date"><span>{dayName}</span><strong>{calendarDate}</strong></div></div>
+    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p><section className="current-area-picker" aria-labelledby="current-area-title"><div className="current-area-heading"><h2 id="current-area-title">Current area</h2><p>Select an area to focus today.</p></div><div className="area-choices">{workspace.areas.map((area) => {
+      const isCurrent = area.id === currentArea?.id;
+      return <div className={`area-choice ${isCurrent ? "current" : ""}`} key={area.id}>
+        <button className="area-choice-main" aria-pressed={isCurrent} onClick={() => setCurrentArea(area.id)}>
+          <span className="area-choice-icon"><AreaIcon name={area.name} /></span>
+          <span className="area-choice-copy"><strong>{area.name}</strong><small>{area.cue}</small></span>
+        </button>
+        {isCurrent && <button className="area-choice-open" onClick={() => navigate({ kind: "area", id: area.id })} aria-label={`Open ${area.name}`} title={`Open ${area.name}`}><OpenAreaIcon /></button>}
+      </div>;
+    })}</div></section></div><div className="date"><span>{dayName}</span><strong>{calendarDate}</strong></div></div>
     <div className="today-grid">
       <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length}/3</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`today:${currentArea?.id ?? ""}`} taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks in {currentArea?.name}. Use Manual order to choose the three that lead.</p>}<p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
     </div>
-    <section className="area-overview"><div className="section-title"><h2>Areas</h2><ListTools noun="areas" onSort={() => sortItems("area", "all")} /></div><div className="area-table">{workspace.areas.map((area) => {
-      const descriptor = { kind: "area" as const, id: area.id, scope: "all" };
-      const reorder = reorderProps(descriptor);
-      const isCurrent = area.id === currentArea?.id;
-      return <div className={`entity-row area-entity ${isCurrent ? "current" : ""}`} key={area.id} onDragOver={(event) => reorder.onDragOver(event, descriptor)} onDrop={(event) => reorder.onDrop(event, descriptor)}>
-        <DragHandle {...reorder} label={`Reorder ${area.name}`} />
-        <span className="area-initial">{area.name.charAt(0)}</span>
-        <div className="entity-copy"><NameEditor value={area.name} onSave={(value) => renameArea(area.id, value)} label={`Area name for ${area.name}`} /><small>{area.cue}</small></div>
-        <span className="area-count">{workspace.tasks.filter((task) => task.areaId === area.id && !task.done).length} open</span>
-        <button className="focus-area-button" aria-pressed={isCurrent} onClick={() => setCurrentArea(area.id)}>{isCurrent ? "In focus" : "Focus"}</button>
-        <button className="open-link" onClick={() => navigate({ kind: "area", id: area.id })}>Open</button>
-      </div>;
-    })}</div></section>
     {inboxTasks.length > 0 && <button className="inbox-callout" onClick={() => navigate({ kind: "inbox" })}><span><strong>{inboxTasks.length} items need a home</strong><small>Process your inbox while context is fresh.</small></span><span>Open inbox</span></button>}
   </div>;
 }
