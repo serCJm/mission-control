@@ -100,7 +100,7 @@ This is an Operate-mode system. Brand character lives in the concentric-orbit co
 
 - Warm paper canvas with crisp, nearly white working panels.
 - Deep forest navigation and callouts, with signal lime used selectively.
-- Hierarchy-first lists with visible Edit, saved task sort modes, due dates, priorities, and custom-order tools where they add value.
+- Hierarchy-first lists with visible Edit, a compact saved-sort dropdown, due dates, priorities, and drag handles for manual ordering.
 - Compact Geist and Geist Mono typography, with rare Georgia editorial accents.
 - Restrained borders, selective ambient shadow, and generous buffer space.
 - A CSS-built concentric-orbit command mark paired with a compact two-line wordmark.
@@ -162,7 +162,7 @@ Desktop uses a fixed 252px forest rail and a fluid content column. The sticky 72
 
 At 920px and below, the rail becomes an off-canvas drawer with a dimmed scrim, the menu control appears, and Today, project, and review grids stack. At 720px and below, task sort, due-date, priority, Edit, and move controls gain touch-sized targets while list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and stacks task metadata into a readable single column.
 
-**The Actions Survive Rule.** Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Custom-order move controls.
+**The Actions Survive Rule.** Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Manual-order drag handles.
 
 **The Buffer Is Structural Rule.** Do not fill every viewport seam. Open paper around the work queue is part of the product's ability to absorb change.
 
@@ -216,7 +216,7 @@ The deep forest rail uses muted cool-green labels at rest, a darker forest hover
 
 ### Hierarchy Lists
 
-Rows are the core operating pattern. Entity rows prioritize the name and expose Edit, Open, and Custom-order controls in the main workspace. Task rows pair the title with optional due date and priority controls, plus saved Custom, A–Z, Due date, and Priority views. Drag and step-move controls appear only in Custom task order. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, editable controls become at least 44px tall and secondary metadata yields before actions do.
+Rows are the core operating pattern. Entity rows prioritize the name and expose Edit, Open, and drag handles in the main workspace. Task rows pair the title with optional due date and priority controls, plus saved Manual, A–Z, Due date, and Priority views in a compact dropdown. Drag handles appear only in Manual task order. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, editable controls become at least 44px tall and secondary metadata yields before actions do.
 
 ### Command Mark
 
@@ -239,5 +239,5 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Don't** show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.
 - **Don't** introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.
 - **Don't** use Georgia for operational copy, task names, or navigation.
-- **Don't** let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Custom-order move controls.
+- **Don't** let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Manual-order drag handles.
 - **Don't** use signal lime as a large decorative background when forest or a neutral surface can carry the structure.

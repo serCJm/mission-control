@@ -26,7 +26,6 @@ type ReorderProps = {
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLElement>, item: DragItem) => void;
   onDrop: (event: DragEvent<HTMLElement>, item: DragItem) => void;
-  onMove: (item: DragItem, delta: number) => void;
 };
 
 const seed: Workspace = {
@@ -457,13 +456,6 @@ export default function Home() {
     setToast("Order updated");
   }
 
-  function moveItem(item: DragItem, delta: number) {
-    const ids = idsFor(item);
-    const index = ids.indexOf(item.id);
-    const target = ids[index + delta];
-    if (target) reorderItem(item, { ...item, id: target });
-  }
-
   function sortItems(kind: "area" | "project", scope: string) {
     setWorkspace((current) => {
       if (kind === "area") return { ...current, areas: [...current.areas].sort((a, b) => a.name.localeCompare(b.name)) };
@@ -494,7 +486,7 @@ export default function Home() {
   }
 
   function reorderProps(descriptor: DragItem): ReorderProps {
-    return { descriptor, onDragStart: dragStart, onDragEnd: () => setDragged(null), onDragOver: dragOver, onDrop: drop, onMove: moveItem };
+    return { descriptor, onDragStart: dragStart, onDragEnd: () => setDragged(null), onDragOver: dragOver, onDrop: drop };
   }
 
   const contextualTasks = workspace.tasks.filter((task) => activeProject ? task.projectId === activeProject.id : activeArea ? task.areaId === activeArea.id : false);
@@ -582,10 +574,9 @@ function OpenAreaIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h10v10M19 5 8 16m-3-7v10h10" /></svg>;
 }
 
-function DragHandle({ descriptor, onDragStart, onDragEnd, onMove, label }: ReorderProps & { label: string }) {
+function DragHandle({ descriptor, onDragStart, onDragEnd, label }: ReorderProps & { label: string }) {
   return <div className="order-controls">
     <button className="drag-handle" draggable onDragStart={(event) => onDragStart(event, descriptor)} onDragEnd={onDragEnd} aria-label={`${label}. Drag to change order.`} title="Drag to reorder"><span /><span /><span /><span /></button>
-    <div className="step-controls"><button onClick={() => onMove(descriptor, -1)} aria-label={`Move ${label.replace("Reorder ", "")} up`} title="Move up"><i /></button><button onClick={() => onMove(descriptor, 1)} aria-label={`Move ${label.replace("Reorder ", "")} down`} title="Move down"><i /></button></div>
   </div>;
 }
 
@@ -615,7 +606,7 @@ function ListTools({ onSort, noun }: { onSort: () => void; noun: string }) {
 
 function TaskSortControl({ value, onChange }: { value: TaskSort; onChange: (sort: TaskSort) => void }) {
   const options: Array<[TaskSort, string]> = [["custom", "Manual"], ["alphabetical", "A–Z"], ["dueDate", "Due"], ["priority", "Priority"]];
-  return <div className="task-sort" role="group" aria-label="Sort tasks"><span>Order</span><div>{options.map(([sort, label]) => <button type="button" key={sort} className={value === sort ? "active" : ""} aria-pressed={value === sort} onClick={() => onChange(sort)}>{label}</button>)}</div></div>;
+  return <label className="task-sort"><span>Order</span><select aria-label="Sort tasks" value={value} onChange={(event) => onChange(event.target.value as TaskSort)}>{options.map(([sort, label]) => <option value={sort} key={sort}>{label}</option>)}</select></label>;
 }
 
 function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void }) {
