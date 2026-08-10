@@ -3,7 +3,19 @@
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 
-type Area = { id: string; name: string; cue: string };
+const AREA_ICON_OPTIONS = [
+  ["target", "Target"],
+  ["trend", "Trend"],
+  ["sprout", "Growth"],
+  ["people", "People"],
+  ["briefcase", "Work"],
+  ["heart", "Health"],
+  ["home", "Home"],
+  ["book", "Learning"],
+] as const;
+
+type AreaIconName = typeof AREA_ICON_OPTIONS[number][0];
+type Area = { id: string; name: string; icon: AreaIconName };
 type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
 type TaskPriority = "high" | "medium" | "low";
 type TaskSort = "custom" | "alphabetical" | "dueDate" | "priority";
@@ -29,10 +41,10 @@ type ReorderProps = {
 
 const seed: Workspace = {
   areas: [
-    { id: "trading", name: "Trading", cue: "Protect capital" },
-    { id: "growth", name: "Personal growth", cue: "Compound skill" },
-    { id: "family", name: "Family", cue: "Be present" },
-    { id: "life", name: "Business & life", cue: "Close loops" },
+    { id: "trading", name: "Trading", icon: "trend" },
+    { id: "growth", name: "Personal growth", icon: "sprout" },
+    { id: "family", name: "Family", icon: "people" },
+    { id: "life", name: "Business & life", icon: "briefcase" },
   ],
   projects: [
     { id: "execution", areaId: "trading", name: "A-Setup Execution", outcome: "Execute and review 20 valid trades while following defined risk rules.", notes: "Entries after the second impulse are consistently late.\n\nNext review: add MFE / MAE and compare first-hour results." },
@@ -71,10 +83,15 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function isAreaIcon(value: unknown): value is AreaIconName {
+  return typeof value === "string" && AREA_ICON_OPTIONS.some(([icon]) => icon === value);
+}
+
 function normalizeClientWorkspace(value: unknown): Workspace | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<Workspace>;
   if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks)) return null;
+  if (!candidate.areas.every((area) => area && typeof area.id === "string" && typeof area.name === "string" && isAreaIcon(area.icon))) return null;
   const currentAreaId = candidate.areas.some((area) => area.id === candidate.currentAreaId) ? candidate.currentAreaId : candidate.areas[0]?.id;
   return { areas: candidate.areas, projects: candidate.projects, tasks: candidate.tasks, reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
 }
@@ -337,7 +354,7 @@ export default function Home() {
     event.preventDefault();
     const name = newArea.trim();
     if (!name) return;
-    const area = { id: makeId("area"), name, cue: "Define what matters" };
+    const area: Area = { id: makeId("area"), name, icon: "target" };
     setWorkspace((current) => ({ ...current, areas: [...current.areas, area], currentAreaId: current.currentAreaId ?? area.id }));
     setExpandedAreas((current) => [...current, area.id]);
     setNewArea("");
@@ -406,6 +423,11 @@ export default function Home() {
   function renameArea(id: string, name: string) {
     setWorkspace((current) => ({ ...current, areas: current.areas.map((area) => area.id === id ? { ...area, name } : area) }));
     setToast("Area renamed");
+  }
+
+  function updateAreaIcon(id: string, icon: AreaIconName) {
+    setWorkspace((current) => ({ ...current, areas: current.areas.map((area) => area.id === id ? { ...area, icon } : area) }));
+    setToast("Area icon updated");
   }
 
   function renameProject(id: string, name: string) {
@@ -541,7 +563,7 @@ export default function Home() {
 
         {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} navigate={navigate} reorderProps={reorderProps} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
-        {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} renameArea={renameArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
+        {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} renameArea={renameArea} updateAreaIcon={updateAreaIcon} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} removeProject={removeProject} />}
         {selection.kind === "review" && <Review reviewed={workspace.reviewed} toggleReviewed={toggleReviewed} inboxCount={inboxTasks.length} />}
       </main>
@@ -554,13 +576,19 @@ function LogoMark() {
   return <span className="brand-mark" aria-hidden="true"><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-core" /><span className="orbit-signal" /></span>;
 }
 
-function AreaIcon({ name }: { name: string }) {
-  const normalized = name.toLowerCase();
-  if (normalized.includes("family")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9-1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 19.5v-2.2a4.3 4.3 0 0 1 4.3-4.3h1.4a4.3 4.3 0 0 1 4.3 4.3v2.2m1-7.5h1.2a4 4 0 0 1 4 4v3.5" /></svg>;
-  if (normalized.includes("growth") || normalized.includes("personal")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V9m0 4c-4.2 0-7-2.5-7-6.5 4.2 0 7 2.5 7 6.5Zm0-4c3.8 0 6.5-2.2 6.5-5.8C14.7 3.2 12 5.4 12 9Z" /></svg>;
-  if (normalized.includes("trading") || normalized.includes("finance")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5 9 12l3.5 3.5L20 7m-5 0h5v5" /></svg>;
-  if (normalized.includes("business") || normalized.includes("work")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16v10H4zM9 8.5V6h6v2.5M4 12h16m-9 0v2h2v-2" /></svg>;
+function AreaIcon({ icon }: { icon: AreaIconName }) {
+  if (icon === "trend") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17.5 9 12l3.5 3.5L20 7m-5 0h5v5" /></svg>;
+  if (icon === "sprout") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V9m0 4c-4.2 0-7-2.5-7-6.5 4.2 0 7 2.5 7 6.5Zm0-4c3.8 0 6.5-2.2 6.5-5.8C14.7 3.2 12 5.4 12 9Z" /></svg>;
+  if (icon === "people") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9-1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2.5 19.5v-2.2a4.3 4.3 0 0 1 4.3-4.3h1.4a4.3 4.3 0 0 1 4.3 4.3v2.2m1-7.5h1.2a4 4 0 0 1 4 4v3.5" /></svg>;
+  if (icon === "briefcase") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h16v10H4zM9 8.5V6h6v2.5M4 12h16m-9 0v2h2v-2" /></svg>;
+  if (icon === "heart") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 5.8a4.4 4.4 0 0 0-6.2 0L12 7.7l-1.9-1.9a4.4 4.4 0 0 0-6.3 6.2L12 20l8.2-8a4.4 4.4 0 0 0 0-6.2Z" /></svg>;
+  if (icon === "home") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.5 11 8.5-7 8.5 7M6 9v10h12V9m-8 10v-5h4v5" /></svg>;
+  if (icon === "book") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H12v17H7.5A3.5 3.5 0 0 0 4 22Zm16 0A3.5 3.5 0 0 0 16.5 2H12v17h4.5A3.5 3.5 0 0 1 20 22Z" /></svg>;
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2.5V5m9.5 7H19M12 19v2.5M5 12H2.5" /></svg>;
+}
+
+function AreaIconPicker({ value, onChange }: { value: AreaIconName; onChange: (icon: AreaIconName) => void }) {
+  return <fieldset className="area-icon-picker"><legend>Area icon</legend><div>{AREA_ICON_OPTIONS.map(([icon, label]) => <button type="button" key={icon} className={value === icon ? "active" : ""} aria-label={label} aria-pressed={value === icon} title={label} onClick={() => onChange(icon)}><AreaIcon icon={icon} /></button>)}</div></fieldset>;
 }
 
 function OpenAreaIcon() {
@@ -645,8 +673,8 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navi
       const isCurrent = area.id === currentArea?.id;
       return <div className={`area-choice ${isCurrent ? "current" : ""}`} key={area.id}>
         <button className="area-choice-main" aria-pressed={isCurrent} onClick={() => setCurrentArea(area.id)}>
-          <span className="area-choice-icon"><AreaIcon name={area.name} /></span>
-          <span className="area-choice-copy"><strong>{area.name}</strong><small>{area.cue}</small></span>
+          <span className="area-choice-icon"><AreaIcon icon={area.icon} /></span>
+          <strong>{area.name}</strong>
         </button>
         {isCurrent && <button className="area-choice-open" onClick={() => navigate({ kind: "area", id: area.id })} aria-label={`Open ${area.name}`} title={`Open ${area.name}`}><OpenAreaIcon /></button>}
       </div>;
@@ -671,9 +699,9 @@ function Inbox({ workspace, tasks, toggleTask, renameTask, updateTask, moveTask,
   </div>;
 }
 
-function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, newProject, setNewProject, addProject, navigate, toggleTask, renameArea, renameProject, renameTask, updateTask, reorderProps, sortItems, taskSort, setTaskSort, removeArea }: { area: Area; projects: Project[]; tasks: Task[]; showProjectForm: boolean; setShowProjectForm: (value: boolean) => void; newProject: string; setNewProject: (value: string) => void; addProject: (event: FormEvent) => void; navigate: (next: Selection) => void; toggleTask: (id: string) => void; renameArea: (id: string, value: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; removeArea: (id: string) => void }) {
+function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, newProject, setNewProject, addProject, navigate, toggleTask, renameArea, updateAreaIcon, renameProject, renameTask, updateTask, reorderProps, sortItems, taskSort, setTaskSort, removeArea }: { area: Area; projects: Project[]; tasks: Task[]; showProjectForm: boolean; setShowProjectForm: (value: boolean) => void; newProject: string; setNewProject: (value: string) => void; addProject: (event: FormEvent) => void; navigate: (next: Selection) => void; toggleTask: (id: string) => void; renameArea: (id: string, value: string) => void; updateAreaIcon: (id: string, icon: AreaIconName) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; removeArea: (id: string) => void }) {
   const looseTasks = tasks.filter((task) => !task.projectId);
-  return <div className="page"><div className="breadcrumb">Area</div><div className="page-heading"><div><NameEditor large value={area.name} onSave={(value) => renameArea(area.id, value)} label={`Area name for ${area.name}`} /><p>{area.cue}. Tasks added above will come directly here.</p></div><button className="secondary-button" onClick={() => setShowProjectForm(!showProjectForm)}>{showProjectForm ? "Cancel" : "New project"}</button></div>
+  return <div className="page"><div className="breadcrumb">Area</div><div className="page-heading area-page-heading"><div><NameEditor large value={area.name} onSave={(value) => renameArea(area.id, value)} label={`Area name for ${area.name}`} /><AreaIconPicker value={area.icon} onChange={(icon) => updateAreaIcon(area.id, icon)} /></div><button className="secondary-button" onClick={() => setShowProjectForm(!showProjectForm)}>{showProjectForm ? "Cancel" : "New project"}</button></div>
     {showProjectForm && <form className="inline-create" onSubmit={addProject}><div><strong>Create a project in {area.name}</strong><span>Name a concrete body of work, not an ongoing responsibility.</span></div><input value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Project name" aria-label="Project name" /><button disabled={!newProject.trim()}>Create project</button></form>}
     <section className="project-section"><div className="section-title"><h2>Projects <small>{projects.length} active</small></h2><ListTools noun="projects" onSort={() => sortItems("project", area.id)} /></div>{projects.length ? <div className="project-list">{projects.map((project) => {
       const descriptor = { kind: "project" as const, id: project.id, scope: area.id };
