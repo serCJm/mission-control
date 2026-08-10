@@ -1,20 +1,10 @@
 "use client";
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AREA_ICON_OPTIONS, normalizeArea } from "./area-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 
-const AREA_ICON_OPTIONS = [
-  ["target", "Target"],
-  ["trend", "Trend"],
-  ["sprout", "Growth"],
-  ["people", "People"],
-  ["briefcase", "Work"],
-  ["heart", "Health"],
-  ["home", "Home"],
-  ["book", "Learning"],
-] as const;
-
-type AreaIconName = typeof AREA_ICON_OPTIONS[number][0];
+type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
 type Area = { id: string; name: string; icon: AreaIconName };
 type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
 type TaskPriority = "high" | "medium" | "low";
@@ -83,17 +73,14 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function isAreaIcon(value: unknown): value is AreaIconName {
-  return typeof value === "string" && AREA_ICON_OPTIONS.some(([icon]) => icon === value);
-}
-
 function normalizeClientWorkspace(value: unknown): Workspace | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<Workspace>;
   if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks)) return null;
-  if (!candidate.areas.every((area) => area && typeof area.id === "string" && typeof area.name === "string" && isAreaIcon(area.icon))) return null;
-  const currentAreaId = candidate.areas.some((area) => area.id === candidate.currentAreaId) ? candidate.currentAreaId : candidate.areas[0]?.id;
-  return { areas: candidate.areas, projects: candidate.projects, tasks: candidate.tasks, reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
+  const areas = candidate.areas.map(normalizeArea).filter(Boolean) as Area[];
+  if (areas.length !== candidate.areas.length) return null;
+  const currentAreaId = areas.some((area) => area.id === candidate.currentAreaId) ? candidate.currentAreaId : areas[0]?.id;
+  return { areas, projects: candidate.projects, tasks: candidate.tasks, reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
 }
 
 function reorderScoped<T extends { id: string }>(items: T[], scopeIds: string[], sourceId: string, targetId: string) {
@@ -588,7 +575,7 @@ function AreaIcon({ icon }: { icon: AreaIconName }) {
 }
 
 function AreaIconPicker({ value, onChange }: { value: AreaIconName; onChange: (icon: AreaIconName) => void }) {
-  return <fieldset className="area-icon-picker"><legend>Area icon</legend><div>{AREA_ICON_OPTIONS.map(([icon, label]) => <button type="button" key={icon} className={value === icon ? "active" : ""} aria-label={label} aria-pressed={value === icon} title={label} onClick={() => onChange(icon)}><AreaIcon icon={icon} /></button>)}</div></fieldset>;
+  return <fieldset className="area-icon-picker"><legend>Area icon</legend><div>{AREA_ICON_OPTIONS.map(([icon, label]) => <button type="button" key={icon} className={value === icon ? "active" : ""} aria-label={label} aria-pressed={value === icon} title={label} onClick={() => onChange(icon as AreaIconName)}><AreaIcon icon={icon as AreaIconName} /></button>)}</div></fieldset>;
 }
 
 function OpenAreaIcon() {

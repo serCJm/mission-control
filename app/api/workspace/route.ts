@@ -1,8 +1,8 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
+import { normalizeArea } from "../../area-schema.mjs";
 import { getD1 } from "../../../db";
 
-const AREA_ICONS = ["target", "trend", "sprout", "people", "briefcase", "heart", "home", "book"] as const;
-type AreaIconName = typeof AREA_ICONS[number];
+type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
 type Area = { id: string; name: string; icon: AreaIconName };
 type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
 type Task = {
@@ -27,20 +27,17 @@ function optionalText(value: unknown, maxLength = 20_000) {
   return value === undefined || isText(value, maxLength);
 }
 
-function isAreaIcon(value: unknown): value is AreaIconName {
-  return typeof value === "string" && (AREA_ICONS as readonly string[]).includes(value);
-}
-
 function normalizeWorkspace(value: unknown): Workspace | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
   if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks)) return null;
 
-  const areas = candidate.areas.filter((area): area is Area => {
-    if (!area || typeof area !== "object") return false;
+  const areas = candidate.areas.map((area) => {
+    if (!area || typeof area !== "object") return null;
     const item = area as Record<string, unknown>;
-    return isText(item.id, 200) && isText(item.name, 500) && isAreaIcon(item.icon);
-  });
+    if (!isText(item.id, 200) || !isText(item.name, 500)) return null;
+    return normalizeArea(item);
+  }).filter(Boolean) as Area[];
   const projects = candidate.projects.filter((project): project is Project => {
     if (!project || typeof project !== "object") return false;
     const item = project as Record<string, unknown>;

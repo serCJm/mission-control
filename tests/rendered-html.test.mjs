@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { normalizeArea } from "../app/area-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 
 async function render() {
@@ -18,6 +19,13 @@ test("recognizes the supported saved task sort modes", () => {
   for (const sort of ["custom", "alphabetical", "dueDate", "priority"]) assert.equal(isTaskSort(sort), true);
   assert.equal(isTaskSort("manual"), false);
   assert.equal(isTaskSort(null), false);
+});
+
+test("upgrades saved areas from before custom icons without losing identity", () => {
+  assert.deepEqual(normalizeArea({ id: "trading", name: "Trading", cue: "Protect capital" }), { id: "trading", name: "Trading", icon: "trend" });
+  assert.deepEqual(normalizeArea({ id: "custom", name: "Health", cue: "Define what matters" }), { id: "custom", name: "Health", icon: "target" });
+  assert.deepEqual(normalizeArea({ id: "custom", name: "Health", icon: "heart" }), { id: "custom", name: "Health", icon: "heart" });
+  assert.equal(normalizeArea({ id: "broken", name: "Broken" }), null);
 });
 
 test("sorts tasks without mutating their custom order", () => {
