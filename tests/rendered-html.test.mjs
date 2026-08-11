@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizeArea } from "../app/area-schema.mjs";
+import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 
 async function render() {
@@ -56,6 +58,29 @@ test("keeps equal computed values in stable custom order", () => {
   }
 });
 
+test("keeps task field sizing separate from checkbox sizing", () => {
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  assert.match(css, /\.task-check input,\.review-steps input\[type="checkbox"\]\{[^}]*width:18px/);
+  assert.doesNotMatch(css, /\.task-row input,\.inbox-row input/);
+  assert.match(css, /\.task-direct-control\.timing\{padding:0\}/);
+  assert.match(css, /\.task-direct-trigger\{[^}]*height:100%/);
+  assert.match(css, /\.timing \.task-direct-trigger\{[^}]*min-width:44px/);
+});
+
+test("opens the native date picker with browser fallbacks", () => {
+  const supportedCalls = [];
+  openDateInputPicker({ showPicker: () => supportedCalls.push("show"), click: () => supportedCalls.push("click"), focus: () => supportedCalls.push("focus") });
+  assert.deepEqual(supportedCalls, ["show"]);
+
+  const legacyCalls = [];
+  openDateInputPicker({ click: () => legacyCalls.push("click"), focus: () => legacyCalls.push("focus") });
+  assert.deepEqual(legacyCalls, ["click"]);
+
+  const recoveryCalls = [];
+  openDateInputPicker({ showPicker: () => { throw new Error("Picker unavailable"); }, click: () => recoveryCalls.push("click"), focus: () => recoveryCalls.push("focus") });
+  assert.deepEqual(recoveryCalls, ["focus", "click"]);
+});
+
 test("server-renders alphabetical navigation and task organization controls", async () => {
   const response = await render();
   assert.equal(response.status, 200);
@@ -83,7 +108,9 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.match(html, /aria-label="Due date for /i);
   assert.match(html, /aria-label="Priority for /i);
   assert.match(html, /class="task-direct-control timing/i);
+  assert.match(html, /class="task-direct-trigger"/i);
   assert.match(html, /class="task-direct-control priority/i);
+  assert.match(html, /class="priority-swatch"/i);
   assert.doesNotMatch(html, /task-plan-trigger|task-plan-done/i);
 
   const currentAreaPicker = html.match(/<section[^>]*class="current-area-picker"[^>]*>[\s\S]*?<\/section>/i)?.[0];

@@ -2,6 +2,7 @@
 
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AREA_ICON_OPTIONS, normalizeArea } from "./area-schema.mjs";
+import { openDateInputPicker } from "./task-date-control.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
@@ -116,8 +117,7 @@ function weekNumber(date: Date) {
   return Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
-function dueLabel(value?: string) {
-  if (!value) return "Add timing";
+function dueLabel(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   const today = projectDateParts(new Date());
   const due = Date.UTC(year, month - 1, day);
@@ -610,16 +610,27 @@ function TaskSortControl({ value, onChange }: { value: TaskSort; onChange: (sort
 }
 
 function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void }) {
+  const dateInput = useRef<HTMLInputElement>(null);
+  const dueDateLabel = task.dueDate ? dueLabel(task.dueDate) : "";
   const priorityLabel = task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : "";
+
+  function openDatePicker() {
+    const input = dateInput.current;
+    if (!input) return;
+    openDateInputPicker(input);
+  }
+
   return <div className="task-planning" aria-label={`Timing and priority for ${task.title}`}>
-    <label className={`task-direct-control timing ${task.dueDate ? "active" : ""}`} title={`${task.dueDate ? dueLabel(task.dueDate) : "Set timing"} for ${task.title}`}>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>
-      {task.dueDate && <span>{dueLabel(task.dueDate)}</span>}
-      <input type="date" value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} />
-    </label>
+    <div className={`task-direct-control timing ${task.dueDate ? "active" : ""}`} title={`${dueDateLabel || "Set timing"} for ${task.title}`}>
+      <button type="button" className="task-direct-trigger" onClick={openDatePicker} aria-label={task.dueDate ? `Change due date for ${task.title}. ${dueDateLabel}.` : `Set due date for ${task.title}`}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>
+        {task.dueDate && <span>{dueDateLabel}</span>}
+      </button>
+      <input ref={dateInput} className="task-date-input" type="date" tabIndex={-1} value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} />
+    </div>
     <label className={`task-direct-control priority ${task.priority ? `active priority-${task.priority}` : ""}`} title={`${task.priority ? `${priorityLabel} priority` : "Set priority"} for ${task.title}`}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4m0 1h10.5l-2 3 2 3H6" /></svg>
-      {task.priority && <span>{priorityLabel}</span>}
+      <span className="priority-swatch" aria-hidden="true" />
       <select value={task.priority ?? ""} onChange={(event) => updateTask(task.id, { priority: (event.target.value || undefined) as TaskPriority | undefined })} aria-label={`Priority for ${task.title}`}><option value="">No priority</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
     </label>
   </div>;
