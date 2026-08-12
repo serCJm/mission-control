@@ -659,7 +659,8 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navi
   const dayName = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, weekday: "long" }).format(now);
   const calendarDate = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "long", day: "numeric" }).format(now);
   return <div className="page today-page">
-    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p><section className="current-area-picker" aria-labelledby="current-area-title"><div className="current-area-heading"><h2 id="current-area-title">Current area</h2><p>Select an area to focus today.</p></div><div className="area-choices">{workspace.areas.map((area) => {
+    <div className="page-heading"><div><h1>Choose what deserves today.</h1><p>A short field of meaningful work, with space left for reality.</p></div><div className="date"><span>{dayName}</span><strong>{calendarDate}</strong></div></div>
+    <section className="current-area-picker" aria-labelledby="current-area-title"><div className="current-area-heading"><h2 id="current-area-title">Current area</h2><p>Select an area to focus today.</p></div><div className="area-choices">{workspace.areas.map((area) => {
       const isCurrent = area.id === currentArea?.id;
       return <div className={`area-choice ${isCurrent ? "current" : ""}`} key={area.id}>
         <button className="area-choice-main" aria-pressed={isCurrent} onClick={() => setCurrentArea(area.id)}>
@@ -668,7 +669,7 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navi
         </button>
         {isCurrent && <button className="area-choice-open" onClick={() => navigate({ kind: "area", id: area.id })} aria-label={`Open ${area.name}`} title={`Open ${area.name}`}><OpenAreaIcon /></button>}
       </div>;
-    })}</div></section></div><div className="date"><span>{dayName}</span><strong>{calendarDate}</strong></div></div>
+    })}</div></section>
     <div className="today-grid">
       <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length}/3</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`today:${currentArea?.id ?? ""}`} taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks in {currentArea?.name}. Use Manual order to choose the three that lead.</p>}<p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
     </div>
