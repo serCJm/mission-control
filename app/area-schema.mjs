@@ -30,3 +30,10 @@ export function normalizeArea(value) {
   if (typeof value.cue === "string") return { id: value.id, name: value.name, icon: defaultAreaIcon(value.name) };
   return null;
 }
+
+export function changedAreaPatch(initial, draft) {
+  const patch = {};
+  if (draft.name !== initial.name) patch.name = draft.name;
+  if (draft.icon !== initial.icon) patch.icon = draft.icon;
+  return patch;
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { AREA_ICON_OPTIONS, normalizeArea } from "./area-schema.mjs";
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
+import { normalizeTaskNotes } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
@@ -10,7 +11,9 @@ type Area = { id: string; name: string; icon: AreaIconName };
 type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
 type TaskPriority = "high" | "medium" | "low";
 type TaskSort = "custom" | "alphabetical" | "dueDate" | "priority";
-type Task = { id: string; title: string; areaId?: string; projectId?: string; done: boolean; createdAt: number; dueDate?: string; priority?: TaskPriority };
+type Task = { id: string; title: string; areaId?: string; projectId?: string; done: boolean; createdAt: number; dueDate?: string; priority?: TaskPriority; notes?: string };
+type TaskPatch = Partial<Pick<Task, "dueDate" | "priority" | "notes">>;
+type UpdateTask = (id: string, patch: TaskPatch) => void;
 type Selection =
   | { kind: "today" | "inbox" | "review" }
   | { kind: "area"; id: string }
@@ -21,6 +24,8 @@ type Account = { displayName: string; email: string };
 type EntityKind = "area" | "project" | "task";
 type SortPreferences = Record<string, TaskSort>;
 type DragItem = { kind: EntityKind; id: string; scope: string };
+type TaskNoteEditorEvent = { taskId: string; open: boolean; draft?: string; saved?: string };
+type TaskNoteEditorChange = (event: TaskNoteEditorEvent) => void;
 type ReorderProps = {
   descriptor: DragItem;
   onDragStart: (event: DragEvent<HTMLButtonElement>, item: DragItem) => void;
@@ -80,7 +85,12 @@ function normalizeClientWorkspace(value: unknown): Workspace | null {
   const areas = candidate.areas.map(normalizeArea).filter(Boolean) as Area[];
   if (areas.length !== candidate.areas.length) return null;
   const currentAreaId = areas.some((area) => area.id === candidate.currentAreaId) ? candidate.currentAreaId : areas[0]?.id;
-  return { areas, projects: candidate.projects, tasks: candidate.tasks, reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
+  const tasks = candidate.tasks.map((task) => {
+    const notes = normalizeTaskNotes(task.notes);
+    return notes === null ? null : { ...task, notes };
+  });
+  if (tasks.some((task) => task === null)) return null;
+  return { areas, projects: candidate.projects, tasks: tasks as Task[], reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
 }
 
 function reorderScoped<T extends { id: string }>(items: T[], scopeIds: string[], sourceId: string, targetId: string) {
@@ -150,6 +160,37 @@ export default function Home() {
   const lastSyncedWorkspace = useRef("");
   const lastServerUpdatedAt = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const openTaskNoteEditors = useRef(new Set<string>());
+  const pendingTaskNoteCommits = useRef(new Map<string, string>());
+
+  const handleTaskNoteEditorChange = useCallback(({ taskId, open, draft, saved }: TaskNoteEditorEvent) => {
+    if (open) {
+      openTaskNoteEditors.current.add(taskId);
+      return;
+    }
+    if (draft !== undefined && saved !== undefined && draft !== saved) {
+      pendingTaskNoteCommits.current.set(taskId, draft);
+      queueMicrotask(() => {
+        if (pendingTaskNoteCommits.current.get(taskId) !== draft) return;
+        setWorkspace((current) => ({
+          ...current,
+          tasks: current.tasks.map((task) => task.id === taskId ? { ...task, notes: draft || undefined } : task),
+        }));
+      });
+      return;
+    }
+    openTaskNoteEditors.current.delete(taskId);
+  }, []);
+
+  useEffect(() => {
+    for (const [taskId, draft] of pendingTaskNoteCommits.current) {
+      const task = workspace.tasks.find((item) => item.id === taskId);
+      if (!task || (task.notes ?? "") === draft) {
+        pendingTaskNoteCommits.current.delete(taskId);
+        openTaskNoteEditors.current.delete(taskId);
+      }
+    }
+  }, [workspace]);
 
   useEffect(() => {
     let active = true;
@@ -245,13 +286,13 @@ export default function Home() {
     let active = true;
 
     async function refreshFromCloud() {
-      if (document.visibilityState !== "visible" || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
+      if (document.visibilityState !== "visible" || openTaskNoteEditors.current.size > 0 || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
       try {
         const response = await fetch("/api/workspace", { cache: "no-store" });
         if (!response.ok) return;
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number };
         const synced = normalizeClientWorkspace(payload.workspace);
-        if (!active || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
+        if (!active || openTaskNoteEditors.current.size > 0 || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
         lastServerUpdatedAt.current = payload.updatedAt;
         lastSyncedWorkspace.current = JSON.stringify(synced);
         setWorkspace(synced);
@@ -406,14 +447,9 @@ export default function Home() {
     setToast("Task moved");
   }
 
-  function renameArea(id: string, name: string) {
-    setWorkspace((current) => ({ ...current, areas: current.areas.map((area) => area.id === id ? { ...area, name } : area) }));
-    setToast("Area renamed");
-  }
-
-  function updateAreaIcon(id: string, icon: AreaIconName) {
-    setWorkspace((current) => ({ ...current, areas: current.areas.map((area) => area.id === id ? { ...area, icon } : area) }));
-    setToast("Area icon updated");
+  function updateArea(id: string, patch: Partial<Pick<Area, "name" | "icon">>) {
+    setWorkspace((current) => ({ ...current, areas: current.areas.map((area) => area.id === id ? { ...area, ...patch } : area) }));
+    setToast("Area updated");
   }
 
   function renameProject(id: string, name: string) {
@@ -426,7 +462,7 @@ export default function Home() {
     setToast("Task renamed");
   }
 
-  function updateTask(id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) {
+  function updateTask(id: string, patch: TaskPatch) {
     setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, ...patch } : task) }));
   }
 
@@ -480,8 +516,9 @@ export default function Home() {
   }
 
   function drop(event: DragEvent<HTMLElement>, item: DragItem) {
+    if (!dragged) return;
     event.preventDefault();
-    if (dragged) reorderItem(dragged, item);
+    reorderItem(dragged, item);
     setDragged(null);
   }
 
@@ -540,10 +577,10 @@ export default function Home() {
           <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
         </header>
 
-        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} navigate={navigate} reorderProps={reorderProps} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
-        {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
-        {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} renameArea={renameArea} updateAreaIcon={updateAreaIcon} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
-        {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} removeProject={removeProject} />}
+        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} navigate={navigate} reorderProps={reorderProps} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
+        {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
+        {selection.kind === "area" && activeArea && <AreaView area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} navigate={navigate} toggleTask={toggleTask} updateArea={updateArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} sortItems={sortItems} taskSort={taskSortFor(`area:${activeArea.id}`)} setTaskSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} removeArea={removeArea} />}
+        {selection.kind === "project" && activeProject && activeArea && <ProjectView project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} removeProject={removeProject} />}
         {selection.kind === "review" && <Review reviewed={workspace.reviewed} toggleReviewed={toggleReviewed} inboxCount={inboxTasks.length} />}
       </main>
       {toast && <div className="toast" role="status"><span>{toast}</span>{undoWorkspace && <button onClick={() => { setWorkspace(undoWorkspace); setUndoWorkspace(null); setToast("Restored"); }}>Undo removal</button>}</div>}
@@ -580,6 +617,10 @@ function DragHandle({ descriptor, onDragStart, onDragEnd, label }: ReorderProps 
   </div>;
 }
 
+function EditIcon() {
+  return <svg className="edit-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5.5 4 4M5 19l2.8-.6L18.5 7.7a1.4 1.4 0 0 0 0-2l-.2-.2a1.4 1.4 0 0 0-2 0L5.6 16.2 5 19Z" /></svg>;
+}
+
 function NameEditor({ value, onSave, label, large = false }: { value: string; onSave: (value: string) => void; label: string; large?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -597,7 +638,47 @@ function NameEditor({ value, onSave, label, large = false }: { value: string; on
     <button disabled={!draft.trim()}>Save</button><button type="button" onClick={() => { setDraft(value); setEditing(false); }}>Cancel</button>
   </form>;
 
-  return <div className={`name-editor ${large ? "large" : ""}`}><span>{value}</span><button onClick={() => { setDraft(value); setEditing(true); }} aria-label={`Rename ${value}`}>Edit</button></div>;
+  return <div className={`name-editor ${large ? "large" : ""}`}><span>{value}</span><button onClick={() => { setDraft(value); setEditing(true); }} aria-label={`Rename ${value}`}><span className="edit-label">Edit</span><EditIcon /></button></div>;
+}
+
+function AreaEditor({ area, onSave }: { area: Area; onSave: (patch: Partial<Pick<Area, "name" | "icon">>) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState(area.name);
+  const [draftIcon, setDraftIcon] = useState<AreaIconName>(area.icon);
+  const initial = useRef<Pick<Area, "name" | "icon">>({ name: area.name, icon: area.icon });
+
+  function beginEditing() {
+    initial.current = { name: area.name, icon: area.icon };
+    setDraftName(area.name);
+    setDraftIcon(area.icon);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setDraftName(area.name);
+    setDraftIcon(area.icon);
+    setEditing(false);
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const name = draftName.trim();
+    if (!name) return;
+    const patch = changedAreaPatch(initial.current, { name, icon: draftIcon });
+    if (Object.keys(patch).length) onSave(patch);
+    setEditing(false);
+  }
+
+  if (editing) return <form className="area-editor-form" onSubmit={submit}>
+    <div className="area-editor-fields">
+      <input value={draftName} onChange={(event) => setDraftName(event.target.value)} aria-label={`Area name for ${area.name}`} onKeyDown={(event) => { if (event.key === "Escape") cancelEditing(); }} />
+      <button disabled={!draftName.trim()}>Save</button>
+      <button type="button" onClick={cancelEditing}>Cancel</button>
+    </div>
+    <AreaIconPicker value={draftIcon} onChange={setDraftIcon} />
+  </form>;
+
+  return <div className="name-editor large area-editor-summary"><span>{area.name}</span><button onClick={beginEditing} aria-label={`Edit ${area.name}`}><span className="edit-label">Edit</span><EditIcon /></button></div>;
 }
 
 function ListTools({ onSort, noun }: { onSort: () => void; noun: string }) {
@@ -606,7 +687,13 @@ function ListTools({ onSort, noun }: { onSort: () => void; noun: string }) {
 
 function TaskSortControl({ value, onChange }: { value: TaskSort; onChange: (sort: TaskSort) => void }) {
   const options: Array<[TaskSort, string]> = [["custom", "Manual"], ["alphabetical", "A–Z"], ["dueDate", "Due"], ["priority", "Priority"]];
-  return <label className="task-sort"><span>Order</span><select aria-label="Sort tasks" value={value} onChange={(event) => onChange(event.target.value as TaskSort)}>{options.map(([sort, label]) => <option value={sort} key={sort}>{label}</option>)}</select></label>;
+  const currentLabel = options.find(([sort]) => sort === value)?.[1] ?? "Manual";
+  return <label className="task-sort"><span className="task-sort-label">Order</span><span className="task-sort-control">
+    <svg className="task-sort-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h10M5 12h7M5 17h4m7-5v7m-3-3 3 3 3-3" /></svg>
+    <span className="task-sort-value">{currentLabel}</span>
+    <svg className="task-sort-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+    <select aria-label="Sort tasks" value={value} onChange={(event) => onChange(event.target.value as TaskSort)}>{options.map(([sort, label]) => <option value={sort} key={sort}>{label}</option>)}</select>
+  </span></label>;
 }
 
 function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void }) {
@@ -620,7 +707,7 @@ function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string
     openDateInputPicker(input);
   }
 
-  return <div className="task-planning" aria-label={`Timing and priority for ${task.title}`}>
+  return <>
     <div className={`task-direct-control timing ${task.dueDate ? "active" : ""}`} title={`${dueDateLabel || "Set timing"} for ${task.title}`}>
       <button type="button" className="task-direct-trigger" onClick={openDatePicker} aria-label={task.dueDate ? `Change due date for ${task.title}. ${dueDateLabel}.` : `Set due date for ${task.title}`}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" /></svg>
@@ -633,10 +720,75 @@ function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string
       <span className="priority-swatch" aria-hidden="true" />
       <select value={task.priority ?? ""} onChange={(event) => updateTask(task.id, { priority: (event.target.value || undefined) as TaskPriority | undefined })} aria-label={`Priority for ${task.title}`}><option value="">No priority</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
     </label>
+  </>;
+}
+
+function NoteIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12a2 2 0 0 1 2 2v8.25a2 2 0 0 1-2 2h-6l-4.5 3v-3H6a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" /><path d="M8 9h8M8 12.5h5" /></svg>;
+}
+
+function TaskCopy({ task, renameTask, updateTask, onTaskNoteEditorChange }: { task: Task; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
+  const noteButton = useRef<HTMLButtonElement>(null);
+  const noteEditor = useRef<HTMLTextAreaElement>(null);
+  const returnFocus = useRef(false);
+  const notesDraftRef = useRef(notesDraft);
+  const savedNotesRef = useRef(task.notes ?? "");
+  const hasNotes = Boolean(task.notes?.trim());
+  const noteEditorId = `task-notes-${task.id}`;
+
+  useEffect(() => {
+    if (notesOpen) noteEditor.current?.focus();
+    else if (returnFocus.current) {
+      noteButton.current?.focus();
+      returnFocus.current = false;
+    }
+  }, [notesOpen]);
+
+  useEffect(() => {
+    if (!notesOpen) return;
+    onTaskNoteEditorChange({ taskId: task.id, open: true });
+    return () => onTaskNoteEditorChange({ taskId: task.id, open: false, draft: notesDraftRef.current, saved: savedNotesRef.current });
+  }, [notesOpen, onTaskNoteEditorChange, task.id]);
+
+  function openNotes() {
+    const notes = task.notes ?? "";
+    notesDraftRef.current = notes;
+    savedNotesRef.current = notes;
+    setNotesDraft(notes);
+    setNotesOpen(true);
+  }
+
+  function commitNotes() {
+    const notes = notesDraftRef.current;
+    if (notes === savedNotesRef.current) return;
+    savedNotesRef.current = notes;
+    updateTask(task.id, { notes: notes || undefined });
+  }
+
+  function closeNotes() {
+    commitNotes();
+    returnFocus.current = true;
+    setNotesOpen(false);
+  }
+
+  return <div className="task-copy">
+    <NameEditor value={task.title} onSave={(value) => renameTask(task.id, value)} label={`Task name for ${task.title}`} />
+    <div className="task-planning" aria-label={`Timing, priority, and notes for ${task.title}`}>
+      <TaskDetails task={task} updateTask={updateTask} />
+      <button ref={noteButton} type="button" className={`task-direct-control task-note-trigger ${hasNotes ? "has-notes" : ""}`} onClick={() => notesOpen ? closeNotes() : openNotes()} aria-expanded={notesOpen} aria-controls={noteEditorId} aria-label={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`} title={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`}><NoteIcon /></button>
+    </div>
+    {hasNotes && !notesOpen && <p className="task-note-preview">{task.notes?.replace(/\s+/g, " ").trim()}</p>}
+    {notesOpen && <div className="task-note-editor" id={noteEditorId}>
+      <div className="task-note-editor-heading"><span>Task notes</span><button type="button" onClick={closeNotes}>Close</button></div>
+      <textarea ref={noteEditor} value={notesDraft} maxLength={20_000} onChange={(event) => { notesDraftRef.current = event.target.value; setNotesDraft(event.target.value); }} onBlur={commitNotes} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeNotes(); } }} placeholder="Add useful context, a decision, or what to remember next…" aria-label={`Notes for ${task.title}`} />
+      <p>Autosaves with this task.</p>
+    </div>}
   </div>;
 }
 
-function TaskRows({ tasks, toggleTask, renameTask, updateTask, reorderProps, empty, scope, taskSort }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; empty: string; scope: string; taskSort: TaskSort }) {
+function TaskRows({ tasks, toggleTask, renameTask, updateTask, onTaskNoteEditorChange, reorderProps, empty, scope, taskSort }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; scope: string; taskSort: TaskSort }) {
   if (!tasks.length) return <div className="empty-state"><strong>Nothing waiting here.</strong><p>{empty}</p></div>;
   const customOrder = taskSort === "custom";
   return <div className="task-list">{sortTasks(tasks, taskSort).map((task: Task) => {
@@ -646,12 +798,12 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, reorderProps, emp
     return <div className={`task-row ${task.done ? "done" : ""} ${customOrder ? "custom-order" : "sorted-order"}`} key={task.id} {...reorderEvents}>
       {customOrder && <DragHandle {...reorder} label={`Reorder ${task.title}`} />}
       <label className="task-check"><input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.done ? "incomplete" : "complete"}</span></label>
-      <div className="task-copy"><NameEditor value={task.title} onSave={(value) => renameTask(task.id, value)} label={`Task name for ${task.title}`} /><TaskDetails task={task} updateTask={updateTask} /></div>
+      <TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={onTaskNoteEditorChange} />
     </div>;
   })}</div>;
 }
 
-function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navigate, reorderProps, taskSort, setTaskSort, setCurrentArea }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; setCurrentArea: (id: string) => void }) {
+function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, onTaskNoteEditorChange, navigate, reorderProps, taskSort, setTaskSort, setCurrentArea }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; setCurrentArea: (id: string) => void }) {
   const currentArea = workspace.areas.find((area) => area.id === workspace.currentAreaId) ?? workspace.areas[0];
   const eligibleTasks = workspace.tasks.filter((task) => task.areaId === currentArea?.id && !task.done);
   const nextTasks = (taskSort === "custom" ? eligibleTasks : sortTasks(eligibleTasks, taskSort)).slice(0, 3) as Task[];
@@ -671,13 +823,13 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, navi
       </div>;
     })}</div></section>
     <div className="today-grid">
-      <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length}/3</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`today:${currentArea?.id ?? ""}`} taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks in {currentArea?.name}. Use Manual order to choose the three that lead.</p>}<p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
+      <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length}/3</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`today:${currentArea?.id ?? ""}`} taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks in {currentArea?.name}. Use Manual order to choose the three that lead.</p>}<p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
     </div>
     {inboxTasks.length > 0 && <button className="inbox-callout" onClick={() => navigate({ kind: "inbox" })}><span><strong>{inboxTasks.length} items need a home</strong><small>Process your inbox while context is fresh.</small></span><span>Open inbox</span></button>}
   </div>;
 }
 
-function Inbox({ workspace, tasks, toggleTask, renameTask, updateTask, moveTask, reorderProps, taskSort, setTaskSort }: { workspace: Workspace; tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; moveTask: (id: string, value: string) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void }) {
+function Inbox({ workspace, tasks, toggleTask, renameTask, updateTask, onTaskNoteEditorChange, moveTask, reorderProps, taskSort, setTaskSort }: { workspace: Workspace; tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange; moveTask: (id: string, value: string) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void }) {
   const customOrder = taskSort === "custom";
   const orderedTasks = sortTasks(tasks, taskSort) as Task[];
   return <div className="page"><div className="page-heading"><div><h1>Inbox</h1><p>Capture first. Give each item a proper home when you are ready.</p></div><div className="quiet-count">{tasks.length}<span>unprocessed</span></div></div>
@@ -685,30 +837,30 @@ function Inbox({ workspace, tasks, toggleTask, renameTask, updateTask, moveTask,
       const descriptor = { kind: "task" as const, id: task.id, scope: "inbox" };
       const reorder = reorderProps(descriptor);
       const reorderEvents = customOrder ? { onDragOver: (event: DragEvent<HTMLElement>) => reorder.onDragOver(event, descriptor), onDrop: (event: DragEvent<HTMLElement>) => reorder.onDrop(event, descriptor) } : {};
-      return <div className={`inbox-row ${task.done ? "done" : ""} ${customOrder ? "custom-order" : "sorted-order"}`} key={task.id} {...reorderEvents}>{customOrder && <DragHandle {...reorder} label={`Reorder ${task.title}`} />}<label className="task-check"><input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} /><span className="sr-only">Complete {task.title}</span></label><div className="task-copy"><NameEditor value={task.title} onSave={(value) => renameTask(task.id, value)} label={`Task name for ${task.title}`} /><TaskDetails task={task} updateTask={updateTask} /></div><select className="move-task" defaultValue="inbox" onChange={(event) => moveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="inbox">Move to…</option>{workspace.areas.map((area) => <optgroup label={area.name} key={area.id}><option value={`area:${area.id}`}>{area.name} · no project</option>{workspace.projects.filter((project) => project.areaId === area.id).map((project) => <option key={project.id} value={`project:${project.id}`}>{project.name}</option>)}</optgroup>)}</select></div>;
+      return <div className={`inbox-row ${task.done ? "done" : ""} ${customOrder ? "custom-order" : "sorted-order"}`} key={task.id} {...reorderEvents}>{customOrder && <DragHandle {...reorder} label={`Reorder ${task.title}`} />}<label className="task-check"><input type="checkbox" checked={task.done} onChange={() => toggleTask(task.id)} /><span className="sr-only">Complete {task.title}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /><select className="move-task" defaultValue="inbox" onChange={(event) => moveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="inbox">Move to…</option>{workspace.areas.map((area) => <optgroup label={area.name} key={area.id}><option value={`area:${area.id}`}>{area.name} · no project</option>{workspace.projects.filter((project) => project.areaId === area.id).map((project) => <option key={project.id} value={`project:${project.id}`}>{project.name}</option>)}</optgroup>)}</select></div>;
     }) : <div className="empty-state spacious"><strong>Your inbox is clear.</strong><p>New tasks added outside an area or project will land here.</p></div>}</section>
   </div>;
 }
 
-function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, newProject, setNewProject, addProject, navigate, toggleTask, renameArea, updateAreaIcon, renameProject, renameTask, updateTask, reorderProps, sortItems, taskSort, setTaskSort, removeArea }: { area: Area; projects: Project[]; tasks: Task[]; showProjectForm: boolean; setShowProjectForm: (value: boolean) => void; newProject: string; setNewProject: (value: string) => void; addProject: (event: FormEvent) => void; navigate: (next: Selection) => void; toggleTask: (id: string) => void; renameArea: (id: string, value: string) => void; updateAreaIcon: (id: string, icon: AreaIconName) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; removeArea: (id: string) => void }) {
+function AreaView({ area, projects, tasks, showProjectForm, setShowProjectForm, newProject, setNewProject, addProject, navigate, toggleTask, updateArea, renameProject, renameTask, updateTask, onTaskNoteEditorChange, reorderProps, sortItems, taskSort, setTaskSort, removeArea }: { area: Area; projects: Project[]; tasks: Task[]; showProjectForm: boolean; setShowProjectForm: (value: boolean) => void; newProject: string; setNewProject: (value: string) => void; addProject: (event: FormEvent) => void; navigate: (next: Selection) => void; toggleTask: (id: string) => void; updateArea: (id: string, patch: Partial<Pick<Area, "name" | "icon">>) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; sortItems: (kind: "area" | "project", scope: string) => void; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; removeArea: (id: string) => void }) {
   const looseTasks = tasks.filter((task) => !task.projectId);
-  return <div className="page"><div className="breadcrumb">Area</div><div className="page-heading area-page-heading"><div><NameEditor large value={area.name} onSave={(value) => renameArea(area.id, value)} label={`Area name for ${area.name}`} /><AreaIconPicker value={area.icon} onChange={(icon) => updateAreaIcon(area.id, icon)} /></div><button className="secondary-button" onClick={() => setShowProjectForm(!showProjectForm)}>{showProjectForm ? "Cancel" : "New project"}</button></div>
+  return <div className="page"><div className="breadcrumb">Area</div><div className="page-heading area-page-heading"><div><AreaEditor key={area.id} area={area} onSave={(patch) => updateArea(area.id, patch)} /></div><button className="secondary-button" onClick={() => setShowProjectForm(!showProjectForm)}>{showProjectForm ? "Cancel" : "New project"}</button></div>
     {showProjectForm && <form className="inline-create" onSubmit={addProject}><div><strong>Create a project in {area.name}</strong><span>Name a concrete body of work, not an ongoing responsibility.</span></div><input value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Project name" aria-label="Project name" /><button disabled={!newProject.trim()}>Create project</button></form>}
     <section className="project-section"><div className="section-title"><h2>Projects <small>{projects.length} active</small></h2><ListTools noun="projects" onSort={() => sortItems("project", area.id)} /></div>{projects.length ? <div className="project-list">{projects.map((project) => {
       const descriptor = { kind: "project" as const, id: project.id, scope: area.id };
       const reorder = reorderProps(descriptor);
       return <div className="entity-row project-entity" key={project.id} onDragOver={(event) => reorder.onDragOver(event, descriptor)} onDrop={(event) => reorder.onDrop(event, descriptor)}><DragHandle {...reorder} label={`Reorder ${project.name}`} /><div className="entity-copy"><NameEditor value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><small>{project.outcome}</small></div><span>{tasks.filter((task) => task.projectId === project.id && !task.done).length} tasks</span><button className="open-link" onClick={() => navigate({ kind: "project", id: project.id })}>Open</button></div>;
     })}</div> : <div className="empty-state"><strong>No projects yet.</strong><p>Create one when this area has a finite outcome to move.</p></div>}</section>
-    <section className="loose-tasks"><div className="section-title"><h2>Area tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={looseTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`area:${area.id}`} taskSort={taskSort} empty="Tasks added here without a project will appear in this list." /></section>
-    <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its synced projects, tasks, and project notes.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
+    <section className="loose-tasks"><div className="section-title"><h2>Area tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={looseTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`area:${area.id}`} taskSort={taskSort} empty="Tasks added here without a project will appear in this list." /></section>
+    <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its synced projects, tasks, and all attached notes.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
   </div>;
 }
 
-function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTask, updateTask, reorderProps, taskSort, setTaskSort, updateProject, removeProject }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; updateProject: (patch: Partial<Project>) => void; removeProject: (id: string) => void }) {
+function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTask, updateTask, onTaskNoteEditorChange, reorderProps, taskSort, setTaskSort, updateProject, removeProject }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; updateProject: (patch: Partial<Project>) => void; removeProject: (id: string) => void }) {
   return <div className="page"><div className="breadcrumb">{area.name} / Project</div><div className="page-heading project-heading"><div><NameEditor large value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><textarea className="outcome-editor" value={project.outcome} onChange={(event) => updateProject({ outcome: event.target.value })} aria-label="Project outcome" /></div><div className="quiet-count">{tasks.filter((task) => !task.done).length}<span>open tasks</span></div></div>
-    <div className="project-workspace"><section className="project-tasks"><div className="section-title"><h2>Tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} reorderProps={reorderProps} scope={`project:${project.id}`} taskSort={taskSort} empty="Add the next concrete action using the field above." /></section>
-    <section className="project-notes"><div className="section-title"><h2>Project notes</h2><span>Synced securely</span></div><textarea value={project.notes} onChange={(event) => updateProject({ notes: event.target.value })} placeholder="Keep decisions, references, observations, and useful context here…" aria-label={`Notes for ${project.name}`} /><p>Notes stay with this project—never in a disconnected pile.</p></section></div>
-    <div className="danger-zone"><div><strong>Remove this project</strong><p>This also removes its synced tasks and notes.</p></div><button onClick={() => removeProject(project.id)}>Remove project</button></div>
+    <div className="project-workspace"><section className="project-tasks"><div className="section-title"><h2>Tasks</h2><TaskSortControl value={taskSort} onChange={setTaskSort} /></div><TaskRows tasks={tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}`} taskSort={taskSort} empty="Add the next concrete action using the field above." /></section>
+    <section className="project-notes"><div className="section-title"><h2>Notes</h2><span>Autosaves</span></div><textarea value={project.notes} maxLength={200_000} onChange={(event) => updateProject({ notes: event.target.value })} placeholder="Keep decisions, references, observations, and useful context here…" aria-label={`Notes for ${project.name}`} /></section></div>
+    <div className="danger-zone"><div><strong>Remove this project</strong><p>This also removes its synced tasks and all attached notes.</p></div><button onClick={() => removeProject(project.id)}>Remove project</button></div>
   </div>;
 }
 

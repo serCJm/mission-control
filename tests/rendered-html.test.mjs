@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { normalizeArea } from "../app/area-schema.mjs";
+import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
+import { normalizeTaskNotes } from "../app/task-schema.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -28,6 +29,22 @@ test("upgrades saved areas from before custom icons without losing identity", ()
   assert.deepEqual(normalizeArea({ id: "custom", name: "Health", cue: "Define what matters" }), { id: "custom", name: "Health", icon: "target" });
   assert.deepEqual(normalizeArea({ id: "custom", name: "Health", icon: "heart" }), { id: "custom", name: "Health", icon: "heart" });
   assert.equal(normalizeArea({ id: "broken", name: "Broken" }), null);
+});
+
+test("saves only area fields changed during an edit", () => {
+  const initial = { name: "Trading", icon: "trend" };
+  assert.deepEqual(changedAreaPatch(initial, { name: "Trading systems", icon: "trend" }), { name: "Trading systems" });
+  assert.deepEqual(changedAreaPatch(initial, { name: "Trading", icon: "target" }), { icon: "target" });
+  assert.deepEqual(changedAreaPatch(initial, initial), {});
+});
+
+test("normalizes persisted task notes to the server contract", () => {
+  assert.equal(normalizeTaskNotes("useful context"), "useful context");
+  assert.equal(normalizeTaskNotes("x".repeat(20_000)), "x".repeat(20_000));
+  assert.equal(normalizeTaskNotes(undefined), undefined);
+  assert.equal(normalizeTaskNotes(42), null);
+  assert.equal(normalizeTaskNotes({ text: "invalid" }), null);
+  assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
 });
 
 test("sorts tasks without mutating their custom order", () => {
@@ -65,6 +82,41 @@ test("keeps task field sizing separate from checkbox sizing", () => {
   assert.match(css, /\.task-direct-control\.timing\{padding:0\}/);
   assert.match(css, /\.task-direct-trigger\{[^}]*height:100%/);
   assert.match(css, /\.timing \.task-direct-trigger\{[^}]*min-width:44px/);
+  assert.match(css, /\.task-row\.custom-order\{grid-template-areas:"check copy" "reorder copy"/);
+  assert.match(css, /\.task-row>\.order-controls\{grid-area:reorder;width:44px;height:44px/);
+  assert.match(css, /\.name-editor>button \.edit-label\{display:none\}/);
+  assert.match(css, /\.task-note-preview\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
+  assert.match(css, /\.task-note-editor\{[^}]*grid-column:1\/-1/);
+  assert.match(css, /\.task-note-trigger\[aria-expanded="true"\]\{[^}]*background:var\(--forest\)/);
+  assert.match(css, /\.task-row\.custom-order:has\(\.task-note-editor\)>\.order-controls\{[^}]*position:absolute[^}]*top:57px/);
+  assert.match(css, /\.project-notes\{[^}]*min-height:0/);
+});
+
+test("uses the shared task-note contract on the client and server", () => {
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(route, /normalizeTaskNotes\(item\.notes\) !== null/);
+  assert.match(page, /const notes = normalizeTaskNotes\(task\.notes\)/);
+  assert.match(page, /notes === null \? null/);
+  assert.match(page, /maxLength=\{20_000\}/);
+  assert.match(page, /notes: notes \|\| undefined/);
+  assert.match(page, /onBlur=\{commitNotes\}/);
+  assert.doesNotMatch(page, /onChange=\{\(event\) => updateTask\(task\.id, \{ notes:/);
+});
+
+test("persists a dirty task-note draft when its row unmounts without blur", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /return \(\) => onTaskNoteEditorChange\(\{ taskId: task\.id, open: false, draft: notesDraftRef\.current, saved: savedNotesRef\.current \}\)/);
+  assert.match(page, /if \(draft !== undefined && saved !== undefined && draft !== saved\)/);
+  assert.match(page, /queueMicrotask\(\(\) => \{/);
+  assert.match(page, /pendingTaskNoteCommits\.current\.get\(taskId\) !== draft/);
+  assert.match(page, /notes: draft \|\| undefined/);
+  assert.match(page, /if \(!task \|\| \(task\.notes \?\? ""\) === draft\)/);
+});
+
+test("row drops only intercept an active internal drag", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /function drop[\s\S]*?if \(!dragged\) return;[\s\S]*?event\.preventDefault\(\);/);
 });
 
 test("opens the native date picker with browser fallbacks", () => {
@@ -99,6 +151,8 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.ok(sidebar.indexOf("A-Setup Execution") < sidebar.indexOf("Market Replay Lab"));
 
   assert.match(html, /<select[^>]*aria-label="Sort tasks"/i);
+  assert.match(html, /class="task-sort-control"/i);
+  assert.match(html, /class="task-sort-value">Manual<\/span>/i);
   assert.match(html, /<option[^>]*>Manual<\/option>/i);
   assert.match(html, /<option[^>]*>A–Z<\/option>/i);
   assert.match(html, /<option[^>]*>Due<\/option>/i);
@@ -111,6 +165,11 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.match(html, /class="task-direct-trigger"/i);
   assert.match(html, /class="task-direct-control priority/i);
   assert.match(html, /class="priority-swatch"/i);
+  assert.match(html, /class="edit-icon"/i);
+  assert.match(html, /class="task-direct-control task-note-trigger/i);
+  assert.match(html, /aria-label="Add notes for /i);
+  assert.match(html, /aria-expanded="false"/i);
+  assert.match(html, /aria-controls="task-notes-/i);
   assert.doesNotMatch(html, /task-plan-trigger|task-plan-done/i);
 
   const currentAreaPicker = html.match(/<section[^>]*class="current-area-picker"[^>]*>[\s\S]*?<\/section>/i)?.[0];

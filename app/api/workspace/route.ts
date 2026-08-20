@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
+import { normalizeTaskNotes } from "../../task-schema.mjs";
 import { getD1 } from "../../../db";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
@@ -14,6 +15,7 @@ type Task = {
   createdAt: number;
   dueDate?: string;
   priority?: "high" | "medium" | "low";
+  notes?: string;
 };
 type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
 
@@ -47,7 +49,8 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     if (!task || typeof task !== "object") return false;
     const item = task as Record<string, unknown>;
     const validPriority = item.priority === undefined || item.priority === "high" || item.priority === "medium" || item.priority === "low";
-    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && typeof item.done === "boolean" && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority;
+    const validNotes = normalizeTaskNotes(item.notes) !== null;
+    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && typeof item.done === "boolean" && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes;
   });
 
   if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length) return null;
