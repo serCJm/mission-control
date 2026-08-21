@@ -1,9 +1,9 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
-import { normalizeTaskNotes } from "../../task-schema.mjs";
+import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
 import { getD1 } from "../../../db";
 
-type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book";
+type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
 type Area = { id: string; name: string; icon: AreaIconName };
 type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
 type Task = {
@@ -11,7 +11,7 @@ type Task = {
   title: string;
   areaId?: string;
   projectId?: string;
-  done: boolean;
+  status: "todo" | "doing" | "done";
   createdAt: number;
   dueDate?: string;
   priority?: "high" | "medium" | "low";
@@ -20,6 +20,7 @@ type Task = {
 type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
 
 const MAX_WORKSPACE_BYTES = 2_000_000;
+let developmentSchemaInitialization: Promise<void> | undefined;
 
 function isText(value: unknown, maxLength = 20_000): value is string {
   return typeof value === "string" && value.length <= maxLength;
@@ -50,7 +51,7 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     const item = task as Record<string, unknown>;
     const validPriority = item.priority === undefined || item.priority === "high" || item.priority === "medium" || item.priority === "low";
     const validNotes = normalizeTaskNotes(item.notes) !== null;
-    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && typeof item.done === "boolean" && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes;
+    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes;
   });
 
   if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length) return null;
@@ -67,11 +68,27 @@ function unauthorized() {
   return Response.json({ error: "Sign in with ChatGPT to sync this workspace." }, { status: 401 });
 }
 
+async function workspaceDatabase() {
+  const database = getD1();
+  if (process.env.NODE_ENV === "development") {
+    developmentSchemaInitialization ??= database.prepare(`CREATE TABLE IF NOT EXISTS workspaces (
+        user_id TEXT PRIMARY KEY NOT NULL,
+        data TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`).run().then(() => undefined).catch((error) => {
+        developmentSchemaInitialization = undefined;
+        throw error;
+      });
+    await developmentSchemaInitialization;
+  }
+  return database;
+}
+
 export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return unauthorized();
 
-  const row = await getD1()
+  const row = await (await workspaceDatabase())
     .prepare("SELECT data, updated_at AS updatedAt FROM workspaces WHERE user_id = ?")
     .bind(user.userId)
     .first<{ data: string; updatedAt: number }>();
@@ -102,7 +119,7 @@ export async function PUT(request: Request) {
   }
 
   const updatedAt = Date.now();
-  await getD1()
+  await (await workspaceDatabase())
     .prepare(`INSERT INTO workspaces (user_id, data, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`)

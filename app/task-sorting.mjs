@@ -1,3 +1,5 @@
+import { TASK_STATUS_RANK } from "./task-schema.mjs";
+
 const titleCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
 export const TASK_SORT_OPTIONS = ["custom", "alphabetical", "dueDate", "priority"];
@@ -14,7 +16,8 @@ export function sortTasks(tasks, sort) {
   return tasks
     .map((task, index) => ({ task, index }))
     .sort((left, right) => {
-      if (left.task.done !== right.task.done) return left.task.done ? 1 : -1;
+      const statusResult = (TASK_STATUS_RANK[left.task.status] ?? 0) - (TASK_STATUS_RANK[right.task.status] ?? 0);
+      if (statusResult) return statusResult;
 
       let result = 0;
       if (sort === "alphabetical") {

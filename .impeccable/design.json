@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-08T16:44:10Z",
+  "generatedAt": "2026-08-21T00:31:17Z",
   "title": "Design System: Mission Control",
   "extensions": {
     "colorMeta": {
@@ -135,9 +135,9 @@
     {
       "name": "Hierarchy List Row",
       "kind": "custom",
-      "description": "Signature entity row with explicit reordering, editing, status, and open controls.",
-      "html": "<div class=\"ds-entity-row\"><div class=\"ds-order\"><button aria-label=\"Drag to change order\"><i></i><i></i><i></i><i></i></button><span><button aria-label=\"Move up\">⌃</button><button aria-label=\"Move down\">⌄</button></span></div><div class=\"ds-copy\"><strong>Trading Practice</strong><small>Execute, review, and improve the process.</small></div><em>4 open</em><button class=\"ds-edit\">Edit</button><button class=\"ds-open\">Open</button></div>",
-      "css": ".ds-entity-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto auto; align-items: center; gap: 10px; max-width: 680px; border-bottom: 1px solid #e2e4dd; padding: 9px 0; color: var(--ink, #18211e); font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-order { display: flex; align-items: center; gap: 3px; } .ds-order > button { width: 26px; height: 30px; display: grid; grid-template-columns: 3px 3px; place-content: center; gap: 3px; border: 0; border-radius: 7px; background: transparent; cursor: grab; } .ds-order i { width: 3px; height: 3px; border-radius: 50%; background: #8e9892; } .ds-order span { display: grid; grid-template-columns: 18px 18px; } .ds-order span button { width: 18px; height: 24px; border: 0; border-radius: 5px; background: transparent; color: #65706b; } .ds-order button:hover, .ds-edit:hover { background: #e9ece4; } .ds-copy { min-width: 0; display: grid; } .ds-copy strong { font-size: 12px; line-height: 1.35; } .ds-copy small { margin-top: 3px; overflow: hidden; color: var(--muted, #65706b); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; } .ds-entity-row em { color: #56645d; font: normal 600 9px/1 var(--font-geist-mono, monospace); white-space: nowrap; } .ds-edit, .ds-open { min-height: 32px; border-radius: 7px; padding: 6px 8px; font-size: 10px; font-weight: 700; cursor: pointer; } .ds-edit { border: 0; background: transparent; color: #365b4d; } .ds-open { border: 1px solid #d5dad1; background: transparent; color: #405d52; } .ds-open:hover { border-color: #c5d49f; background: #edf2e1; } .ds-entity-row button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; }"
+      "description": "Signature entity row with a compact drag handle and icon-only edit and open actions.",
+      "html": "<div class=\"ds-entity-row\"><button class=\"ds-drag\" aria-label=\"Trading Practice. Drag to change order.\"><i></i><i></i><i></i></button><div class=\"ds-copy\"><strong>Trading Practice</strong><small>Execute, review, and improve the process.</small></div><em>4 open</em><button class=\"ds-edit\" aria-label=\"Edit Trading Practice\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"m14.5 5.5 4 4M5 19l2.8-.6L18.5 7.7a1.4 1.4 0 0 0 0-2l-.2-.2a1.4 1.4 0 0 0-2 0L5.6 16.2 5 19Z\"/></svg></button><button class=\"ds-open\" aria-label=\"Open Trading Practice\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M9 5h10v10M19 5 8 16m-3-7v10h10\"/></svg></button></div>",
+      "css": ".ds-entity-row { display: grid; grid-template-columns: 24px minmax(0,1fr) auto 34px 34px; align-items: center; gap: 8px; max-width: 680px; border-bottom: 1px solid #e2e4dd; padding: 13px 0; color: var(--ink, #18211e); font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-drag { width: 24px; height: 34px; display: grid; place-content: center; gap: 3px; border: 0; border-radius: 7px; background: transparent; cursor: grab; } .ds-drag i { width: 3px; height: 3px; border-radius: 50%; background: #8e9892; } .ds-copy { min-width: 0; display: grid; } .ds-copy strong { font-size: 14px; line-height: 1.35; } .ds-copy small { margin-top: 3px; overflow: hidden; color: var(--muted, #65706b); font-size: 9px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; } .ds-entity-row em { color: #56645d; font: normal 600 9px/1 var(--font-geist-mono, monospace); white-space: nowrap; } .ds-edit, .ds-open { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; background: transparent; color: #405d52; padding: 0; cursor: pointer; } .ds-edit { border: 0; } .ds-open { border: 1px solid #d5dad1; } .ds-edit:hover, .ds-drag:hover { background: #eef0e9; } .ds-open:hover { border-color: #c5d49f; background: #edf2e1; } .ds-edit svg, .ds-open svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .ds-entity-row button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; }"
     },
     {
       "name": "Command Mark",
@@ -163,14 +163,14 @@
       { "name": "The Forest Anchor Rule", "body": "Deep forest owns the navigation rail and the strongest operational actions so the application always has a stable visual bearing.", "section": "colors" },
       { "name": "The Instrument Label Rule", "body": "Use Geist Mono for terse values, timing, counts, and uppercase metadata—not for paragraphs or primary task names.", "section": "typography" },
       { "name": "The Editorial Pause Rule", "body": "Georgia is a rare reflective accent for principles and prompts; it never replaces Geist as the operating typeface.", "section": "typography" },
-      { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Custom-order move controls.", "section": "layout" },
+      { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Manual-order drag handles.", "section": "layout" },
       { "name": "The Buffer Is Structural Rule", "body": "Do not fill every viewport seam. Open paper around the work queue is part of the product's ability to absorb change.", "section": "layout" },
       { "name": "The Flat-by-Default Rule", "body": "Borders and tonal contrast organize ordinary work; shadows are reserved for overlays, transient feedback, and the single featured brief.", "section": "elevation" },
       { "name": "The Nested Radius Rule", "body": "Smaller controls sit inside larger surfaces with visibly tighter corners; do not give every object the same radius.", "section": "shapes" }
     ],
     "dos": [
       "Do use Warm Paper for the canvas and Quiet Panel for primary work surfaces.",
-      "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.",
+      "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Manual-order drag handles.",
       "Do preserve the 252px rail on desktop and convert it to a drawer below 920px.",
       "Do use signal lime sparingly for identity, status, and consequential cues.",
       "Do keep touch actions at least 44px tall in compact list layouts.",
@@ -181,7 +181,7 @@
       "Don't show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.",
       "Don't introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.",
       "Don't use Georgia for operational copy, task names, or navigation.",
-      "Don't let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Custom-order move controls.",
+      "Don't let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Manual-order drag handles.",
       "Don't use signal lime as a large decorative background when forest or a neutral surface can carry the structure."
     ]
   }

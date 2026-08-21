@@ -7,6 +7,22 @@ export const AREA_ICON_OPTIONS = [
   ["heart", "Health"],
   ["home", "Home"],
   ["book", "Learning"],
+  ["calendar", "Calendar"],
+  ["clock", "Time"],
+  ["star", "Favorite"],
+  ["flag", "Milestone"],
+  ["wallet", "Money"],
+  ["chart", "Analytics"],
+  ["dumbbell", "Fitness"],
+  ["music", "Music"],
+  ["camera", "Photography"],
+  ["plane", "Travel"],
+  ["car", "Transport"],
+  ["utensils", "Food"],
+  ["leaf", "Nature"],
+  ["paw", "Pets"],
+  ["globe", "World"],
+  ["palette", "Creative"],
 ];
 
 const AREA_ICONS = AREA_ICON_OPTIONS.map(([icon]) => icon);

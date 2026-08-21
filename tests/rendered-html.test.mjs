@@ -4,7 +4,7 @@ import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
-import { normalizeTaskNotes } from "../app/task-schema.mjs";
+import { isTaskStatus, normalizeTaskNotes } from "../app/task-schema.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -47,12 +47,17 @@ test("normalizes persisted task notes to the server contract", () => {
   assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
 });
 
+test("accepts only the three persisted task statuses", () => {
+  for (const status of ["todo", "doing", "done"]) assert.equal(isTaskStatus(status), true);
+  for (const status of ["open", "complete", false, undefined]) assert.equal(isTaskStatus(status), false);
+});
+
 test("sorts tasks without mutating their custom order", () => {
   const tasks = [
-    { id: "b", title: "Bravo", done: false, dueDate: "2026-08-10", priority: "medium" },
-    { id: "a", title: "alpha", done: false, dueDate: "2026-08-08", priority: "high" },
-    { id: "n", title: "No metadata", done: false },
-    { id: "d", title: "Aardvark done", done: true, dueDate: "2026-08-07", priority: "high" },
+    { id: "b", title: "Bravo", status: "todo", dueDate: "2026-08-10", priority: "medium" },
+    { id: "a", title: "alpha", status: "todo", dueDate: "2026-08-08", priority: "high" },
+    { id: "n", title: "No metadata", status: "todo" },
+    { id: "d", title: "Aardvark done", status: "done", dueDate: "2026-08-07", priority: "high" },
   ];
 
   assert.deepEqual(sortTasks(tasks, "custom").map((task) => task.id), ["b", "a", "n", "d"]);
@@ -64,14 +69,26 @@ test("sorts tasks without mutating their custom order", () => {
 
 test("keeps equal computed values in stable custom order", () => {
   const tasks = [
-    { id: "first", title: "Same", done: false, dueDate: "2026-08-08", priority: "high" },
-    { id: "second", title: "Same", done: false, dueDate: "2026-08-08", priority: "high" },
-    { id: "unset-1", title: "Unset", done: false },
-    { id: "unset-2", title: "Unset", done: false },
+    { id: "first", title: "Same", status: "todo", dueDate: "2026-08-08", priority: "high" },
+    { id: "second", title: "Same", status: "todo", dueDate: "2026-08-08", priority: "high" },
+    { id: "unset-1", title: "Unset", status: "todo" },
+    { id: "unset-2", title: "Unset", status: "todo" },
   ];
 
   for (const sort of ["alphabetical", "dueDate", "priority"]) {
     assert.deepEqual(sortTasks(tasks, sort).map((task) => task.id), ["first", "second", "unset-1", "unset-2"]);
+  }
+});
+
+test("ranks all three task statuses before applying computed sorts", () => {
+  const tasks = [
+    { id: "done", title: "Alpha", status: "done", dueDate: "2026-08-01", priority: "high" },
+    { id: "doing", title: "Bravo", status: "doing", dueDate: "2026-08-02", priority: "medium" },
+    { id: "todo", title: "Zulu", status: "todo", dueDate: "2026-08-03", priority: "low" },
+  ];
+
+  for (const sort of ["alphabetical", "dueDate", "priority"]) {
+    assert.deepEqual(sortTasks(tasks, sort).map((task) => task.id), ["todo", "doing", "done"]);
   }
 });
 
@@ -82,13 +99,21 @@ test("keeps task field sizing separate from checkbox sizing", () => {
   assert.match(css, /\.task-direct-control\.timing\{padding:0\}/);
   assert.match(css, /\.task-direct-trigger\{[^}]*height:100%/);
   assert.match(css, /\.timing \.task-direct-trigger\{[^}]*min-width:44px/);
-  assert.match(css, /\.task-row\.custom-order\{grid-template-areas:"check copy" "reorder copy"/);
-  assert.match(css, /\.task-row>\.order-controls\{grid-area:reorder;width:44px;height:44px/);
+  assert.match(css, /\.task-row\.custom-order\{grid-template-columns:12px 44px minmax\(0,1fr\);grid-template-areas:"reorder check copy"/);
+  assert.match(css, /\.task-row>\.order-controls\{grid-area:reorder;position:relative;width:12px;height:44px;align-self:center/);
+  assert.match(css, /\.task-row>\.order-controls \.drag-handle\{position:absolute;left:50%;top:0;width:24px;transform:translateX\(-50%\)/);
+  assert.match(css, /\.task-row:has\(\.name-editor\.editing\)\{grid-template-columns:minmax\(0,1fr\);grid-template-areas:"copy";padding:18px 0\}/);
+  assert.match(css, /\.task-row:has\(\.name-editor\.editing\)>\.order-controls,\.task-row:has\(\.name-editor\.editing\)>\.task-check\{display:none\}/);
   assert.match(css, /\.name-editor>button \.edit-label\{display:none\}/);
   assert.match(css, /\.task-note-preview\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
   assert.match(css, /\.task-note-editor\{[^}]*grid-column:1\/-1/);
   assert.match(css, /\.task-note-trigger\[aria-expanded="true"\]\{[^}]*background:var\(--forest\)/);
-  assert.match(css, /\.task-row\.custom-order:has\(\.task-note-editor\)>\.order-controls\{[^}]*position:absolute[^}]*top:57px/);
+  assert.match(css, /\.task-note-trigger\{[^}]*display:grid;place-items:center[^}]*padding:0!important/);
+  assert.match(css, /\.task-note-trigger svg\{transform:translateX\(1px\)\}/);
+  assert.match(css, /\.area-choice\{max-width:calc\(\(100% - 8px\)\/2\)\}/);
+  assert.match(css, /\.today-page \.today-grid\{margin-inline:-17px\}/);
+  assert.match(css, /\.today-page \.work-queue\{border-right:0;border-left:0;border-radius:0\}/);
+  assert.doesNotMatch(css, /\.task-row\.custom-order:has\(\.task-note-editor\)>\.order-controls/);
   assert.match(css, /\.project-notes\{[^}]*min-height:0/);
 });
 
@@ -104,6 +129,78 @@ test("uses the shared task-note contract on the client and server", () => {
   assert.doesNotMatch(page, /onChange=\{\(event\) => updateTask\(task\.id, \{ notes:/);
 });
 
+test("uses the three-state task contract and project view controls", () => {
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(route, /isTaskStatus\(item\.status\)/);
+  assert.doesNotMatch(route, /item\.done|done: boolean/);
+  assert.match(page, /status: "todo"/);
+  assert.match(page, /mission-control-project-view-v1/);
+  assert.match(page, /aria-label="Project task view"/);
+  assert.match(page, /label: "To do"/);
+  assert.match(page, /label: "Doing"/);
+  assert.match(page, /label: "Done"/);
+  assert.match(page, /className="kanban-board"/);
+  assert.match(page, /aria-label={`Status for \$\{task\.title\}`}/);
+  assert.doesNotMatch(page, /task\.done|done: false|done: true/);
+});
+
+test("uses compact accessible actions for inline name editing", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /aria-label="Save" title="Save"><ConfirmIcon/);
+  assert.doesNotMatch(page, /CancelIcon|aria-label="Cancel"|title="Cancel"/);
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  assert.match(css, /\.editor-action-icon\{width:13px;height:13px/);
+  assert.match(css, /\.name-editor\.editing\{display:grid;grid-template-columns:minmax\(0,1fr\) 34px/);
+});
+
+test("inline editors cancel drafts with Escape", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /function NameEditor[\s\S]*?onKeyDown=\{\(event\) => \{ if \(event\.key === "Escape"\) \{ event\.preventDefault\(\); cancel\(\); \} \}\}/);
+  assert.match(page, /function NameEditor[\s\S]*?setDraft\(value\);[\s\S]*?onEditingChange\?\.\(false\)/);
+  assert.match(page, /function AreaEditor[\s\S]*?onKeyDown=\{\(event\) => \{ if \(event\.key === "Escape"\) \{ event\.preventDefault\(\); cancel\(\); \} \}\}/);
+  assert.match(page, /function AreaEditor[\s\S]*?setDraftName\(initial\.current\.name\);[\s\S]*?setDraftIcon\(initial\.current\.icon\);[\s\S]*?setEditing\(false\)/);
+});
+
+test("uses an accessible icon-only mobile menu trigger", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  assert.match(page, /className="menu-button"/);
+  assert.match(page, /aria-label="Menu" title="Menu"><MenuIcon/);
+  assert.doesNotMatch(page, /className="menu-button"[^>]*>Menu<\/button>/);
+  assert.match(css, /\.topbar\{padding:8px 16px 8px 8px\}/);
+});
+
+test("uses a compact accessible task submit control on every view", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  assert.match(page, /aria-label=\{`Add task to \$\{captureDestination\}`\}/);
+  assert.match(page, /<PlusIcon \/>/);
+  assert.match(page, /title=\{`Add task to \$\{captureDestination\}`\}><PlusIcon \/>/);
+  assert.doesNotMatch(page, /quick-add-copy|>Add task <span>/);
+  assert.match(css, /\.quick-add button\{width:52px;display:grid;place-items:center/);
+  assert.match(css, /\.quick-add-icon\{display:block/);
+});
+
+test("uses an icon-only color priority picker", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /className="priority-menu" role="menu"/);
+  assert.match(page, /role="menuitemradio"/);
+  assert.match(page, /<PriorityFlag priority=\{priority\}/);
+  assert.doesNotMatch(page, /<select value=\{task\.priority/);
+});
+
+test("provides isolated identity and storage for local development", () => {
+  const auth = readFileSync(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+  assert.match(auth, /process\.env\.NODE_ENV !== "development"/);
+  assert.match(auth, /userId: "local-development"/);
+  assert.match(route, /process\.env\.NODE_ENV === "development"/);
+  assert.match(route, /CREATE TABLE IF NOT EXISTS workspaces/);
+  assert.doesNotMatch(vite, /host: "0\.0\.0\.0"/);
+});
+
 test("persists a dirty task-note draft when its row unmounts without blur", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /return \(\) => onTaskNoteEditorChange\(\{ taskId: task\.id, open: false, draft: notesDraftRef\.current, saved: savedNotesRef\.current \}\)/);
@@ -117,6 +214,38 @@ test("persists a dirty task-note draft when its row unmounts without blur", () =
 test("row drops only intercept an active internal drag", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /function drop[\s\S]*?if \(!dragged\) return;[\s\S]*?event\.preventDefault\(\);/);
+});
+
+test("project board drops guard the task's exact current project before changing status", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /currentTask\.projectId !== expectedProjectId/);
+  assert.match(page, /moveTaskToStatus\(dragged\.id, status, project\.id,/);
+  assert.doesNotMatch(page, /dragged\.scope\.startsWith\(`project:\$\{project\.id\}:/);
+});
+
+test("project status scopes preserve project IDs containing colons", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const projectScope = item\.scope\.slice\("project:"\.length\)/);
+  assert.match(page, /const statusDelimiter = projectScope\.lastIndexOf\(":"\)/);
+  assert.match(page, /const projectId = projectScope\.slice\(0, statusDelimiter\)/);
+  assert.doesNotMatch(page, /item\.scope\.split\(":"\)/);
+});
+
+test("status moves clear a pending removal undo before mutating the workspace", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /function moveTaskToStatus[\s\S]*?setUndoWorkspace\(null\);[\s\S]*?setWorkspace\(\(current\) =>/);
+  assert.match(page, /function StatusControl[\s\S]*?moveTaskToStatus\(task\.id, event\.target\.value as TaskStatus\)/);
+  assert.match(page, /showStatus moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\}/);
+  assert.match(page, /<StatusControl task=\{task\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\}/);
+  assert.doesNotMatch(page, /updateTask\(task\.id, \{ status:/);
+});
+
+test("project rows open without hijacking their edit or drag controls", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /className="entity-row project-entity"[\s\S]*?role="link"[\s\S]*?tabIndex=\{0\}/);
+  assert.match(page, /closest\("button, input, textarea, select, a"\)/);
+  assert.match(page, /event\.target === event\.currentTarget && \(event\.key === "Enter" \|\| event\.key === " "\)/);
+  assert.doesNotMatch(page, /className="open-link" onClick=\{\(\) => navigate\(\{ kind: "project"/);
 });
 
 test("opens the native date picker with browser fallbacks", () => {
@@ -158,18 +287,12 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.match(html, /<option[^>]*>Due<\/option>/i);
   assert.match(html, /<option[^>]*>Priority<\/option>/i);
   assert.doesNotMatch(html, /class="step-controls"|title="Move up"|title="Move down"/i);
-  assert.match(html, /type="date"/i);
-  assert.match(html, /aria-label="Due date for /i);
-  assert.match(html, /aria-label="Priority for /i);
-  assert.match(html, /class="task-direct-control timing/i);
-  assert.match(html, /class="task-direct-trigger"/i);
-  assert.match(html, /class="task-direct-control priority/i);
-  assert.match(html, /class="priority-swatch"/i);
+  assert.doesNotMatch(html, /type="date"|aria-label="Due date for |aria-label="Priority for /i);
+  assert.doesNotMatch(html, /class="task-direct-control timing|class="task-direct-trigger"|class="task-direct-control priority|class="priority-swatch"/i);
   assert.match(html, /class="edit-icon"/i);
-  assert.match(html, /class="task-direct-control task-note-trigger/i);
-  assert.match(html, /aria-label="Add notes for /i);
-  assert.match(html, /aria-expanded="false"/i);
-  assert.match(html, /aria-controls="task-notes-/i);
+  assert.doesNotMatch(html, /class="task-direct-control task-note-trigger|aria-label="Add notes for |aria-controls="task-notes-/i);
+  assert.match(html, /class="task-due-date">(?:Due |Overdue)/i);
+  assert.match(html, /class="task-row[^"]*has-priority priority-high/i);
   assert.doesNotMatch(html, /task-plan-trigger|task-plan-done/i);
 
   const currentAreaPicker = html.match(/<section[^>]*class="current-area-picker"[^>]*>[\s\S]*?<\/section>/i)?.[0];
