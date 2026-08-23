@@ -161,7 +161,13 @@ test("uses the shared project-note contract and removes the legacy textarea", ()
 test("renders an accessible responsive project note board", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(page, /className="project-note-composer-trigger"/);
+  assert.match(page, /<div className="section-title project-notes-heading">[\s\S]*?<h2[^>]*>Notes<\/h2>[\s\S]*?<div className="project-notes-meta">[\s\S]*?<button[^>]*className=\{`[^`]*project-note-add-button[^`]*`\} onClick=\{\(\) => composing \? closeComposer\(\) : setComposing\(true\)\}/);
+  assert.match(page, /function closeComposer\(\) \{\s*setComposing\(false\);\s*\}/);
+  assert.match(page, /function cancelComposer\(\) \{\s*setComposing\(false\);\s*setTitle\(""\);\s*setBody\(""\);\s*\}/);
+  assert.match(page, /useEffect\(\(\) => \{\s*setComposing\(false\);\s*setTitle\(""\);\s*setBody\(""\);\s*\}, \[project\.id\]\);/);
+  assert.match(page, /aria-label=\{composing \? "Close new note form" : "Add a note"\}/);
+  assert.match(page, /aria-expanded=\{composing\}/);
+  assert.doesNotMatch(page, /project-note-composer-trigger/);
   assert.match(page, /disabled=\{!canCreate\}/);
   assert.match(page, /className="notes-board"/);
   assert.match(page, /sortProjectNotes\(project\.notes\)/);

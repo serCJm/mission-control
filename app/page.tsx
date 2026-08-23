@@ -1120,6 +1120,10 @@ function ProjectNotes({ project, addNote, updateNote, removeNote, onEditorChange
     setBody("");
   }
 
+  function closeComposer() {
+    setComposing(false);
+  }
+
   function createNote(event: FormEvent) {
     event.preventDefault();
     if (!canCreate) return;
@@ -1128,12 +1132,12 @@ function ProjectNotes({ project, addNote, updateNote, removeNote, onEditorChange
   }
 
   return <section className="project-notes" aria-labelledby={`project-notes-${project.id}`}>
-    <div className="section-title project-notes-heading"><div><h2 id={`project-notes-${project.id}`}>Notes</h2><p className="section-note">Keep decisions, references, observations, and useful context close to the work.</p></div><span>{notes.length} {notes.length === 1 ? "note" : "notes"}</span></div>
+    <div className="section-title project-notes-heading"><div><h2 id={`project-notes-${project.id}`}>Notes</h2><p className="section-note">Keep decisions, references, observations, and useful context close to the work.</p></div><div className="project-notes-meta"><span>{notes.length} {notes.length === 1 ? "note" : "notes"}</span><button type="button" className={`project-add-button project-note-add-button ${composing ? "active" : ""}`} onClick={() => composing ? closeComposer() : setComposing(true)} aria-label={composing ? "Close new note form" : "Add a note"} title={composing ? "Close new note form" : "Add a note"} aria-expanded={composing}><PlusIcon /></button></div></div>
     {composing ? <form className="project-note-composer expanded" onSubmit={createNote} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelComposer(); } }}>
       <input autoFocus value={title} maxLength={500} onChange={(event) => setTitle(event.target.value)} placeholder="Title" aria-label="New note title" />
       <textarea value={body} maxLength={20_000} onChange={(event) => setBody(event.target.value)} placeholder="Write a note…" aria-label="New note body" />
       <div className="project-note-composer-actions"><button type="button" className="note-cancel-button" onClick={cancelComposer}>Cancel</button><button type="submit" className="note-create-button" disabled={!canCreate}>Create note</button></div>
-    </form> : <button type="button" className="project-note-composer-trigger" onClick={() => setComposing(true)}><PlusIcon /><span>Add a note</span><small>Use a title, body, or both</small></button>}
+    </form> : null}
     {notes.length ? <div className="notes-board">{notes.map((note) => <ProjectNoteCard key={note.id} note={note} updateNote={updateNote} removeNote={removeNote} onEditorChange={onEditorChange} />)}</div> : <div className="empty-state project-notes-empty"><strong>No notes yet.</strong><p>Add the first decision, observation, or reference for this project.</p></div>}
   </section>;
 }
