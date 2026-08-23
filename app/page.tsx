@@ -249,7 +249,7 @@ export default function Home() {
           return;
         }
         if (!response.ok) throw new Error("Unable to load the synced workspace.");
-        const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; user: Account };
+        const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; resetIncompatibleWorkspace?: boolean; user: Account };
         if (!active) return;
 
         const nextWorkspace = normalizeClientWorkspace(payload.workspace) ?? localWorkspace;
@@ -272,6 +272,7 @@ export default function Home() {
         setAccount(payload.user);
         setCloudReady(true);
         setSyncState("saved");
+        if (payload.resetIncompatibleWorkspace) setToast("Started fresh after a saved-data format change. Your previous cloud workspace was archived.");
         localStorage.removeItem(WORKSPACE_STORAGE_KEY);
         localStorage.removeItem("bearing-workspace-v2");
       } catch {

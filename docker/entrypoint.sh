@@ -12,4 +12,11 @@ if ! cmp -s package.json "$snapshot_directory/package.json" ||
   cp package.json package-lock.json "$snapshot_directory"
 fi
 
+# The bind-mounted vinext state can outlive its container. A replacement
+# development container cannot share a running process with the old container,
+# so any retained dev-server lock is stale.
+if [ "${1:-}" = "npm" ] && [ "${2:-}" = "run" ] && [ "${3:-}" = "dev" ]; then
+  rm -f .vinext/dev/lock.json
+fi
+
 exec "$@"

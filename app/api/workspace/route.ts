@@ -94,7 +94,8 @@ export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return unauthorized();
 
-  const row = await (await workspaceDatabase())
+  const database = await workspaceDatabase();
+  const row = await database
     .prepare("SELECT data, updated_at AS updatedAt FROM workspaces WHERE user_id = ?")
     .bind(user.userId)
     .first<{ data: string; updatedAt: number }>();
@@ -103,8 +104,30 @@ export async function GET() {
     return Response.json({ workspace: null, updatedAt: 0, user: { displayName: user.displayName, email: user.email } });
   }
 
-  const workspace = normalizeWorkspace(JSON.parse(row.data) as unknown);
-  if (!workspace) return Response.json({ error: "The saved workspace is invalid." }, { status: 500 });
+  let workspace: Workspace | null = null;
+  try {
+    workspace = normalizeWorkspace(JSON.parse(row.data) as unknown);
+  } catch { /* Invalid JSON is handled like any other obsolete workspace. */ }
+
+  if (!workspace) {
+    if (process.env.NODE_ENV === "development") {
+      await database.prepare("DELETE FROM workspaces WHERE user_id = ?").bind(user.userId).run();
+    } else {
+      const archiveUserId = `archived:${Date.now()}:${crypto.randomUUID()}:${user.userId}`;
+      await database
+        .prepare("UPDATE workspaces SET user_id = ? WHERE user_id = ?")
+        .bind(archiveUserId, user.userId)
+        .run();
+    }
+
+    return Response.json({
+      workspace: null,
+      updatedAt: 0,
+      resetIncompatibleWorkspace: true,
+      user: { displayName: user.displayName, email: user.email },
+    });
+  }
+
   return Response.json({ workspace, updatedAt: row.updatedAt, user: { displayName: user.displayName, email: user.email } });
 }
 

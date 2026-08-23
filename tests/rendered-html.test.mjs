@@ -251,11 +251,24 @@ test("provides isolated identity and storage for local development", () => {
   const auth = readFileSync(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
   const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+  const entrypoint = readFileSync(new URL("../docker/entrypoint.sh", import.meta.url), "utf8");
   assert.match(auth, /process\.env\.NODE_ENV !== "development"/);
   assert.match(auth, /userId: "local-development"/);
   assert.match(route, /process\.env\.NODE_ENV === "development"/);
   assert.match(route, /CREATE TABLE IF NOT EXISTS workspaces/);
   assert.doesNotMatch(vite, /host: "0\.0\.0\.0"/);
+  assert.match(entrypoint, /rm -f \.vinext\/dev\/lock\.json/);
+});
+
+test("recovers from an incompatible saved workspace without a sync dead-end", () => {
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(route, /DELETE FROM workspaces WHERE user_id = \?/);
+  assert.match(route, /UPDATE workspaces SET user_id = \? WHERE user_id = \?/);
+  assert.match(route, /resetIncompatibleWorkspace: true/);
+  assert.match(page, /payload\.resetIncompatibleWorkspace/);
+  assert.match(page, /previous cloud workspace was archived/);
+  assert.doesNotMatch(route, /The saved workspace is invalid/);
 });
 
 test("persists a dirty task-note draft when its row unmounts without blur", () => {
