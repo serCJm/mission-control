@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { openDateInputPicker } from "../app/task-date-control.mjs";
+import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../app/task-schema.mjs";
 
@@ -45,6 +46,23 @@ test("normalizes persisted task notes to the server contract", () => {
   assert.equal(normalizeTaskNotes(42), null);
   assert.equal(normalizeTaskNotes({ text: "invalid" }), null);
   assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
+});
+
+test("validates and sorts project note cards", () => {
+  const notes = [
+    { id: "older-pinned", title: "Pinned", body: "Keep close", pinned: true, createdAt: 1, updatedAt: 3 },
+    { id: "recent", title: "Recent", body: "Latest", pinned: false, createdAt: 3, updatedAt: 9 },
+    { id: "newer-pinned", title: "Pinned too", body: "Newer", pinned: true, createdAt: 2, updatedAt: 8 },
+  ];
+  assert.deepEqual(normalizeProjectNotes(notes), notes);
+  assert.deepEqual(sortProjectNotes(notes).map((note) => note.id), ["newer-pinned", "older-pinned", "recent"]);
+  assert.deepEqual(notes.map((note) => note.id), ["older-pinned", "recent", "newer-pinned"]);
+  assert.equal(normalizeProjectNotes("legacy notes"), null);
+  assert.equal(normalizeProjectNotes([{ ...notes[0], id: "duplicate" }, { ...notes[1], id: "duplicate" }]), null);
+  assert.equal(normalizeProjectNotes([{ ...notes[0], title: "x".repeat(501) }]), null);
+  assert.equal(normalizeProjectNotes([{ ...notes[0], body: "x".repeat(20_001) }]), null);
+  assert.equal(normalizeProjectNotes([{ ...notes[0], pinned: "yes" }]), null);
+  assert.equal(normalizeProjectNotes([{ ...notes[0], updatedAt: Number.NaN }]), null);
 });
 
 test("accepts only the three persisted task statuses", () => {
@@ -129,9 +147,39 @@ test("uses the shared task-note contract on the client and server", () => {
   assert.doesNotMatch(page, /onChange=\{\(event\) => updateTask\(task\.id, \{ notes:/);
 });
 
+test("uses the shared project-note contract and removes the legacy textarea", () => {
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(route, /normalizeProjectNotes\(item\.notes\)/);
+  assert.match(page, /const notes = normalizeProjectNotes\(project\.notes\)/);
+  assert.match(page, /type ProjectNote = \{ id: string; title: string; body: string; pinned: boolean; createdAt: number; updatedAt: number \}/);
+  assert.match(page, /notes: ProjectNote\[\]/);
+  assert.doesNotMatch(page, /notes: string/);
+  assert.doesNotMatch(page, /maxLength=\{200_000\}/);
+});
+
+test("renders an accessible responsive project note board", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  assert.match(page, /className="project-note-composer-trigger"/);
+  assert.match(page, /disabled=\{!canCreate\}/);
+  assert.match(page, /className="notes-board"/);
+  assert.match(page, /sortProjectNotes\(project\.notes\)/);
+  assert.match(page, /aria-pressed=\{note\.pinned\}/);
+  assert.match(page, /title="Delete note"/);
+  assert.match(page, /setUndoWorkspace\(workspace\)[\s\S]*?Note removed/);
+  assert.match(page, /openProjectNoteEditors\.current\.size > 0/);
+  assert.match(page, /No notes yet\./);
+  assert.match(css, /\.notes-board\{column-count:3;column-gap:12px\}/);
+  assert.match(css, /@media\(max-width:920px\)\{\.notes-board\{column-count:2\}\}/);
+  assert.match(css, /@media\(max-width:580px\)[^{]*\{[^}]*[\s\S]*?\.notes-board\{column-count:1\}/);
+  assert.match(css, /\.note-icon-button\{width:44px;height:44px/);
+});
+
 test("uses the three-state task contract and project view controls", () => {
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(route, /isTaskStatus\(item\.status\)/);
   assert.doesNotMatch(route, /item\.done|done: boolean/);
   assert.match(page, /status: "todo"/);
@@ -141,7 +189,10 @@ test("uses the three-state task contract and project view controls", () => {
   assert.match(page, /label: "Doing"/);
   assert.match(page, /label: "Done"/);
   assert.match(page, /className="kanban-board"/);
+  assert.match(css, /\.kanban-board\{[^}]*align-items:stretch/);
   assert.match(page, /aria-label={`Status for \$\{task\.title\}`}/);
+  assert.match(page, /className="status-control-label"/);
+  assert.match(css, /\.task-status-control select,[^}]*opacity:0/);
   assert.doesNotMatch(page, /task\.done|done: false|done: true/);
 });
 
@@ -246,6 +297,52 @@ test("project rows open without hijacking their edit or drag controls", () => {
   assert.match(page, /closest\("button, input, textarea, select, a"\)/);
   assert.match(page, /event\.target === event\.currentTarget && \(event\.key === "Enter" \|\| event\.key === " "\)/);
   assert.doesNotMatch(page, /className="open-link" onClick=\{\(\) => navigate\(\{ kind: "project"/);
+});
+
+test("area projects disclose open tasks and can release them to the area", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(page, /const \[expandedProjects, setExpandedProjects\] = useState<Set<string>>/);
+  assert.match(page, /className="project-disclosure" aria-expanded=\{isExpanded\} aria-controls=\{taskListId\}/);
+  assert.match(page, /task\.projectId === project\.id && task\.status !== "done"/);
+  assert.match(page, /aria-label=\{`Move \$\{task\.title\} to area tasks`\} onClick=\{\(\) => moveTask\(task\.id, `area:\$\{area\.id\}`\)\}/);
+  assert.match(css, /\.project-disclosure\{[^}]*align-self:center;justify-self:center/);
+  assert.match(page, /task\.status === "doing" \? "Doing" : "Todo"/);
+  assert.match(css, /\.project-task-preview-row\{grid-template-columns:48px minmax\(0,1fr\) auto;gap:9px\}/);
+  assert.match(css, /\.project-task-status\{[^}]*background:#f0f2ee;[^}]*transform:scale\(\.625\)/);
+  assert.match(css, /\.project-task-status\.status-doing\{[^}]*background:#edf2df/);
+});
+
+test("keeps completed project work in a collapsed archive outside the active board", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(page, /PROJECT_STATUSES\.filter\(\(status\) => status\.value !== "done"\)/);
+  assert.match(page, /const completedTasks = tasks\.filter\(\(task\) => task\.status === "done"\)/);
+  assert.match(page, /className=\{`completed-archive/);
+  assert.match(page, /onDrop=\{\(event\) => dropInStatus\(event, "done"\)\}/);
+  assert.match(page, /aria-expanded=\{showCompleted\} aria-controls=\{`completed-\$\{project\.id\}`\}/);
+  assert.match(css, /\.kanban-board\{display:grid;grid-template-columns:repeat\(2,minmax\(260px,1fr\)\)/);
+  assert.match(css, /\.completed-archive\{margin-top:14px/);
+});
+
+test("area tasks can be deferred to a separate someday queue", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
+  assert.match(page, /<h2>Someday<\/h2>/);
+  assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
+  assert.match(page, /label: "Move to area tasks", action: \(id\) => updateTask\(id, \{ someday: undefined \}\)/);
+  assert.match(page, /task\.status !== "done" && !task\.someday/);
+  assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
+});
+
+test("Someday tasks can be created directly from the area page", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /function addSomedayTask\(areaId: string, title: string\)/);
+  assert.match(page, /createdAt: Date\.now\(\), someday: true/);
+  assert.match(page, /aria-label=\{showSomedayForm \? "Close new Someday task form" : "New Someday task"\}/);
+  assert.match(page, /className="someday-create"/);
+  assert.match(page, /addSomedayTask\(area\.id, title\)/);
 });
 
 test("opens the native date picker with browser fallbacks", () => {

@@ -218,6 +218,10 @@ The deep forest rail uses muted cool-green labels at rest, a darker forest hover
 
 Rows are the core operating pattern. Entity rows prioritize the name and expose Edit, Open, and drag handles in the main workspace. Task rows pair the title with optional due date and priority controls, plus saved Manual, A–Z, Due date, and Priority views in a compact dropdown. Drag handles appear only in Manual task order. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, editable controls become at least 44px tall and secondary metadata yields before actions do.
 
+### Project Note Board
+
+Project notes form a lightweight working board below the task workflow. A centered inline composer creates titled or body-only notes, while quiet paper cards flow through three, two, and one columns as space narrows. Cards remain flat and hairline-defined, use signal lime only for the pinned state, and order pinned notes before the most recently edited context. Editing happens inside the card, autosaves through workspace sync, and keeps Pin, Delete, Done, keyboard Escape, touch-sized actions, empty guidance, and deletion Undo available without introducing a modal.
+
 ### Command Mark
 
 The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is always paired with the compact two-line Mission Control wordmark in the product rail.
@@ -228,6 +232,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 
 - **Do** use Warm Paper for the canvas and Quiet Panel for primary work surfaces.
 - **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.
+- **Do** keep project notes compact, project-owned, pin-first, and readable as a responsive board rather than one undifferentiated document.
 - **Do** preserve the 252px rail on desktop and convert it to a drawer below 920px.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.

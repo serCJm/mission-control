@@ -1,11 +1,13 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
+import { normalizeProjectNotes } from "../../project-note-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
 import { getD1 } from "../../../db";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
 type Area = { id: string; name: string; icon: AreaIconName };
-type Project = { id: string; areaId: string; name: string; outcome: string; notes: string };
+type ProjectNote = { id: string; title: string; body: string; pinned: boolean; createdAt: number; updatedAt: number };
+type Project = { id: string; areaId: string; name: string; outcome: string; notes: ProjectNote[] };
 type Task = {
   id: string;
   title: string;
@@ -16,6 +18,7 @@ type Task = {
   dueDate?: string;
   priority?: "high" | "medium" | "low";
   notes?: string;
+  someday?: boolean;
 };
 type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
 
@@ -41,17 +44,20 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     if (!isText(item.id, 200) || !isText(item.name, 500)) return null;
     return normalizeArea(item);
   }).filter(Boolean) as Area[];
-  const projects = candidate.projects.filter((project): project is Project => {
-    if (!project || typeof project !== "object") return false;
+  const projects = candidate.projects.map((project) => {
+    if (!project || typeof project !== "object") return null;
     const item = project as Record<string, unknown>;
-    return isText(item.id, 200) && isText(item.areaId, 200) && isText(item.name, 500) && isText(item.outcome) && isText(item.notes, 200_000);
-  });
+    const notes = normalizeProjectNotes(item.notes);
+    if (!isText(item.id, 200) || !isText(item.areaId, 200) || !isText(item.name, 500) || !isText(item.outcome) || notes === null) return null;
+    return { id: item.id, areaId: item.areaId, name: item.name, outcome: item.outcome, notes };
+  }).filter(Boolean) as Project[];
   const tasks = candidate.tasks.filter((task): task is Task => {
     if (!task || typeof task !== "object") return false;
     const item = task as Record<string, unknown>;
     const validPriority = item.priority === undefined || item.priority === "high" || item.priority === "medium" || item.priority === "low";
     const validNotes = normalizeTaskNotes(item.notes) !== null;
-    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes;
+    const validSomeday = item.someday === undefined || typeof item.someday === "boolean";
+    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes && validSomeday;
   });
 
   if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length) return null;

@@ -18,4 +18,4 @@ COPY --chown=node:node docker/entrypoint.sh /usr/local/lib/mission-control-entry
 EXPOSE 3000
 
 ENTRYPOINT ["sh", "/usr/local/lib/mission-control-entrypoint.sh"]
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

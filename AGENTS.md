@@ -8,6 +8,12 @@
 - Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
 - Perform all project development inside the Docker container. Run dependency installation, development servers, builds, checks, and tests in the container; do not install project dependencies or run project tooling directly on the host. Use the host only to run Docker/Docker Compose commands and edit files.
 
+# Development Server
+- Always start this Sites project with development data enabled. The workspace API depends on the local D1 binding and development identity supplied by the Sites/Vite development configuration; do not use a plain preview that omits them.
+- Start the app through Docker Compose so `vite.config.ts` loads `.openai/hosting.json` and provisions the local development bindings. For the shared preview, use `APP_PORT=3010 docker-compose up -d --build`.
+- If the persisted local D1 workspace uses an obsolete schema and `/api/workspace` reports that the saved workspace is invalid, remove the obsolete local-development row before restarting. Let the current starter workspace bootstrap a fresh dev-data row; do not add compatibility code or migrations for obsolete local data.
+- Keep Docker published on localhost. For remote access, proxy `http://127.0.0.1:3010` through Tailscale Serve instead of exposing the development server on every host interface.
+
 # Project Productivity Philosophy
 
 When helping with this project, use the following productivity philosophy as the default operating model unless the user explicitly overrides it:
