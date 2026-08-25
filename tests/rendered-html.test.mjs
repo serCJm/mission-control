@@ -4,6 +4,16 @@ import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
+import {
+  currentRoutineSession,
+  normalizeRoutine,
+  normalizeRoutines,
+  pruneRoutineSessions,
+  reconcileRoutine,
+  routineConsistency,
+  routineDateKey,
+  routineScheduleStartsOn,
+} from "../app/routine-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../app/task-schema.mjs";
 import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
@@ -93,6 +103,125 @@ test("validates and sorts project note cards", () => {
 test("accepts only the three persisted task statuses", () => {
   for (const status of ["todo", "doing", "done"]) assert.equal(isTaskStatus(status), true);
   for (const status of ["open", "complete", false, undefined]) assert.equal(isTaskStatus(status), false);
+});
+
+function routineFixture(overrides = {}) {
+  return {
+    id: "routine-1",
+    areaId: "trading",
+    name: "Pre-market preparation",
+    expectedMinutes: 20,
+    weekdays: [1, 2, 3, 4, 5],
+    allDay: false,
+    windowStart: "06:00",
+    windowEnd: "07:00",
+    scheduleEffectiveOn: "2026-08-24",
+    checklist: [{ id: "levels", text: "Mark overnight levels" }],
+    suspensions: [],
+    sessions: [],
+    ...overrides,
+  };
+}
+
+test("normalizes the strict routine workspace contract", () => {
+  const routine = routineFixture();
+  assert.deepEqual(normalizeRoutine(routine), routine);
+  assert.deepEqual(normalizeRoutines([routine], new Set(["trading"])), [routine]);
+  assert.equal(normalizeRoutines([routine], new Set(["family"])), null);
+  assert.equal(normalizeRoutine({ ...routine, weekdays: [] }), null);
+  assert.equal(normalizeRoutine({ ...routine, expectedMinutes: 0 }), null);
+  assert.equal(normalizeRoutine({ ...routine, windowEnd: "05:30" }), null);
+  assert.equal(normalizeRoutine({ ...routine, checklist: Array.from({ length: 21 }, (_, index) => ({ id: `${index}`, text: "Step" })) }), null);
+});
+
+test("opens, finalizes, and reconciles routine sessions without duplicates", () => {
+  const openTime = new Date("2026-08-25T13:30:00.000Z");
+  const open = reconcileRoutine(routineFixture(), openTime);
+  assert.equal(open.sessions.length, 2);
+  assert.equal(open.sessions[0].status, "missed");
+  assert.equal(open.sessions[1].status, "pending");
+  assert.equal(currentRoutineSession(open, openTime)?.date, "2026-08-25");
+  assert.strictEqual(reconcileRoutine(open, openTime), open);
+
+  const closed = reconcileRoutine(open, new Date("2026-08-25T14:00:00.000Z"));
+  assert.equal(closed.sessions.at(-1).status, "missed");
+  assert.equal(currentRoutineSession(closed, new Date("2026-08-25T14:00:00.000Z")), null);
+  assert.equal(new Set(closed.sessions.map((session) => session.date)).size, closed.sessions.length);
+});
+
+test("excludes pause and vacation dates from routine debt", () => {
+  const routine = routineFixture({
+    allDay: true,
+    windowStart: undefined,
+    windowEnd: undefined,
+    suspensions: [
+      { id: "vacation", kind: "vacation", startsOn: "2026-08-24", endsOn: "2026-08-25" },
+      { id: "pause", kind: "pause", startsOn: "2026-08-26" },
+    ],
+  });
+  const reconciled = reconcileRoutine(routine, new Date("2026-08-26T18:00:00.000Z"));
+  assert.deepEqual(reconciled.sessions, []);
+});
+
+test("keeps schedule edits future-effective and snapshots checklist history", () => {
+  const routine = routineFixture({
+    allDay: true,
+    windowStart: undefined,
+    windowEnd: undefined,
+    checklist: [{ id: "levels", text: "Mark overnight levels" }, { id: "risk", text: "Set maximum loss" }],
+    pendingSchedule: { weekdays: [3], allDay: true, effectiveOn: "2026-08-26" },
+  });
+  const before = reconcileRoutine(routine, new Date("2026-08-25T18:00:00.000Z"));
+  assert.equal(before.sessions.at(-1).date, "2026-08-25");
+  assert.equal(before.sessions.at(-1).checklist.length, 2);
+  const after = reconcileRoutine(before, new Date("2026-08-26T18:00:00.000Z"));
+  assert.equal(after.pendingSchedule, undefined);
+  assert.deepEqual(after.weekdays, [3]);
+  assert.equal(after.scheduleEffectiveOn, "2026-08-26");
+});
+
+test("caps history and calculates consistency from finalized sessions", () => {
+  const sessions = Array.from({ length: 14 }, (_, index) => ({
+    date: `2026-08-${String(index + 1).padStart(2, "0")}`,
+    status: index % 3 === 0 ? "completed" : "missed",
+    checklist: [],
+    updatedAt: index,
+  }));
+  const pruned = pruneRoutineSessions(sessions);
+  assert.equal(pruned.length, 10);
+  const consistency = routineConsistency(routineFixture({ sessions: pruned }));
+  assert.deepEqual(consistency, { completed: 3, total: 10 });
+});
+
+test("starts a timed routine tomorrow when today's window already closed", () => {
+  assert.equal(routineDateKey(new Date("2026-08-25T15:00:00.000Z")), "2026-08-25");
+  assert.equal(routineScheduleStartsOn(routineFixture(), new Date("2026-08-25T15:00:00.000Z")), "2026-08-26");
+  assert.equal(routineScheduleStartsOn({ ...routineFixture(), allDay: true }, new Date("2026-08-25T15:00:00.000Z")), "2026-08-25");
+});
+
+test("uses one strict routine contract on the client and server", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  assert.match(page, /normalizeRoutines\(candidate\.routines, new Set\(areas\.map/);
+  assert.match(route, /normalizeRoutines\(candidate\.routines, new Set\(areas\.map/);
+  assert.match(page, /routines: current\.routines\.filter\(\(routine\) => routine\.areaId !== areaId\)/);
+  assert.match(page, /reconcileRoutines\(normalized\.routines, new Date\(\)\)/);
+  assert.match(page, /60_000 - \(Date\.now\(\) % 60_000\)/);
+  assert.doesNotMatch(page, /focusTaskIds:[^\n]*routine/);
+});
+
+test("renders routines above projects and separately from Focus three", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/routines.css", import.meta.url), "utf8");
+  const areaView = page.slice(page.indexOf("function AreaView"), page.indexOf("function ProjectNoteCard"));
+  assert.ok(areaView.indexOf("<RoutinesSection") < areaView.indexOf('<section className="project-section"'));
+  assert.match(page, /<section className="today-routines">/);
+  assert.match(page, /activeRoutines = workspace\.routines\.filter\(\(routine\) => routine\.areaId === currentArea\?\.id && currentRoutineSession/);
+  assert.match(page, /aria-pressed=\{session\.status === "completed"\}/);
+  assert.match(page, /aria-expanded=\{reviewOpen\}/);
+  assert.match(page, /Vacation starts/);
+  assert.match(css, /@media\(max-width:580px\)/);
+  assert.match(css, /min-height:44px/);
 });
 
 test("sorts tasks without mutating their custom order", () => {

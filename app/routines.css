@@ -1,0 +1,72 @@
+.routine-form{display:grid;gap:16px;border:1px solid #cfd7ca;border-radius:12px;background:#f5f7f1;padding:18px;margin-bottom:12px;animation:task-note-reveal .16s cubic-bezier(.22,1,.36,1)}
+.routine-card>.routine-form{margin:0;border:0;border-radius:0}
+.routine-form-grid{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px}
+.routine-field{display:grid;gap:6px}
+.routine-field>span:first-child,.routine-form legend,.routine-time-fields label>span,.routine-vacation-panel label>span{color:#526159;font:650 8px var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.routine-field input,.routine-time-fields input,.routine-checklist-edit-row input,.routine-vacation-panel input{width:100%;min-width:0;border:1px solid #c9d0c5;border-radius:8px;background:#fff;padding:9px 10px;font-size:11px}
+.routine-duration-input{position:relative}
+.routine-duration-input input{padding-right:40px}
+.routine-duration-input i{position:absolute;right:10px;top:50%;color:#748079;font:650 8px var(--mono);transform:translateY(-50%)}
+.routine-form fieldset{min-width:0;margin:0;border:0;padding:0}
+.routine-form legend{margin-bottom:8px}
+.routine-form legend span{color:#84908a;font-weight:500;text-transform:none;letter-spacing:0}
+.routine-days>div{display:grid;grid-template-columns:repeat(7,minmax(38px,1fr));gap:6px}
+.routine-days button,.routine-window-mode button{min-height:38px;border:1px solid #cad1c6;border-radius:8px;background:#fff;color:#69756f;font-size:10px;font-weight:700}
+.routine-days button[aria-pressed="true"],.routine-window-mode button[aria-pressed="true"]{border-color:var(--forest);background:var(--forest);color:#fff}
+.routine-days>p,.routine-window>p{margin:6px 0 0;color:var(--danger);font-size:9px}
+.routine-window{display:grid;gap:8px}
+.routine-window-mode{display:flex;gap:6px}
+.routine-window-mode button{min-width:82px;padding:7px 12px}
+.routine-time-fields{display:grid;grid-template-columns:minmax(120px,1fr) auto minmax(120px,1fr);align-items:end;gap:8px}
+.routine-time-fields label{display:grid;gap:6px}
+.routine-time-fields>span{padding-bottom:9px;color:#7d8983;font-size:9px}
+.routine-checklist-editor>div{display:grid;gap:6px}
+.routine-checklist-edit-row{display:grid;grid-template-columns:12px minmax(0,1fr) 34px;align-items:center;gap:7px}
+.routine-checklist-edit-row>span{width:8px;height:8px;border:1px solid #b9c2b5;border-radius:3px}
+.routine-checklist-edit-row button{width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:7px;background:transparent;color:#7b6964;padding:0}
+.routine-checklist-edit-row button:hover{background:#f2e6e3;color:var(--danger)}
+.routine-checklist-edit-row svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.routine-add-step{justify-self:start;margin-top:7px;border:0;background:transparent;color:var(--forest);padding:4px 0;font-size:9px;font-weight:700}
+.routine-form-actions{display:flex;justify-content:flex-end;gap:7px;padding-top:3px}
+.routine-form-actions button,.routine-vacation-panel form>button{min-height:36px;border:1px solid #c4ccc0;border-radius:8px;background:#fff;padding:8px 12px;font-size:10px;font-weight:700}
+.routine-form-actions button[type="submit"],.routine-vacation-panel form>button{border-color:var(--forest);background:var(--forest);color:#fff}
+.routine-form-actions button:disabled,.routine-vacation-panel button:disabled{opacity:.45;cursor:not-allowed}
+.routine-vacation-panel form{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:8px}
+.routine-vacation-panel label{display:grid;gap:6px}
+.routine-vacation-panel ul{display:grid;gap:5px;margin:11px 0 0;padding:10px 0 0;border-top:1px solid #dce1d8;list-style:none}
+.routine-vacation-panel li{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#53625a;font:600 9px var(--mono)}
+.routine-vacation-panel li button{border:0;background:transparent;color:var(--danger);padding:5px;font:700 9px var(--sans)}
+
+@media(max-width:720px){
+  .routine-form-grid{grid-template-columns:1fr}
+  .routine-card-foot{align-items:flex-start;flex-direction:column}
+  .routine-primary-actions{width:100%}
+  .routine-primary-actions button{flex:1}
+  .routine-vacation-panel form{grid-template-columns:1fr 1fr}
+  .routine-vacation-panel form>button{grid-column:1/-1}
+}
+
+@media(max-width:580px){
+  .routine-section,.today-routines{margin-inline:-17px}
+  .routine-section>.section-title,.today-routines>.section-title{padding:0 17px}
+  .routine-card{border-right:0;border-left:0;border-radius:0}
+  .routine-card-main{padding:18px 17px}
+  .routine-card-heading{display:grid}
+  .routine-state{justify-self:start}
+  .routine-primary-actions button,.routine-management button{min-height:44px;padding:10px 12px}
+  .routine-management .routine-delete{margin-left:0}
+  .routine-review,.routine-vacation-panel,.routine-card>.routine-form{padding:16px 17px}
+  .routine-form{border-right:0;border-left:0;border-radius:0;padding:17px}
+  .routine-days>div{gap:4px}
+  .routine-days button{min-width:0;min-height:44px}
+  .routine-window-mode button{min-height:44px}
+  .routine-time-fields{grid-template-columns:1fr 1fr}
+  .routine-time-fields>span{display:none}
+  .routine-field input,.routine-time-fields input,.routine-checklist-edit-row input,.routine-vacation-panel input{min-height:44px;font-size:16px}
+  .routine-checklist-edit-row{grid-template-columns:10px minmax(0,1fr) 44px}
+  .routine-checklist-edit-row button{width:44px;height:44px}
+  .routine-form-actions button{min-height:44px}
+  .routine-vacation-panel form{grid-template-columns:1fr}
+  .routine-vacation-panel form>button{grid-column:auto;min-height:44px}
+  .routine-review li{grid-template-columns:52px 76px minmax(0,1fr)}
+}

@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
 import { normalizeProjectNotes } from "../../project-note-schema.mjs";
+import { normalizeRoutines } from "../../routine-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
 import { normalizeFocusTaskIds, normalizeWeeklyReview } from "../../workspace-guidance.mjs";
 import { getD1 } from "../../../db";
@@ -22,7 +23,12 @@ type Task = {
   someday?: boolean;
 };
 type WeeklyReview = { weekKey: string; completedSteps: number[]; intention: string };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
+type RoutineChecklistItem = { id: string; text: string };
+type RoutineSession = { date: string; status: "pending" | "completed" | "skipped" | "missed"; checklist: Array<RoutineChecklistItem & { checked: boolean }>; updatedAt: number };
+type RoutineSuspension = { id: string; kind: "pause" | "vacation"; startsOn: string; endsOn?: string };
+type RoutineSchedule = { weekdays: number[]; allDay: boolean; windowStart?: string; windowEnd?: string; effectiveOn?: string };
+type Routine = RoutineSchedule & { id: string; areaId: string; name: string; expectedMinutes: number; scheduleEffectiveOn: string; checklist: RoutineChecklistItem[]; suspensions: RoutineSuspension[]; sessions: RoutineSession[]; pendingSchedule?: RoutineSchedule };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
 
 const MAX_WORKSPACE_BYTES = 2_000_000;
 let developmentSchemaInitialization: Promise<void> | undefined;
@@ -38,7 +44,7 @@ function optionalText(value: unknown, maxLength = 20_000) {
 function normalizeWorkspace(value: unknown): Workspace | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
-  if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks)) return null;
+  if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks) || !Array.isArray(candidate.routines)) return null;
 
   const areas = candidate.areas.map((area) => {
     if (!area || typeof area !== "object") return null;
@@ -61,15 +67,16 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     const validSomeday = item.someday === undefined || typeof item.someday === "boolean";
     return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes && validSomeday;
   });
+  const routines = normalizeRoutines(candidate.routines, new Set(areas.map((area) => area.id))) as Routine[] | null;
 
-  if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length) return null;
+  if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length || routines === null) return null;
   const currentAreaId = isText(candidate.currentAreaId, 200) && areas.some((area) => area.id === candidate.currentAreaId)
     ? candidate.currentAreaId
     : areas[0]?.id;
   const focusTaskIds = normalizeFocusTaskIds(candidate.focusTaskIds, tasks, currentAreaId);
   const weeklyReview = normalizeWeeklyReview(candidate.weeklyReview);
   if (focusTaskIds === null || weeklyReview === null) return null;
-  return { areas, projects, tasks, focusTaskIds, weeklyReview, currentAreaId };
+  return { areas, projects, tasks, routines, focusTaskIds, weeklyReview, currentAreaId };
 }
 
 function unauthorized() {
