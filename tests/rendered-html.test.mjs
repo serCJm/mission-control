@@ -164,7 +164,7 @@ test("renders an accessible responsive project note board", () => {
   assert.match(page, /<div className="section-title project-notes-heading">[\s\S]*?<h2[^>]*>Notes<\/h2>[\s\S]*?<div className="project-notes-meta">[\s\S]*?<button[^>]*className=\{`[^`]*project-note-add-button[^`]*`\} onClick=\{\(\) => composing \? closeComposer\(\) : setComposing\(true\)\}/);
   assert.match(page, /function closeComposer\(\) \{\s*setComposing\(false\);\s*\}/);
   assert.match(page, /function cancelComposer\(\) \{\s*setComposing\(false\);\s*setTitle\(""\);\s*setBody\(""\);\s*\}/);
-  assert.match(page, /useEffect\(\(\) => \{\s*setComposing\(false\);\s*setTitle\(""\);\s*setBody\(""\);\s*\}, \[project\.id\]\);/);
+  assert.match(page, /<ProjectView key=\{activeProject\.id\}/);
   assert.match(page, /aria-label=\{composing \? "Close new note form" : "Add a note"\}/);
   assert.match(page, /aria-expanded=\{composing\}/);
   assert.doesNotMatch(page, /project-note-composer-trigger/);
@@ -310,9 +310,29 @@ test("status moves clear a pending removal undo before mutating the workspace", 
   assert.doesNotMatch(page, /updateTask\(task\.id, \{ status:/);
 });
 
+test("task undo restores only the removed task into the latest workspace", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /type TaskUndo = \{ task: Task; index: number \}/);
+  assert.match(page, /function removeTask[\s\S]*?setUndoWorkspace\(null\);[\s\S]*?setTaskUndo\(index >= 0 \? \{ task: workspace\.tasks\[index\], index \} : null\)/);
+  assert.match(page, /function undoRemoval[\s\S]*?if \(taskUndo\) \{[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?const tasks = \[\.\.\.current\.tasks\];[\s\S]*?tasks\.splice[\s\S]*?return \{ \.\.\.current, tasks \}/);
+  assert.match(page, /toast === "Task deleted" && taskUndo/);
+  assert.doesNotMatch(page, /\(taskUndo \|\| undoWorkspace\) && <button onClick=\{undoRemoval\}>Undo<\/button>/);
+});
+
+test("a replacement task undo restarts the toast expiry timer", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const timeout = window\.setTimeout\(\(\) => \{ setToast\(""\); setUndoWorkspace\(null\); setTaskUndo\(null\); \}, 8000\);[\s\S]*?\}, \[toast, taskUndo\]\);/);
+});
+
+test("area and project task composers reset when entity identity changes", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /<AreaView key=\{activeArea\.id\}/);
+  assert.match(page, /<ProjectView key=\{activeProject\.id\}/);
+});
+
 test("project rows open without hijacking their edit or drag controls", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /className="entity-row project-entity"[\s\S]*?role="link"[\s\S]*?tabIndex=\{0\}/);
+  assert.match(page, /className=\{`entity-row project-entity \$\{projectSort === "custom" \? "custom-order" : "sorted-order"\}`\}[\s\S]*?role="link"[\s\S]*?tabIndex=\{0\}/);
   assert.match(page, /closest\("button, input, textarea, select, a"\)/);
   assert.match(page, /event\.target === event\.currentTarget && \(event\.key === "Enter" \|\| event\.key === " "\)/);
   assert.doesNotMatch(page, /className="open-link" onClick=\{\(\) => navigate\(\{ kind: "project"/);
@@ -350,7 +370,7 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
   assert.match(page, /<h2>Someday<\/h2>/);
   assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
-  assert.match(page, /label: "Move to area tasks", action: \(id\) => updateTask\(id, \{ someday: undefined \}\)/);
+  assert.match(page, /label: "Move to today’s focus", action: \(id\) => updateTask\(id, \{ someday: undefined \}\)/);
   assert.match(page, /task\.status !== "done" && !task\.someday/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
 });
@@ -362,6 +382,14 @@ test("Someday tasks can be created directly from the area page", () => {
   assert.match(page, /aria-label=\{showSomedayForm \? "Close new Someday task form" : "New Someday task"\}/);
   assert.match(page, /className="someday-create"/);
   assert.match(page, /addSomedayTask\(area\.id, title\)/);
+});
+
+test("area task composers enforce the workspace task-title limit", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  assert.match(page, /value=\{newFocusTask\} maxLength=\{2_000\}/);
+  assert.match(page, /value=\{newSomedayTask\} maxLength=\{2_000\}/);
+  assert.match(route, /isText\(item\.title, 2_000\)/);
 });
 
 test("opens the native date picker with browser fallbacks", () => {
