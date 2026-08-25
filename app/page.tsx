@@ -370,7 +370,7 @@ export default function Home() {
   const inboxTasks = useMemo(() => workspace.tasks.filter((task) => !task.areaId && !task.projectId), [workspace.tasks]);
   const openTasks = useMemo(() => workspace.tasks.filter((task) => task.status !== "done"), [workspace.tasks]);
   const completeCount = workspace.tasks.filter((task) => task.status === "done").length;
-  const captureDestination = activeProject?.name ?? activeArea?.name ?? "Inbox";
+  const captureDestination = activeProject?.name ?? (selection.kind === "area" && activeArea ? `${activeArea.name} Someday` : "Inbox");
   const sidebarAreas = useMemo(() => [...workspace.areas].sort((a, b) => nameCollator.compare(a.name, b.name)), [workspace.areas]);
 
   function taskSortFor(scope: string): TaskSort {
@@ -418,6 +418,7 @@ export default function Home() {
       id: makeId("task"), title, status: "todo", createdAt: Date.now(),
       ...(activeArea ? { areaId: activeArea.id } : {}),
       ...(activeProject ? { projectId: activeProject.id } : {}),
+      ...(selection.kind === "area" ? { someday: true } : {}),
     };
     prependTask(task, `Added to ${captureDestination}`);
     setCapture("");

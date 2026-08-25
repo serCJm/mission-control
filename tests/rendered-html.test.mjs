@@ -379,6 +379,8 @@ test("Someday tasks can be created directly from the area page", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /function addSomedayTask\(areaId: string, title: string\)/);
   assert.match(page, /createdAt: Date\.now\(\), someday: true/);
+  assert.match(page, /selection\.kind === "area" \? \{ someday: true \} : \{\}/);
+  assert.match(page, /`\$\{activeArea\.name\} Someday`/);
   assert.match(page, /aria-label=\{showSomedayForm \? "Close new Someday task form" : "New Someday task"\}/);
   assert.match(page, /className="someday-create"/);
   assert.match(page, /addSomedayTask\(area\.id, title\)/);
