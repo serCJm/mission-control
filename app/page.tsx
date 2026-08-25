@@ -6,6 +6,7 @@ import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
+import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview } from "./workspace-guidance.mjs";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
 type Area = { id: string; name: string; icon: AreaIconName };
@@ -25,7 +26,8 @@ type Selection =
   | { kind: "today" | "inbox" | "review" }
   | { kind: "area"; id: string }
   | { kind: "project"; id: string };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
+type WeeklyReview = { weekKey: string; completedSteps: number[]; intention: string };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
 type SyncState = "loading" | "saving" | "saved" | "error";
 type Account = { displayName: string; email: string };
 type EntityKind = "area" | "project" | "task";
@@ -69,7 +71,8 @@ const seed: Workspace = {
     { id: "i1", title: "Compare new broker fee schedule", status: "todo", createdAt: 7 },
     { id: "i2", title: "Book annual dental appointments", status: "todo", createdAt: 8, dueDate: "2026-08-15", priority: "low" },
   ],
-  reviewed: [],
+  focusTaskIds: ["t1", "t2", "t3"],
+  weeklyReview: emptyWeeklyReview(currentWeekKey()),
   currentAreaId: "trading",
 };
 
@@ -114,7 +117,10 @@ function normalizeClientWorkspace(value: unknown): Workspace | null {
     return notes === null ? null : { ...task, notes };
   });
   if (tasks.some((task) => task === null)) return null;
-  return { areas, projects: projects as Project[], tasks: tasks as Task[], reviewed: Array.isArray(candidate.reviewed) ? candidate.reviewed : [], currentAreaId };
+  const focusTaskIds = normalizeFocusTaskIds(candidate.focusTaskIds, tasks, currentAreaId);
+  const weeklyReview = normalizeWeeklyReview(candidate.weeklyReview);
+  if (focusTaskIds === null || weeklyReview === null) return null;
+  return { areas, projects: projects as Project[], tasks: tasks as Task[], focusTaskIds, weeklyReview, currentAreaId };
 }
 
 function reorderScoped<T extends { id: string }>(items: T[], scopeIds: string[], sourceId: string, targetId: string) {
@@ -370,6 +376,8 @@ export default function Home() {
   const inboxTasks = useMemo(() => workspace.tasks.filter((task) => !task.areaId && !task.projectId), [workspace.tasks]);
   const openTasks = useMemo(() => workspace.tasks.filter((task) => task.status !== "done"), [workspace.tasks]);
   const completeCount = workspace.tasks.filter((task) => task.status === "done").length;
+  const reviewWeekKey = currentWeekKey(new Date(), PROJECT_TIME_ZONE);
+  const currentReview = workspace.weeklyReview.weekKey === reviewWeekKey ? workspace.weeklyReview : emptyWeeklyReview(reviewWeekKey);
   const captureDestination = activeProject?.name ?? (selection.kind === "area" && activeArea ? `${activeArea.name} Someday` : "Inbox");
   const sidebarAreas = useMemo(() => [...workspace.areas].sort((a, b) => nameCollator.compare(a.name, b.name)), [workspace.areas]);
 
@@ -382,8 +390,7 @@ export default function Home() {
   }
 
   function setCurrentArea(id: string) {
-    setWorkspace((current) => ({ ...current, currentAreaId: id }));
-    setTaskSort("today", "custom");
+    setWorkspace((current) => ({ ...current, currentAreaId: id, focusTaskIds: [] }));
     setToast(`${workspace.areas.find((area) => area.id === id)?.name ?? "Area"} is now in focus`);
   }
 
@@ -391,11 +398,28 @@ export default function Home() {
     window.location.reload();
   }
 
-  function toggleReviewed(index: number) {
+  function toggleFocusTask(id: string) {
     setWorkspace((current) => ({
       ...current,
-      reviewed: current.reviewed.includes(index) ? current.reviewed.filter((item) => item !== index) : [...current.reviewed, index],
+      focusTaskIds: current.focusTaskIds.includes(id)
+        ? current.focusTaskIds.filter((taskId) => taskId !== id)
+        : current.focusTaskIds.length < 3 ? [...current.focusTaskIds, id] : current.focusTaskIds,
     }));
+  }
+
+  function completeReviewStep(index: number, intention?: string) {
+    setWorkspace((current) => {
+      const review = current.weeklyReview.weekKey === reviewWeekKey ? current.weeklyReview : emptyWeeklyReview(reviewWeekKey);
+      return {
+        ...current,
+        weeklyReview: {
+          ...review,
+          completedSteps: review.completedSteps.includes(index) ? review.completedSteps : [...review.completedSteps, index],
+          intention: intention ?? review.intention,
+        },
+      };
+    });
+    setToast(index === 4 ? `Weekly brief saved for Week ${reviewWeekKey.slice(-2)}` : "Review step complete");
   }
 
   function navigate(next: Selection) {
@@ -473,6 +497,7 @@ export default function Home() {
       areas: current.areas.filter((item) => item.id !== areaId),
       projects: current.projects.filter((project) => project.areaId !== areaId),
       tasks: current.tasks.filter((task) => task.areaId !== areaId && !projectIds.includes(task.projectId ?? "")),
+      focusTaskIds: current.currentAreaId === areaId ? [] : current.focusTaskIds,
       currentAreaId: current.currentAreaId === areaId ? current.areas.find((item) => item.id !== areaId)?.id : current.currentAreaId,
     }));
     navigate({ kind: "today" });
@@ -487,6 +512,7 @@ export default function Home() {
       ...current,
       projects: current.projects.filter((item) => item.id !== projectId),
       tasks: current.tasks.filter((task) => task.projectId !== projectId),
+      focusTaskIds: current.focusTaskIds.filter((taskId) => current.tasks.some((task) => task.id === taskId && task.projectId !== projectId)),
     }));
     navigate(project ? { kind: "area", id: project.areaId } : { kind: "today" });
     setToast(`${project?.name ?? "Project"} removed`);
@@ -496,7 +522,7 @@ export default function Home() {
     const index = workspace.tasks.findIndex((task) => task.id === taskId);
     setUndoWorkspace(null);
     setTaskUndo(index >= 0 ? { task: workspace.tasks[index], index } : null);
-    setWorkspace((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskId) }));
+    setWorkspace((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskId), focusTaskIds: current.focusTaskIds.filter((id) => id !== taskId) }));
     setToast("Task deleted");
   }
 
@@ -517,7 +543,15 @@ export default function Home() {
   }
 
   function toggleTask(id: string) {
-    setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, status: task.status === "done" ? "todo" : "done" } : task) }));
+    setWorkspace((current) => {
+      const task = current.tasks.find((item) => item.id === id);
+      const completing = task?.status !== "done";
+      return {
+        ...current,
+        tasks: current.tasks.map((item) => item.id === id ? { ...item, status: item.status === "done" ? "todo" : "done" } : item),
+        focusTaskIds: completing ? current.focusTaskIds.filter((taskId) => taskId !== id) : current.focusTaskIds,
+      };
+    });
   }
 
   function moveTaskToStatus(id: string, status: TaskStatus, expectedProjectId?: string, targetId?: string) {
@@ -526,11 +560,12 @@ export default function Home() {
       const currentTask = current.tasks.find((task) => task.id === id);
       if (!currentTask || (expectedProjectId !== undefined && currentTask.projectId !== expectedProjectId)) return current;
       const movedTasks = current.tasks.map((task) => task.id === id ? { ...task, status } : task);
-      if (!targetId || targetId === id) return { ...current, tasks: movedTasks };
+      const focusTaskIds = status === "done" ? current.focusTaskIds.filter((taskId) => taskId !== id) : current.focusTaskIds;
+      if (!targetId || targetId === id) return { ...current, tasks: movedTasks, focusTaskIds };
       const task = movedTasks.find((item) => item.id === id);
       if (!task?.projectId) return { ...current, tasks: movedTasks };
       const ids = movedTasks.filter((item) => item.projectId === task.projectId && item.status === status).map((item) => item.id);
-      return { ...current, tasks: reorderScoped(movedTasks, ids, id, targetId) };
+      return { ...current, tasks: reorderScoped(movedTasks, ids, id, targetId), focusTaskIds };
     });
     const statusLabel = PROJECT_STATUSES.find((item) => item.value === status)?.label ?? status;
     setToast(`Moved to ${statusLabel}`);
@@ -538,16 +573,17 @@ export default function Home() {
 
   function moveTask(id: string, value: string) {
     setUndoWorkspace(null);
-    setWorkspace((current) => ({
-      ...current,
-      tasks: current.tasks.map((task) => {
+    setWorkspace((current) => {
+      const tasks = current.tasks.map((task) => {
         if (task.id !== id) return task;
         if (value === "inbox") return { ...task, areaId: undefined, projectId: undefined, someday: undefined };
         if (value.startsWith("area:")) return { ...task, areaId: value.slice(5), projectId: undefined, someday: undefined };
         const project = current.projects.find((item) => item.id === value.slice(8));
         return project ? { ...task, areaId: project.areaId, projectId: project.id, someday: undefined } : task;
-      }),
-    }));
+      });
+      const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
+      return { ...current, tasks, focusTaskIds };
+    });
     setToast("Task moved");
   }
 
@@ -567,7 +603,11 @@ export default function Home() {
   }
 
   function updateTask(id: string, patch: TaskPatch) {
-    setWorkspace((current) => ({ ...current, tasks: current.tasks.map((task) => task.id === id ? { ...task, ...patch } : task) }));
+    setWorkspace((current) => {
+      const tasks = current.tasks.map((task) => task.id === id ? { ...task, ...patch } : task);
+      const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
+      return { ...current, tasks, focusTaskIds };
+    });
   }
 
   function updateProject(patch: Partial<Project>) {
@@ -700,7 +740,7 @@ export default function Home() {
           })}
         </nav>
 
-        <button className={`review-link ${selection.kind === "review" ? "active" : ""}`} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{workspace.reviewed.length}/5</small></button>
+        <button className={`review-link ${selection.kind === "review" ? "active" : ""}`} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{currentReview.completedSteps.length}/5</small></button>
         <div className="sidebar-foot"><div><strong>Week {weekNumber(new Date())}</strong><span>{completeCount} tasks completed</span></div><p>Steady over busy.</p></div>
       </aside>
 
@@ -717,11 +757,11 @@ export default function Home() {
           <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
         </header>
 
-        {selection.kind === "today" && <Today workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} navigate={navigate} reorderProps={reorderProps} taskSort={taskSortFor("today")} setTaskSort={(sort) => setTaskSort("today", sort)} setCurrentArea={setCurrentArea} />}
+        {selection.kind === "today" && <Today key={workspace.currentAreaId ?? "today"} workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} navigate={navigate} reorderProps={reorderProps} setCurrentArea={setCurrentArea} toggleFocusTask={toggleFocusTask} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView key={activeArea.id} area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} addAreaTask={addAreaTask} addSomedayTask={addSomedayTask} navigate={navigate} toggleTask={toggleTask} updateArea={updateArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} focusSort={taskSortFor(`area:${activeArea.id}`)} setFocusSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} somedaySort={taskSortFor(`someday:${activeArea.id}`)} setSomedaySort={(sort) => setTaskSort(`someday:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} setDragged={setDragged} />}
-        {selection.kind === "review" && <Review reviewed={workspace.reviewed} toggleReviewed={toggleReviewed} inboxCount={inboxTasks.length} />}
+        {selection.kind === "review" && <Review key={currentReview.weekKey} workspace={workspace} review={currentReview} completeStep={completeReviewStep} navigate={navigate} />}
       </main>
       {toast && <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}
     </div>
@@ -1022,9 +1062,9 @@ function StatusControl({ task, moveTaskToStatus }: { task: Task; moveTaskToStatu
   </select></label>;
 }
 
-function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, showStatus = false, moveTaskToStatus, taskAction }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void } }) {
+function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void } }) {
   if (!tasks.length) return <div className="empty-state"><strong>{emptyTitle}</strong><p>{empty}</p></div>;
-  const customOrder = taskSort === "custom";
+  const customOrder = reorderable && taskSort === "custom";
   return <div className="task-list">{sortTasks(tasks, taskSort).map((task: Task) => {
     const descriptor = { kind: "task" as const, id: task.id, scope };
     const reorder = reorderProps(descriptor);
@@ -1039,10 +1079,11 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTas
   })}</div>;
 }
 
-function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, navigate, reorderProps, taskSort, setTaskSort, setCurrentArea }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; setCurrentArea: (id: string) => void }) {
+function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, navigate, reorderProps, setCurrentArea, toggleFocusTask }: { workspace: Workspace; inboxTasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; navigate: (next: Selection) => void; reorderProps: (item: DragItem) => ReorderProps; setCurrentArea: (id: string) => void; toggleFocusTask: (id: string) => void }) {
   const currentArea = workspace.areas.find((area) => area.id === workspace.currentAreaId) ?? workspace.areas[0];
   const eligibleTasks = workspace.tasks.filter((task) => task.areaId === currentArea?.id && task.status !== "done" && !task.someday);
-  const nextTasks = (taskSort === "custom" ? eligibleTasks : sortTasks(eligibleTasks, taskSort)).slice(0, 3) as Task[];
+  const focusedTasks = workspace.focusTaskIds.map((id) => eligibleTasks.find((task) => task.id === id)).filter(Boolean) as Task[];
+  const [choosingFocus, setChoosingFocus] = useState(focusedTasks.length === 0);
   const now = new Date();
   const dayName = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, weekday: "long" }).format(now);
   const calendarDate = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "long", day: "numeric" }).format(now);
@@ -1059,7 +1100,13 @@ function Today({ workspace, inboxTasks, toggleTask, renameTask, updateTask, remo
       </div>;
     })}</div></section>
     <div className="today-grid">
-      <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">The few actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{nextTasks.length}/3</span><TaskSortControl value={taskSort} onChange={setTaskSort} /></div></div><TaskRows tasks={nextTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`today:${currentArea?.id ?? ""}`} taskSort={taskSort} empty="Add a task above, or leave the space open." />{eligibleTasks.length > nextTasks.length && <p className="queue-note">Showing {nextTasks.length} of {eligibleTasks.length} open tasks in {currentArea?.name}. Choose Manual to drag the three that lead.</p>}<p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
+      <section className="work-queue"><div className="section-title"><div><h2>Focus three</h2><p className="section-note">Choose up to three actions in {currentArea?.name ?? "this area"} with the strongest consequence or feedback.</p></div><div className="section-actions"><span>{focusedTasks.length}/3</span><button type="button" className="focus-choose-button" aria-expanded={choosingFocus} onClick={() => setChoosingFocus((open) => !open)}>{choosingFocus ? "Done" : "Choose focus"}</button></div></div>
+      {choosingFocus && <div className="focus-chooser" aria-label={`Choose focus tasks from ${currentArea?.name ?? "the current area"}`}><div className="focus-chooser-heading"><strong>Open queue</strong><span>{eligibleTasks.length} available</span></div>{eligibleTasks.length ? <div className="focus-candidates">{eligibleTasks.map((task) => {
+        const selected = workspace.focusTaskIds.includes(task.id);
+        const project = workspace.projects.find((item) => item.id === task.projectId);
+        return <button type="button" className={`focus-candidate ${selected ? "selected" : ""}`} aria-pressed={selected} disabled={!selected && focusedTasks.length >= 3} onClick={() => toggleFocusTask(task.id)} key={task.id}><span className="focus-candidate-check" aria-hidden="true">{selected && <ConfirmIcon />}</span><span><strong>{task.title}</strong><small>{project?.name ?? `${currentArea?.name ?? "Area"} task`}{task.priority ? ` · ${task.priority} priority` : ""}</small></span></button>;
+      })}</div> : <div className="focus-chooser-empty">No open tasks are waiting in this area.</div>}</div>}
+      <TaskRows tasks={focusedTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`focus:${currentArea?.id ?? ""}`} taskSort="custom" reorderable={false} empty="Choose an open task from this area, or intentionally leave the space open." emptyTitle="Your focus is open." /><p className="principle-note"><strong>Process over prediction.</strong> Judge the day by the practice, not the outcome.</p></section>
     </div>
     {inboxTasks.length > 0 && <button className="inbox-callout" onClick={() => navigate({ kind: "inbox" })}><span><strong>{inboxTasks.length} items need a home</strong><small>Process your inbox while context is fresh.</small></span><span>Open inbox</span></button>}
   </div>;
@@ -1249,6 +1296,35 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
   </div>;
 }
 
-function Review({ reviewed, toggleReviewed, inboxCount }: { reviewed: number[]; toggleReviewed: (index: number) => void; inboxCount: number }) {
-  return <div className="page"><div className="page-heading"><div><h1>Reset your bearing.</h1><p>Make the system lighter before asking it to carry another week.</p></div><div className="quiet-count">{reviewed.length}/5<span>steps complete</span></div></div><div className="review-layout"><section className="review-steps">{reviewSteps.map(([title, copy], index) => <label aria-label={`${title}: ${index === 1 ? `${inboxCount} inbox items are waiting.` : copy}`} className={reviewed.includes(index) ? "complete" : ""} key={title}><input type="checkbox" checked={reviewed.includes(index)} onChange={() => toggleReviewed(index)} /><span><strong>{title}</strong><small>{index === 1 ? `${inboxCount} inbox items are waiting.` : copy}</small></span></label>)}</section><aside className="review-note"><span>Priority filter</span><h2>If this slips, what changes?</h2><dl><div><dt>Capital</dt><dd>Protect</dd></div><div><dt>Skills</dt><dd>Compound</dd></div><div><dt>Relationships</dt><dd>Be present</dd></div><div><dt>Everything else</dt><dd>Stay flexible</dd></div></dl><p>Consequences create priority. Urgency alone does not.</p></aside></div></div>;
+function Review({ workspace, review, completeStep, navigate }: { workspace: Workspace; review: WeeklyReview; completeStep: (index: number, intention?: string) => void; navigate: (next: Selection) => void }) {
+  const firstIncomplete = reviewSteps.findIndex((_, index) => !review.completedSteps.includes(index));
+  const [activeStep, setActiveStep] = useState(firstIncomplete < 0 ? 4 : firstIncomplete);
+  const [intention, setIntention] = useState(review.intention);
+  const currentArea = workspace.areas.find((area) => area.id === workspace.currentAreaId) ?? workspace.areas[0];
+  const focusTasks = workspace.focusTaskIds.map((id) => workspace.tasks.find((task) => task.id === id)).filter(Boolean) as Task[];
+  const inboxCount = workspace.tasks.filter((task) => !task.areaId && !task.projectId && task.status !== "done").length;
+  const completedCount = workspace.tasks.filter((task) => task.status === "done").length;
+  const openCount = workspace.tasks.filter((task) => task.status !== "done").length;
+  const somedayCount = workspace.tasks.filter((task) => task.someday && task.status !== "done").length;
+  const reviewComplete = review.completedSteps.length === reviewSteps.length;
+
+  function finishStep(index: number, savedIntention?: string) {
+    completeStep(index, savedIntention);
+    setActiveStep(Math.min(index + 1, reviewSteps.length - 1));
+  }
+
+  if (reviewComplete) return <div className="page review-page"><div className="page-heading"><div><h1>Your bearing is set.</h1><p>The week has a direction, a short field of work, and room for reality.</p></div><div className="quiet-count">5/5<span>Week {review.weekKey.slice(-2)} complete</span></div></div><section className="weekly-brief"><div className="weekly-brief-heading"><div><h2>Week {review.weekKey.slice(-2)} brief</h2><p>Return here when the week gets noisy.</p></div><span>Saved</span></div><div className="weekly-brief-grid"><div><span>Current area</span><strong>{currentArea?.name ?? "Choose an area"}</strong></div><div><span>Focus three</span>{focusTasks.length ? <ol>{focusTasks.map((task) => <li key={task.id}>{task.title}</li>)}</ol> : <p>No focus selected.</p>}</div><div><span>Weekly intention</span><blockquote>{review.intention || "Keep enough space to respond well."}</blockquote></div></div><button type="button" onClick={() => navigate({ kind: "today" })}>Open Today</button></section></div>;
+
+  const [stepTitle, stepCopy] = reviewSteps[activeStep];
+  return <div className="page review-page"><div className="page-heading"><div><h1>Reset your bearing.</h1><p>Make the system lighter before asking it to carry another week.</p></div><div className="quiet-count">{review.completedSteps.length}/5<span>Week {review.weekKey.slice(-2)}</span></div></div><div className="guided-review"><nav className="review-progress" aria-label="Weekly review steps">{reviewSteps.map(([title, copy], index) => {
+    const complete = review.completedSteps.includes(index);
+    const available = complete || index <= Math.max(firstIncomplete, 0);
+    return <button type="button" className={`${activeStep === index ? "active" : ""} ${complete ? "complete" : ""}`} disabled={!available} aria-current={activeStep === index ? "step" : undefined} onClick={() => setActiveStep(index)} key={title}><span>{complete ? <ConfirmIcon /> : index + 1}</span><span><strong>{title}</strong><small>{copy}</small></span></button>;
+  })}</nav><section className="review-stage" aria-labelledby="review-stage-title"><div className="review-stage-heading"><span>Step {activeStep + 1} of 5</span><h2 id="review-stage-title">{stepTitle}</h2><p>{activeStep === 1 && inboxCount > 0 ? `${inboxCount} inbox ${inboxCount === 1 ? "item is" : "items are"} still waiting for a home.` : stepCopy}</p></div>
+    {activeStep === 0 && <><div className="review-evidence"><div><strong>{completedCount}</strong><span>tasks completed</span></div><div><strong>{openCount}</strong><span>still open</span></div><div><strong>{workspace.projects.length}</strong><span>projects carrying work</span></div></div><p className="review-prompt">Notice the work that produced learning, protected something important, or changed what you will do next.</p><button type="button" className="review-primary" onClick={() => finishStep(0)}>I noticed what moved</button></>}
+    {activeStep === 1 && <div className={`review-action-state ${inboxCount === 0 ? "ready" : "waiting"}`}><strong>{inboxCount === 0 ? "Your inbox is clear." : "Give every loose task a home—or let it go."}</strong><p>{inboxCount === 0 ? "The system is ready for the next decision." : "Return here when the inbox reaches zero."}</p>{inboxCount === 0 ? <button type="button" className="review-primary" onClick={() => finishStep(1)}>Continue</button> : <button type="button" className="review-primary" onClick={() => navigate({ kind: "inbox" })}>Process inbox</button>}</div>}
+    {activeStep === 2 && <><div className="review-prune-summary"><div><span>Open work</span><strong>{openCount}</strong></div><div><span>Someday</span><strong>{somedayCount}</strong></div><div><span>Projects</span><strong>{workspace.projects.length}</strong></div></div><p className="review-prompt">Remove, defer, or narrow anything that no longer earns attention. Keep only work with real stakes or useful feedback.</p><div className="review-stage-actions">{currentArea && <button type="button" className="review-secondary" onClick={() => navigate({ kind: "area", id: currentArea.id })}>Open {currentArea.name}</button>}<button type="button" className="review-primary" onClick={() => finishStep(2)}>I pruned the queue</button></div></>}
+    {activeStep === 3 && <div className={`review-focus-summary ${focusTasks.length ? "ready" : "waiting"}`}><span>Current area</span><h3>{currentArea?.name ?? "No area selected"}</h3>{focusTasks.length ? <ol>{focusTasks.map((task) => <li key={task.id}>{task.title}</li>)}</ol> : <p>Choose one to three tasks that will define a useful week.</p>}<div className="review-stage-actions"><button type="button" className="review-secondary" onClick={() => navigate({ kind: "today" })}>{focusTasks.length ? "Adjust focus" : "Choose focus"}</button>{focusTasks.length > 0 && <button type="button" className="review-primary" onClick={() => finishStep(3)}>Use this focus</button>}</div></div>}
+    {activeStep === 4 && <><label className="review-intention"><span>Weekly intention</span><textarea value={intention} maxLength={2_000} onChange={(event) => setIntention(event.target.value)} placeholder="What will help you protect the work—and the space around it?" /><small>Leave buffer for surprises, market changes, relationships, and unfinished work.</small></label><button type="button" className="review-primary" disabled={!intention.trim()} onClick={() => finishStep(4, intention.trim())}>Complete weekly review</button></>}
+  </section></div></div>;
 }

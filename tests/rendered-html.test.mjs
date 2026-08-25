@@ -6,6 +6,7 @@ import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../app/task-schema.mjs";
+import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -23,6 +24,30 @@ test("recognizes the supported saved task sort modes", () => {
   for (const sort of ["custom", "alphabetical", "dueDate", "priority"]) assert.equal(isTaskSort(sort), true);
   assert.equal(isTaskSort("manual"), false);
   assert.equal(isTaskSort(null), false);
+});
+
+test("keeps deliberate focus to three eligible tasks in the current area", () => {
+  const tasks = [
+    { id: "a", areaId: "trading", status: "todo" },
+    { id: "b", areaId: "trading", status: "doing" },
+    { id: "done", areaId: "trading", status: "done" },
+    { id: "later", areaId: "trading", status: "todo", someday: true },
+    { id: "elsewhere", areaId: "family", status: "todo" },
+  ];
+  assert.deepEqual(normalizeFocusTaskIds(["b", "a"], tasks, "trading"), ["b", "a"]);
+  assert.equal(normalizeFocusTaskIds(["done"], tasks, "trading"), null);
+  assert.equal(normalizeFocusTaskIds(["later"], tasks, "trading"), null);
+  assert.equal(normalizeFocusTaskIds(["elsewhere"], tasks, "trading"), null);
+  assert.equal(normalizeFocusTaskIds(["a", "b", "a"], tasks, "trading"), null);
+  assert.equal(normalizeFocusTaskIds(["a", "b", "done", "later"], tasks, "trading"), null);
+});
+
+test("stores weekly review progress against an ISO week", () => {
+  assert.equal(currentWeekKey(new Date("2026-08-25T12:00:00-07:00"), "America/Los_Angeles"), "2026-W35");
+  assert.deepEqual(emptyWeeklyReview("2026-W35"), { weekKey: "2026-W35", completedSteps: [], intention: "" });
+  assert.deepEqual(normalizeWeeklyReview({ weekKey: "2026-W35", completedSteps: [0, 2, 2], intention: "Protect the mornings." }), { weekKey: "2026-W35", completedSteps: [0, 2], intention: "Protect the mornings." });
+  assert.equal(normalizeWeeklyReview({ weekKey: "2026-35", completedSteps: [], intention: "" }), null);
+  assert.equal(normalizeWeeklyReview({ weekKey: "2026-W35", completedSteps: [5], intention: "" }), null);
 });
 
 test("upgrades saved areas from before custom icons without losing identity", () => {
@@ -408,7 +433,7 @@ test("opens the native date picker with browser fallbacks", () => {
   assert.deepEqual(recoveryCalls, ["focus", "click"]);
 });
 
-test("server-renders alphabetical navigation and task organization controls", async () => {
+test("server-renders alphabetical navigation and deliberate daily focus", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -425,13 +450,10 @@ test("server-renders alphabetical navigation and task organization controls", as
   assert.deepEqual([...areaPositions].sort((a, b) => a - b), areaPositions);
   assert.ok(sidebar.indexOf("A-Setup Execution") < sidebar.indexOf("Market Replay Lab"));
 
-  assert.match(html, /<select[^>]*aria-label="Sort tasks"/i);
-  assert.match(html, /class="task-sort-control"/i);
-  assert.match(html, /class="task-sort-value">Manual<\/span>/i);
-  assert.match(html, /<option[^>]*>Manual<\/option>/i);
-  assert.match(html, /<option[^>]*>A–Z<\/option>/i);
-  assert.match(html, /<option[^>]*>Due<\/option>/i);
-  assert.match(html, /<option[^>]*>Priority<\/option>/i);
+  assert.match(html, /<h2>Focus three<\/h2>/i);
+  assert.match(html, /<button[^>]*class="focus-choose-button"[^>]*>Choose focus<\/button>/i);
+  assert.match(html, />3<!-- -->\/3</i);
+  assert.doesNotMatch(html, /<select[^>]*aria-label="Sort tasks"/i);
   assert.doesNotMatch(html, /class="step-controls"|title="Move up"|title="Move down"/i);
   assert.doesNotMatch(html, /type="date"|aria-label="Due date for |aria-label="Priority for /i);
   assert.doesNotMatch(html, /class="task-direct-control timing|class="task-direct-trigger"|class="task-direct-control priority|class="priority-swatch"/i);

@@ -2,6 +2,7 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
 import { normalizeProjectNotes } from "../../project-note-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
+import { normalizeFocusTaskIds, normalizeWeeklyReview } from "../../workspace-guidance.mjs";
 import { getD1 } from "../../../db";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
@@ -20,7 +21,8 @@ type Task = {
   notes?: string;
   someday?: boolean;
 };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; reviewed: number[]; currentAreaId?: string };
+type WeeklyReview = { weekKey: string; completedSteps: number[]; intention: string };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
 
 const MAX_WORKSPACE_BYTES = 2_000_000;
 let developmentSchemaInitialization: Promise<void> | undefined;
@@ -61,13 +63,13 @@ function normalizeWorkspace(value: unknown): Workspace | null {
   });
 
   if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length) return null;
-  const reviewed = Array.isArray(candidate.reviewed)
-    ? candidate.reviewed.filter((step): step is number => Number.isInteger(step) && step >= 0 && step < 5)
-    : [];
   const currentAreaId = isText(candidate.currentAreaId, 200) && areas.some((area) => area.id === candidate.currentAreaId)
     ? candidate.currentAreaId
     : areas[0]?.id;
-  return { areas, projects, tasks, reviewed: [...new Set(reviewed)], currentAreaId };
+  const focusTaskIds = normalizeFocusTaskIds(candidate.focusTaskIds, tasks, currentAreaId);
+  const weeklyReview = normalizeWeeklyReview(candidate.weeklyReview);
+  if (focusTaskIds === null || weeklyReview === null) return null;
+  return { areas, projects, tasks, focusTaskIds, weeklyReview, currentAreaId };
 }
 
 function unauthorized() {
