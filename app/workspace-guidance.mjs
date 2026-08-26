@@ -35,7 +35,7 @@ export function normalizeFocusTaskIds(value, tasks, currentAreaId) {
   const ids = [...new Set(value)];
   if (ids.length !== value.length) return null;
   const eligibleIds = new Set(tasks
-    .filter((task) => task.areaId === currentAreaId && task.status !== "done" && !task.someday)
+    .filter((task) => task.areaId === currentAreaId && task.status !== "done" && !task.someday && !task.waiting)
     .map((task) => task.id));
   return ids.every((id) => eligibleIds.has(id)) ? ids : null;
 }

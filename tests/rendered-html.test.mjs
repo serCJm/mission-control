@@ -42,17 +42,19 @@ test("keeps deliberate focus to three eligible tasks in the current area", () =>
     { id: "b", areaId: "trading", status: "doing" },
     { id: "done", areaId: "trading", status: "done" },
     { id: "later", areaId: "trading", status: "todo", someday: true },
+    { id: "blocked", areaId: "trading", status: "todo", waiting: true },
     { id: "elsewhere", areaId: "family", status: "todo" },
   ];
   assert.deepEqual(normalizeFocusTaskIds(["b", "a"], tasks, "trading"), ["b", "a"]);
   assert.equal(normalizeFocusTaskIds(["done"], tasks, "trading"), null);
   assert.equal(normalizeFocusTaskIds(["later"], tasks, "trading"), null);
+  assert.equal(normalizeFocusTaskIds(["blocked"], tasks, "trading"), null);
   assert.equal(normalizeFocusTaskIds(["elsewhere"], tasks, "trading"), null);
   assert.equal(normalizeFocusTaskIds(["a", "b", "a"], tasks, "trading"), null);
   assert.equal(normalizeFocusTaskIds(["a", "b", "done", "later"], tasks, "trading"), null);
 });
 
-test("a Someday move removes and restores only the moved Focus three task", () => {
+test("a Backlog move removes and restores only the moved Focus three task", () => {
   const focused = ["first", "moved", "third"];
   const deferredTasks = [
     { id: "first", areaId: "trading", status: "todo" },
@@ -98,11 +100,12 @@ test("normalizes persisted task notes to the server contract", () => {
   assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
 });
 
-test("resolves task moves into area focus, Someday, and projects", () => {
+test("resolves task moves into area focus, Backlog, Waiting, and projects", () => {
   const projects = [{ id: "execution", areaId: "trading" }];
-  assert.deepEqual(taskPlacementForDestination("area:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined });
-  assert.deepEqual(taskPlacementForDestination("someday:trading", projects), { areaId: "trading", projectId: undefined, someday: true });
-  assert.deepEqual(taskPlacementForDestination("project:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined });
+  assert.deepEqual(taskPlacementForDestination("area:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined, waiting: undefined });
+  assert.deepEqual(taskPlacementForDestination("backlog:trading", projects), { areaId: "trading", projectId: undefined, someday: true, waiting: undefined });
+  assert.deepEqual(taskPlacementForDestination("waiting:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined, waiting: true });
+  assert.deepEqual(taskPlacementForDestination("project:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined, waiting: undefined });
   assert.equal(taskPlacementForDestination("project:missing", projects), null);
 });
 
@@ -554,14 +557,16 @@ test("keeps completed project work in a collapsed archive outside the active boa
   assert.match(css, /\.completed-archive\{margin-top:14px/);
 });
 
-test("area tasks can be deferred to a separate someday queue", () => {
+test("area tasks use distinct backlog and waiting queues", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
-  assert.match(page, /<h2>Someday<\/h2>/);
-  assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
-  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus" \}, \.\.\.projects\.map/);
+  assert.match(page, /const backlogTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday && !task\.waiting\)/);
+  assert.match(page, /const waitingTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.waiting\)/);
+  assert.match(page, /label="Backlog" description="Committed work that matters, but is not prioritized yet\."/);
+  assert.match(page, /label="Waiting" description="Tasks blocked on a person, response, event, or other dependency\."/);
+  assert.match(page, /label: "Backlog", action: \(id\) => updateTask\(id, \{ someday: true, waiting: undefined \}\)/);
+  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus" \}, otherQueue, \.\.\.projects\.map/);
   assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name, kind: "project"/);
   assert.match(page, /function TaskMoveMenu/);
   assert.match(page, /aria-haspopup="menu"/);
@@ -570,8 +575,10 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /if \(event\.key !== "Escape"\) return;[\s\S]*?triggerRef\.current\?\.focus\(\)/);
   assert.match(css, /\.task-move-control\{position:relative;justify-self:end\}/);
   assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action:not\(\.with-status\)>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
-  assert.match(page, /task\.status !== "done" && !task\.someday/);
+  assert.match(page, /task\.status !== "done" && !task\.someday && !task\.waiting/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
+  assert.match(route, /const validWaiting = item\.waiting === undefined \|\| typeof item\.waiting === "boolean"/);
+  assert.match(route, /const validQueueState = !\(item\.someday === true && item\.waiting === true\)/);
 });
 
 test("project tasks use the original icon for one labeled workflow and destination menu", () => {
@@ -585,7 +592,8 @@ test("project tasks use the original icon for one labeled workflow and destinati
   const completedArchive = projectView.slice(completedArchiveStart, projectView.indexOf("</section>", completedArchiveStart));
   const projectStatusCss = css.slice(css.indexOf("/* Project status views */"), css.indexOf("/* Project task workflow */"));
   assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s work", kind: "focus"/);
-  assert.match(projectView, /value: `someday:\$\{area\.id\}`, label: "Someday", kind: "someday"/);
+  assert.match(projectView, /value: `backlog:\$\{area\.id\}`, label: "Backlog", kind: "backlog"/);
+  assert.match(projectView, /value: `waiting:\$\{area\.id\}`, label: "Waiting", kind: "waiting"/);
   assert.match(listBranch, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
   assert.match(completedArchive, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
   assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} openBelow \/>/);
@@ -628,29 +636,30 @@ test("task moves name their destination and can be undone", () => {
   assert.doesNotMatch(moveTaskSource, /setUndoWorkspace\(workspace\)/);
   assert.match(page, /if \(undoWorkspace\) \{[\s\S]*?setWorkspace\(undoWorkspace\);[\s\S]*?return;[\s\S]*?if \(moveTaskUndo\) \{/);
   assert.match(page, /if \(moveTaskUndo\) \{[\s\S]*?const task = workspace\.tasks\.find[\s\S]*?setToast\("Undo unavailable"\);[\s\S]*?return;[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?current\.tasks\.map[\s\S]*?\{ \.\.\.item, \.\.\.moveTaskUndo\.from \}[\s\S]*?return \{ \.\.\.current, tasks, focusTaskIds \}/);
-  assert.match(page, /currentTask\.areaId !== moveTaskUndo\.to\.areaId[\s\S]*?currentTask\.projectId !== moveTaskUndo\.to\.projectId[\s\S]*?currentTask\.someday !== moveTaskUndo\.to\.someday/);
+  assert.match(page, /currentTask\.areaId !== moveTaskUndo\.to\.areaId[\s\S]*?currentTask\.projectId !== moveTaskUndo\.to\.projectId[\s\S]*?currentTask\.someday !== moveTaskUndo\.to\.someday[\s\S]*?currentTask\.waiting !== moveTaskUndo\.to\.waiting/);
   assert.match(moveTaskSource, /const moveToast = `Moved to \$\{destinationLabel \?\? resolvedLabel \?\? "destination"\}`[\s\S]*?toast: moveToast[\s\S]*?setToast\(moveToast\)/);
   assert.match(page, /moveTask\(task\.id, target\.value, target\.label\)/);
   assert.match(page, /moveTaskUndo && toast === moveTaskUndo\.toast/);
   assert.doesNotMatch(page, /\|\| moveTaskUndo \|\|/);
 });
 
-test("Someday tasks can be created directly from the area page", () => {
+test("Backlog and Waiting tasks can be created directly from the area page", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /function addSomedayTask\(areaId: string, title: string\)/);
+  assert.match(page, /function addBacklogTask\(areaId: string, title: string\)/);
+  assert.match(page, /function addWaitingTask\(areaId: string, title: string\)/);
   assert.match(page, /createdAt: Date\.now\(\), someday: true/);
+  assert.match(page, /createdAt: Date\.now\(\), waiting: true/);
   assert.match(page, /selection\.kind === "area" \? \{ someday: true \} : \{\}/);
-  assert.match(page, /`\$\{activeArea\.name\} Someday`/);
-  assert.match(page, /aria-label=\{showSomedayForm \? "Close new Someday task form" : "New Someday task"\}/);
-  assert.match(page, /className="someday-create"/);
-  assert.match(page, /addSomedayTask\(area\.id, title\)/);
+  assert.match(page, /`\$\{activeArea\.name\} Backlog`/);
+  assert.match(page, /className="deferred-task-create"/);
+  assert.match(page, /addTask\(area\.id, title\)/);
 });
 
 test("area task composers enforce the workspace task-title limit", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
   assert.match(page, /value=\{newFocusTask\} maxLength=\{2_000\}/);
-  assert.match(page, /value=\{newSomedayTask\} maxLength=\{2_000\}/);
+  assert.match(page, /value=\{newTask\} maxLength=\{2_000\}/);
   assert.match(route, /isText\(item\.title, 2_000\)/);
 });
 

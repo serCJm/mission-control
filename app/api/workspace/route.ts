@@ -21,6 +21,7 @@ type Task = {
   priority?: "high" | "medium" | "low";
   notes?: string;
   someday?: boolean;
+  waiting?: boolean;
 };
 type WeeklyReview = { weekKey: string; completedSteps: number[]; intention: string };
 type RoutineChecklistItem = { id: string; text: string };
@@ -65,7 +66,9 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     const validPriority = item.priority === undefined || item.priority === "high" || item.priority === "medium" || item.priority === "low";
     const validNotes = normalizeTaskNotes(item.notes) !== null;
     const validSomeday = item.someday === undefined || typeof item.someday === "boolean";
-    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes && validSomeday;
+    const validWaiting = item.waiting === undefined || typeof item.waiting === "boolean";
+    const validQueueState = !(item.someday === true && item.waiting === true);
+    return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validPriority && validNotes && validSomeday && validWaiting && validQueueState;
   });
   const routines = normalizeRoutines(candidate.routines, new Set(areas.map((area) => area.id))) as Routine[] | null;
 
