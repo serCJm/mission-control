@@ -239,6 +239,7 @@ test("uses one strict routine contract on the client and server", () => {
 test("renders routines above projects and separately from Focus three", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = readFileSync(new URL("../app/routines.css", import.meta.url), "utf8");
+  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const areaView = page.slice(page.indexOf("function AreaView"), page.indexOf("function ProjectNoteCard"));
   assert.ok(areaView.indexOf("<RoutinesSection") < areaView.indexOf('<section className="project-section"'));
   assert.match(page, /<section className="today-routines">/);
@@ -248,6 +249,8 @@ test("renders routines above projects and separately from Focus three", () => {
   assert.match(page, /Vacation starts/);
   assert.match(css, /@media\(max-width:580px\)/);
   assert.match(css, /min-height:44px/);
+  assert.match(globalCss, /\.routine-section\{border:1px solid var\(--line\);border-radius:14px;background:var\(--panel\);padding:23px\}/);
+  assert.match(globalCss, /\.routine-section \.routine-card\{overflow:visible;border:0;border-radius:0;background:transparent\}/);
 });
 
 test("sorts tasks without mutating their custom order", () => {
