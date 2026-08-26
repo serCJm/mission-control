@@ -533,7 +533,10 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
   assert.match(page, /<h2>Someday<\/h2>/);
   assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
-  assert.match(page, /label: "Move to today’s focus", action: \(id\) => updateTask\(id, \{ someday: undefined \}\)/);
+  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus" \}, \.\.\.projects\.map/);
+  assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name/);
+  assert.match(page, /aria-label=\{`Move \$\{task\.title\} to a project or today’s focus`\}/);
+  assert.match(page, /if \(event\.target\.value\) moveTask\(task\.id, event\.target\.value\)/);
   assert.match(page, /task\.status !== "done" && !task\.someday/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
 });
