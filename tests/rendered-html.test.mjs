@@ -475,7 +475,7 @@ test("task undo restores only the removed task into the latest workspace", () =>
 
 test("a replacement task undo restarts the toast expiry timer", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /const timeout = window\.setTimeout\(\(\) => \{ setToast\(""\); setUndoWorkspace\(null\); setTaskUndo\(null\); \}, 8000\);[\s\S]*?\}, \[toast, taskUndo\]\);/);
+  assert.match(page, /const timeout = window\.setTimeout\(\(\) => \{ setToast\(""\); setUndoWorkspace\(null\); setTaskUndo\(null\); setMoveTaskUndo\(null\); \}, 8000\);[\s\S]*?\}, \[toast, taskUndo, moveTaskUndo\]\);/);
 });
 
 test("area and project task composers reset when entity identity changes", () => {
@@ -530,15 +530,37 @@ test("keeps completed project work in a collapsed archive outside the active boa
 test("area tasks can be deferred to a separate someday queue", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
   assert.match(page, /<h2>Someday<\/h2>/);
   assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
   assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus" \}, \.\.\.projects\.map/);
   assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name/);
-  assert.match(page, /aria-label=\{`Move \$\{task\.title\} to a project or today’s focus`\}/);
-  assert.match(page, /if \(event\.target\.value\) moveTask\(task\.id, event\.target\.value\)/);
+  assert.match(page, /function TaskMoveMenu/);
+  assert.match(page, /aria-haspopup="menu"/);
+  assert.match(page, /role="menu" aria-label=\{`Move \$\{task\.title\}`\}/);
+  assert.match(page, /role="menuitem" onClick=\{\(\) => choose\(target\)\}/);
+  assert.match(page, /if \(event\.key !== "Escape"\) return;[\s\S]*?triggerRef\.current\?\.focus\(\)/);
+  assert.match(css, /\.task-move-control\{position:relative;justify-self:end\}/);
+  assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
   assert.match(page, /task\.status !== "done" && !task\.someday/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
+});
+
+test("task moves name their destination and can be undone", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const moveTaskSource = page.slice(page.indexOf("function moveTask(id:"), page.indexOf("function updateArea("));
+  assert.match(moveTaskSource, /function moveTask\(id: string, value: string, destinationLabel\?: string\)/);
+  assert.match(page, /type MoveTaskUndo = \{ taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string \}/);
+  assert.match(moveTaskSource, /setUndoWorkspace\(null\);[\s\S]*?setMoveTaskUndo\(task && to \? \{/);
+  assert.doesNotMatch(moveTaskSource, /setUndoWorkspace\(workspace\)/);
+  assert.match(page, /if \(undoWorkspace\) \{[\s\S]*?setWorkspace\(undoWorkspace\);[\s\S]*?return;[\s\S]*?if \(moveTaskUndo\) \{/);
+  assert.match(page, /if \(moveTaskUndo\) \{[\s\S]*?const task = workspace\.tasks\.find[\s\S]*?setToast\("Undo unavailable"\);[\s\S]*?return;[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?current\.tasks\.map[\s\S]*?\{ \.\.\.item, \.\.\.moveTaskUndo\.from \}[\s\S]*?return \{ \.\.\.current, tasks, focusTaskIds \}/);
+  assert.match(page, /currentTask\.areaId !== moveTaskUndo\.to\.areaId[\s\S]*?currentTask\.projectId !== moveTaskUndo\.to\.projectId[\s\S]*?currentTask\.someday !== moveTaskUndo\.to\.someday/);
+  assert.match(moveTaskSource, /const moveToast = `Moved to \$\{destinationLabel \?\? resolvedLabel \?\? "destination"\}`[\s\S]*?toast: moveToast[\s\S]*?setToast\(moveToast\)/);
+  assert.match(page, /moveTask\(task\.id, target\.value, target\.label\)/);
+  assert.match(page, /moveTaskUndo && toast === moveTaskUndo\.toast/);
+  assert.doesNotMatch(page, /\|\| moveTaskUndo \|\|/);
 });
 
 test("Someday tasks can be created directly from the area page", () => {

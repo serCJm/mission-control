@@ -45,6 +45,8 @@ type DragItem = { kind: EntityKind; id: string; scope: string };
 type TaskNoteEditorEvent = { taskId: string; open: boolean; draft?: string; saved?: string };
 type TaskNoteEditorChange = (event: TaskNoteEditorEvent) => void;
 type TaskUndo = { task: Task; index: number };
+type TaskPlacement = Pick<Task, "areaId" | "projectId" | "someday">;
+type MoveTaskUndo = { taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string };
 type ReorderProps = {
   descriptor: DragItem;
   onDragStart: (event: DragEvent<HTMLButtonElement>, item: DragItem) => void;
@@ -248,6 +250,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [undoWorkspace, setUndoWorkspace] = useState<Workspace | null>(null);
   const [taskUndo, setTaskUndo] = useState<TaskUndo | null>(null);
+  const [moveTaskUndo, setMoveTaskUndo] = useState<MoveTaskUndo | null>(null);
   const [expandedAreas, setExpandedAreas] = useState<string[]>(seed.areas.map((area) => area.id));
   const [dragged, setDragged] = useState<DragItem | null>(null);
   const [taskSorts, setTaskSorts] = useState<SortPreferences>({});
@@ -455,9 +458,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); setTaskUndo(null); }, 8000);
+    const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); setTaskUndo(null); setMoveTaskUndo(null); }, 8000);
     return () => window.clearTimeout(timeout);
-  }, [toast, taskUndo]);
+  }, [toast, taskUndo, moveTaskUndo]);
 
   const activeArea = selection.kind === "area"
     ? workspace.areas.find((area) => area.id === selection.id)
@@ -749,6 +752,7 @@ export default function Home() {
     const index = workspace.tasks.findIndex((task) => task.id === taskId);
     setUndoWorkspace(null);
     setTaskUndo(index >= 0 ? { task: workspace.tasks[index], index } : null);
+    setMoveTaskUndo(null);
     setWorkspace((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== taskId), focusTaskIds: current.focusTaskIds.filter((id) => id !== taskId) }));
     setToast("Task deleted");
   }
@@ -762,11 +766,32 @@ export default function Home() {
         return { ...current, tasks };
       });
       setTaskUndo(null);
-    } else if (undoWorkspace) {
+      setToast("Restored");
+      return;
+    }
+    if (undoWorkspace) {
       setWorkspace(undoWorkspace);
       setUndoWorkspace(null);
+      setToast("Restored");
+      return;
     }
-    setToast("Restored");
+    if (moveTaskUndo) {
+      const task = workspace.tasks.find((item) => item.id === moveTaskUndo.taskId);
+      if (!task || task.areaId !== moveTaskUndo.to.areaId || task.projectId !== moveTaskUndo.to.projectId || task.someday !== moveTaskUndo.to.someday) {
+        setMoveTaskUndo(null);
+        setToast("Undo unavailable");
+        return;
+      }
+      setWorkspace((current) => {
+        const currentTask = current.tasks.find((item) => item.id === moveTaskUndo.taskId);
+        if (!currentTask || currentTask.areaId !== moveTaskUndo.to.areaId || currentTask.projectId !== moveTaskUndo.to.projectId || currentTask.someday !== moveTaskUndo.to.someday) return current;
+        const tasks = current.tasks.map((item) => item.id === moveTaskUndo.taskId ? { ...item, ...moveTaskUndo.from } : item);
+        const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
+        return { ...current, tasks, focusTaskIds };
+      });
+      setMoveTaskUndo(null);
+      setToast("Restored");
+    }
   }
 
   function toggleTask(id: string) {
@@ -783,6 +808,7 @@ export default function Home() {
 
   function moveTaskToStatus(id: string, status: TaskStatus, expectedProjectId?: string, targetId?: string) {
     setUndoWorkspace(null);
+    setMoveTaskUndo(null);
     setWorkspace((current) => {
       const currentTask = current.tasks.find((task) => task.id === id);
       if (!currentTask || (expectedProjectId !== undefined && currentTask.projectId !== expectedProjectId)) return current;
@@ -798,20 +824,39 @@ export default function Home() {
     setToast(`Moved to ${statusLabel}`);
   }
 
-  function moveTask(id: string, value: string) {
+  function moveTask(id: string, value: string, destinationLabel?: string) {
+    const task = workspace.tasks.find((item) => item.id === id);
+    const project = value.startsWith("project:") ? workspace.projects.find((item) => item.id === value.slice(8)) : undefined;
+    const to: TaskPlacement | null = value === "inbox"
+      ? { areaId: undefined, projectId: undefined, someday: undefined }
+      : value.startsWith("area:")
+        ? { areaId: value.slice(5), projectId: undefined, someday: undefined }
+        : project
+          ? { areaId: project.areaId, projectId: project.id, someday: undefined }
+          : null;
+    const resolvedLabel = value === "inbox"
+      ? "Inbox"
+      : value.startsWith("area:")
+        ? workspace.areas.find((area) => area.id === value.slice(5))?.name
+        : workspace.projects.find((project) => project.id === value.slice(8))?.name;
+    const moveToast = `Moved to ${destinationLabel ?? resolvedLabel ?? "destination"}`;
     setUndoWorkspace(null);
+    setTaskUndo(null);
+    setMoveTaskUndo(task && to ? {
+      taskId: id,
+      from: { areaId: task.areaId, projectId: task.projectId, someday: task.someday },
+      to,
+      toast: moveToast,
+    } : null);
     setWorkspace((current) => {
       const tasks = current.tasks.map((task) => {
         if (task.id !== id) return task;
-        if (value === "inbox") return { ...task, areaId: undefined, projectId: undefined, someday: undefined };
-        if (value.startsWith("area:")) return { ...task, areaId: value.slice(5), projectId: undefined, someday: undefined };
-        const project = current.projects.find((item) => item.id === value.slice(8));
-        return project ? { ...task, areaId: project.areaId, projectId: project.id, someday: undefined } : task;
+        return to ? { ...task, ...to } : task;
       });
       const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
       return { ...current, tasks, focusTaskIds };
     });
-    setToast("Task moved");
+    setToast(moveToast);
   }
 
   function updateArea(id: string, patch: Partial<Pick<Area, "name" | "icon">>) {
@@ -990,7 +1035,7 @@ export default function Home() {
         {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} setDragged={setDragged} navigate={navigate} />}
         {selection.kind === "review" && <Review key={currentReview.weekKey} workspace={workspace} review={currentReview} completeStep={completeReviewStep} navigate={navigate} />}
       </main>
-      {toast && <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}
+      {toast && <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || (moveTaskUndo && toast === moveTaskUndo.toast) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}
     </div>
   );
 }
@@ -1289,7 +1334,52 @@ function StatusControl({ task, moveTaskToStatus }: { task: Task; moveTaskToStatu
   </select></label>;
 }
 
-function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: { value: string; label: string }[]; moveTask?: (id: string, value: string) => void }) {
+function TaskMoveMenu({ task, targets, moveTask }: { task: Task; targets: { value: string; label: string }[]; moveTask: (id: string, value: string, destinationLabel?: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = `task-move-menu-${task.id}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const focusFrame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const [focusTarget, ...projectTargets] = targets;
+  function choose(target: { value: string; label: string }) {
+    moveTask(task.id, target.value, target.label);
+    setOpen(false);
+  }
+
+  return <div className="task-move-control">
+    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" onClick={() => setOpen((current) => !current)}>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h6.5M7.5 2.5l2 2-2 2M3 11.5h6.5M7.5 9.5l2 2-2 2" /></svg>
+      <span>Move</span>
+      <svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+    </button>
+    {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" aria-label={`Move ${task.title}`}>
+      {focusTarget && <button type="button" role="menuitem" onClick={() => choose(focusTarget)}><span className="task-move-target-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1.5" /></svg></span><span>{focusTarget.label}</span></button>}
+      {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg></span><span>{target.label}</span></button>)}</>}
+    </div>}
+  </div>;
+}
+
+function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: { value: string; label: string }[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
   if (!tasks.length) return <div className="empty-state"><strong>{emptyTitle}</strong><p>{empty}</p></div>;
   const customOrder = reorderable && taskSort === "custom";
   return <div className="task-list">{sortTasks(tasks, taskSort).map((task: Task) => {
@@ -1302,7 +1392,7 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTas
       <TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} />
       {showStatus && moveTaskToStatus && <StatusControl task={task} moveTaskToStatus={moveTaskToStatus} />}
       {taskAction && <button type="button" className="task-queue-action" onClick={() => taskAction.action(task.id)}>{taskAction.label}</button>}
-      {taskMoveTargets && moveTask && <select className="task-queue-destination" defaultValue="" onChange={(event) => { if (event.target.value) moveTask(task.id, event.target.value); }} aria-label={`Move ${task.title} to a project or today’s focus`}><option value="" disabled>Move to…</option>{taskMoveTargets.map((target) => <option value={target.value} key={target.value}>{target.label}</option>)}</select>}
+      {taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} />}
     </div>;
   })}</div>;
 }

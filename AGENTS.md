@@ -8,10 +8,19 @@
 - Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
 - Perform all project development inside the Docker container. Run dependency installation, development servers, builds, checks, and tests in the container; do not install project dependencies or run project tooling directly on the host. Use the host only to run Docker/Docker Compose commands and edit files.
 
+# Data Safety
+- Treat every persisted D1 workspace as irreplaceable user data. Never delete, overwrite, reset, or replace an active workspace merely because a new schema rejects it.
+- Before any schema-breaking deployment, reset, destructive test, or bootstrap that can replace persisted data, create a timestamped snapshot of the active row. Preserve the original JSON unchanged and keep the snapshot until the user has verified the restored workspace.
+- If the application must start with a fresh row, restore the last valid pre-change snapshot immediately afterward and add only the fields required by the current schema. This operational restore is required even though compatibility code and permanent migrations remain out of scope.
+- “Last snapshot” means the newest snapshot containing genuine user data immediately before the schema change. Do not blindly select the newest archived row: later archives may contain starter data or the result of an earlier reset. Compare timestamps and inspect expected area, project, and task names or counts. Ask the user when more than one plausible snapshot remains.
+- Before restoring a snapshot, archive the current active row so the restore is reversible. Use an atomic D1 batch when multiple writes are required, and never delete the source snapshot during restoration.
+- After restoration, verify the active production row contains the expected user data and all fields required by the current schema. A successful request or deployment alone is not proof of a successful restore.
+- Temporary recovery routes or controls must be authenticated, scoped to the current user's own snapshots, removed immediately after verification, and followed by a clean validated deployment.
+
 # Development Server
 - Always start this Sites project with development data enabled. The workspace API depends on the local D1 binding and development identity supplied by the Sites/Vite development configuration; do not use a plain preview that omits them.
 - Start the app through Docker Compose so `vite.config.ts` loads `.openai/hosting.json` and provisions the local development bindings. For the shared preview, use `APP_PORT=3010 docker-compose up -d --build`.
-- If the persisted local D1 workspace uses an obsolete schema and `/api/workspace` reports that the saved workspace is invalid, remove the obsolete local-development row before restarting. Let the current starter workspace bootstrap a fresh dev-data row; do not add compatibility code or migrations for obsolete local data.
+- If the persisted local D1 workspace uses an obsolete schema and `/api/workspace` reports that the saved workspace is invalid, snapshot the obsolete local-development row before changing it. Only remove it after the snapshot is verified; then let the current starter bootstrap a fresh row and restore the snapshot with the minimum current-schema fields. Do not add permanent compatibility code or migrations for obsolete local data.
 - Keep Docker published on localhost. For remote access, proxy `http://127.0.0.1:3010` through Tailscale Serve instead of exposing the development server on every host interface.
 
 # Project Productivity Philosophy
