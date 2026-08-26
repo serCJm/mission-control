@@ -551,6 +551,8 @@ test("keeps completed project work in a collapsed archive outside the active boa
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(page, /PROJECT_STATUSES\.filter\(\(status\) => status\.value !== "done"\)/);
   assert.match(page, /const completedTasks = tasks\.filter\(\(task\) => task\.status === "done"\)/);
+  assert.match(page, /className="project-open-count" aria-label=\{`\$\{openTaskCount\} open \$\{openTaskCount === 1 \? "task" : "tasks"\}`\}/);
+  assert.match(css, /\.project-open-count\{[^}]*grid-template-columns:34px auto[^}]*background:#f8f9f3/);
   assert.match(page, /className=\{`completed-archive/);
   assert.match(page, /onDrop=\{\(event\) => dropInStatus\(event, "done"\)\}/);
   assert.match(page, /aria-expanded=\{showCompleted\} aria-controls=\{`completed-\$\{project\.id\}`\}/);

@@ -139,3 +139,6 @@ main{grid-column:2;min-width:0}.topbar{height:72px;position:sticky;top:0;z-index
 
 /* Keep the notes board scannable; opening a card reveals the complete note in its editor. */
 .project-note-open p:not(.note-empty-body){display:-webkit-box;max-height:calc(1.62em * 7);overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:7}
+
+/* Project heading instrument: compact, anchored, and consistent with the forest signal system. */
+.project-heading{align-items:center}.project-heading>div:first-child{min-width:0;flex:1}.project-open-count{flex:0 0 auto;display:grid;grid-template-columns:34px auto;align-items:center;gap:10px;border:1px solid #d5dcc9;border-radius:12px;background:#f8f9f3;padding:9px 13px 9px 9px;color:var(--forest)}.project-open-count strong{width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:var(--lime-soft);font:650 16px/1 var(--mono);font-variant-numeric:tabular-nums}.project-open-count span{color:#56665e;font:650 9px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}@media(max-width:580px){.project-heading{display:grid;gap:14px}.project-open-count{justify-self:start;margin-top:0}}
