@@ -559,27 +559,28 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
   assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus" \}, \.\.\.projects\.map/);
   assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name, kind: "project"/);
-  assert.match(page, /function TaskMoveControl/);
-  assert.match(page, /<option value="" disabled>Move task<\/option>/);
-  assert.match(page, /<optgroup label="Projects">/);
-  assert.match(page, /<select value="" aria-label=\{`Move \$\{task\.title\}`\}/);
-  assert.match(css, /\.task-status-control,\.task-move-control\{position:relative;height:32px;display:inline-grid\}/);
-  assert.match(css, /@media\(max-width:720px\)\{\.task-status-control,\.task-move-control\{height:44px\}/);
+  assert.match(page, /function TaskMoveMenu/);
+  assert.match(page, /aria-haspopup="menu"/);
+  assert.match(page, /role="menu" aria-label=\{`Move \$\{task\.title\}`\}/);
+  assert.match(page, /role="menuitem" onClick=\{\(\) => choose\(target\)\}/);
+  assert.match(page, /if \(event\.key !== "Escape"\) return;[\s\S]*?triggerRef\.current\?\.focus\(\)/);
+  assert.match(css, /\.task-move-control\{position:relative;justify-self:end\}/);
+  assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
   assert.match(page, /task\.status !== "done" && !task\.someday/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
 });
 
-test("project tasks use matching compact status and move selectors", () => {
+test("project tasks move to focus or Someday without widening board cards", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   const projectView = page.slice(page.indexOf("function ProjectView"), page.indexOf("function Review"));
   assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus"/);
   assert.match(projectView, /value: `someday:\$\{area\.id\}`, label: "Someday", kind: "someday"/);
   assert.match(projectView, /taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
-  assert.match(projectView, /<TaskMoveControl task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} \/>/);
-  assert.match(page, /<label className="task-move-control" title="Move task">/);
-  assert.match(css, /\.status-control-label,\.task-move-label\{[^}]*border:1px solid #cfd5cb;[^}]*transform:translateY\(-50%\) scale\(\.625\)/);
-  assert.match(css, /\.task-status-control select,[^}]*\.task-move-control select\{position:absolute;inset:0;[^}]*opacity:0;cursor:pointer/);
+  assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} compact openBelow \/>/);
+  assert.match(page, /aria-label=\{`Move \$\{task\.title\}`\} title="Move task"/);
+  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:32px;height:32px/);
+  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:44px;height:44px;min-height:44px\}/);
 });
 
 test("task moves name their destination and can be undone", () => {
@@ -593,7 +594,7 @@ test("task moves name their destination and can be undone", () => {
   assert.match(page, /if \(moveTaskUndo\) \{[\s\S]*?const task = workspace\.tasks\.find[\s\S]*?setToast\("Undo unavailable"\);[\s\S]*?return;[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?current\.tasks\.map[\s\S]*?\{ \.\.\.item, \.\.\.moveTaskUndo\.from \}[\s\S]*?return \{ \.\.\.current, tasks, focusTaskIds \}/);
   assert.match(page, /currentTask\.areaId !== moveTaskUndo\.to\.areaId[\s\S]*?currentTask\.projectId !== moveTaskUndo\.to\.projectId[\s\S]*?currentTask\.someday !== moveTaskUndo\.to\.someday/);
   assert.match(moveTaskSource, /const moveToast = `Moved to \$\{destinationLabel \?\? resolvedLabel \?\? "destination"\}`[\s\S]*?toast: moveToast[\s\S]*?setToast\(moveToast\)/);
-  assert.match(page, /if \(target\) moveTask\(task\.id, target\.value, target\.label\)/);
+  assert.match(page, /moveTask\(task\.id, target\.value, target\.label\)/);
   assert.match(page, /moveTaskUndo && toast === moveTaskUndo\.toast/);
   assert.doesNotMatch(page, /\|\| moveTaskUndo \|\|/);
 });
