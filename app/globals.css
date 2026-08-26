@@ -123,3 +123,7 @@ main{grid-column:2;min-width:0}.topbar{height:72px;position:sticky;top:0;z-index
 
 /* Keep the disclosure glyph centered despite the generic project-list button grid. */
 .project-list .project-disclosure{grid-template-columns:1fr;gap:0}
+
+/* Project hierarchy navigation */
+.project-page .breadcrumb{display:flex;align-items:center;gap:6px;overflow:hidden}.project-page .breadcrumb button{min-height:28px;flex:0 0 auto;border:0;border-radius:4px;background:transparent;color:var(--forest);padding:2px 0;text-decoration:underline;text-decoration-color:#9cad8f;text-underline-offset:3px}.project-page .breadcrumb button:hover{color:var(--forest-2);text-decoration-color:currentColor}.project-page .breadcrumb>span[aria-hidden="true"]{color:#9aa49f}.project-page .breadcrumb>span[aria-current="page"]{min-width:0;overflow:hidden;color:#64716b;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:720px){.project-page .breadcrumb button{min-height:44px}}

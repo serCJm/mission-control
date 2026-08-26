@@ -484,6 +484,14 @@ test("area and project task composers reset when entity identity changes", () =>
   assert.match(page, /<ProjectView key=\{activeProject\.id\}/);
 });
 
+test("project breadcrumbs navigate home and back to their area", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /<nav className="breadcrumb" aria-label="Breadcrumb">/);
+  assert.match(page, /onClick=\{\(\) => navigate\(\{ kind: "today" \}\)\}>Today<\/button>/);
+  assert.match(page, /onClick=\{\(\) => navigate\(\{ kind: "area", id: area\.id \}\)\}>\{area\.name\}<\/button>/);
+  assert.match(page, /<span aria-current="page">\{project\.name\}<\/span>/);
+});
+
 test("project rows open without hijacking their edit or drag controls", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /className=\{`entity-row project-entity \$\{projectSort === "custom" \? "custom-order" : "sorted-order"\}`\}[\s\S]*?role="link"[\s\S]*?tabIndex=\{0\}/);
