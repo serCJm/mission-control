@@ -41,7 +41,7 @@ function optionalText(value: unknown, maxLength = 20_000) {
   return value === undefined || isText(value, maxLength);
 }
 
-export function normalizeWorkspace(value: unknown): Workspace | null {
+function normalizeWorkspace(value: unknown): Workspace | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
   if (!Array.isArray(candidate.areas) || !Array.isArray(candidate.projects) || !Array.isArray(candidate.tasks) || !Array.isArray(candidate.routines)) return null;
