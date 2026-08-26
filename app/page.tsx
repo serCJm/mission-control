@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
@@ -1324,28 +1324,31 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
   </div>;
 }
 
-function StatusControl({ task, moveTaskToStatus }: { task: Task; moveTaskToStatus: (id: string, status: TaskStatus) => void }) {
-  const statusLabel = PROJECT_STATUSES.find((status) => status.value === task.status)?.label ?? task.status;
-  return <label className={`task-status-control status-${task.status}`}><span className="status-control-label"><i />{statusLabel}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg></span><select value={task.status} onChange={(event) => moveTaskToStatus(task.id, event.target.value as TaskStatus)} aria-label={`Status for ${task.title}`}>
-    {PROJECT_STATUSES.map((status) => <option value={status.value} key={status.value}>{status.label}</option>)}
-  </select></label>;
-}
-
 function TaskMoveTargetIcon({ kind }: { kind: TaskMoveTarget["kind"] }) {
   if (kind === "focus") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1.5" /></svg>;
   if (kind === "someday") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.5l2.25 1.25" /></svg>;
   return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>;
 }
 
-function TaskMoveMenu({ task, targets, moveTask, compact = false, openBelow = false }: { task: Task; targets: TaskMoveTarget[]; moveTask: (id: string, value: string, destinationLabel?: string) => void; compact?: boolean; openBelow?: boolean }) {
+function TaskMoveIcon() {
+  return <svg className="task-move-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h6.5M7.5 2.5l2 2-2 2M3 11.5h6.5M7.5 9.5l2 2-2 2" /></svg>;
+}
+
+function TaskMoveMenu({ task, targets, moveTask, moveTaskToStatus, openBelow = false }: { task: Task; targets: TaskMoveTarget[]; moveTask: (id: string, value: string, destinationLabel?: string) => void; moveTaskToStatus?: (id: string, status: TaskStatus) => void; openBelow?: boolean }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = `task-move-menu-${task.id}`;
+  const hasWorkflow = Boolean(moveTaskToStatus);
 
   useEffect(() => {
     if (!open) return;
-    const focusFrame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
+    const focusFrame = window.requestAnimationFrame(() => {
+      const menu = menuRef.current;
+      if (!menu) return;
+      const currentStatus = hasWorkflow ? menu.querySelector<HTMLButtonElement>('button[role="menuitemradio"][aria-checked="true"]:not(:disabled)') : null;
+      (currentStatus ?? menu.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus();
+    });
     function closeOnOutsideClick(event: MouseEvent) {
       if (!menuRef.current?.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -1361,44 +1364,67 @@ function TaskMoveMenu({ task, targets, moveTask, compact = false, openBelow = fa
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open]);
+  }, [open, hasWorkflow]);
 
   const directTargets = targets.filter((target) => target.kind !== "project");
   const projectTargets = targets.filter((target) => target.kind === "project");
+  const statusLabel = PROJECT_STATUSES.find((status) => status.value === task.status)?.label ?? task.status;
   function choose(target: TaskMoveTarget) {
     moveTask(task.id, target.value, target.label);
     setOpen(false);
   }
 
-  return <div className={`task-move-control ${compact ? "compact" : ""} ${openBelow ? "open-below" : ""}`}>
-    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`Move ${task.title}`} title="Move task" onClick={() => setOpen((current) => !current)}>
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h6.5M7.5 2.5l2 2-2 2M3 11.5h6.5M7.5 9.5l2 2-2 2" /></svg>
-      <span>Move</span>
-      <svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+  function chooseStatus(status: TaskStatus) {
+    if (status === task.status) {
+      setOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+      return;
+    }
+    moveTaskToStatus?.(task.id, status);
+    setOpen(false);
+  }
+
+  function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+    if (!buttons.length) return;
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = buttons.length - 1;
+    else if (currentIndex < 0) nextIndex = event.key === "ArrowUp" ? buttons.length - 1 : 0;
+    else nextIndex = event.key === "ArrowDown" ? (currentIndex + 1) % buttons.length : (currentIndex - 1 + buttons.length) % buttons.length;
+    event.preventDefault();
+    buttons[nextIndex].focus();
+  }
+
+  return <div className={`task-move-control ${hasWorkflow ? "has-workflow" : ""} ${openBelow ? "open-below" : ""}`}>
+    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`${hasWorkflow ? "Update workflow or move" : "Move"} ${task.title}`} title={hasWorkflow ? `Manage task · ${statusLabel}` : "Move task"} onClick={() => setOpen((current) => !current)}>
+      <TaskMoveIcon />
+      {!hasWorkflow && <><span>Move</span><svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg></>}
     </button>
-    {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" aria-label={`Move ${task.title}`}>
+    {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" tabIndex={-1} aria-label={`Move ${task.title}`} onKeyDown={handleMenuKeyDown}>
+      {hasWorkflow && <><span className="task-move-menu-label first">Workflow</span>{PROJECT_STATUSES.map((status) => <button type="button" role="menuitemradio" aria-checked={task.status === status.value} onClick={() => chooseStatus(status.value)} key={status.value}><span className={`task-workflow-option status-${status.value}`}><i /></span><span>{status.label}</span></button>)}</>}
+      {directTargets.length > 0 && <span className={`task-move-menu-label ${hasWorkflow ? "" : "first"}`}>Move to</span>}
       {directTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}
       {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}</>}
     </div>}
   </div>;
 }
 
-function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: TaskMoveTarget[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
+function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: TaskMoveTarget[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
   if (!tasks.length) return <div className="empty-state"><strong>{emptyTitle}</strong><p>{empty}</p></div>;
   const customOrder = reorderable && taskSort === "custom";
   return <div className="task-list">{sortTasks(tasks, taskSort).map((task: Task) => {
     const descriptor = { kind: "task" as const, id: task.id, scope };
     const reorder = reorderProps(descriptor);
     const reorderEvents = customOrder ? { onDragOver: (event: DragEvent<HTMLElement>) => reorder.onDragOver(event, descriptor), onDrop: (event: DragEvent<HTMLElement>) => reorder.onDrop(event, descriptor) } : {};
-    return <div className={`task-row ${task.status === "done" ? "done" : ""} ${showStatus ? "with-status" : ""} ${taskAction || taskMoveTargets ? "with-action" : ""} ${customOrder ? "custom-order" : "sorted-order"} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} {...reorderEvents}>
+    return <div className={`task-row ${task.status === "done" ? "done" : ""} ${moveTaskToStatus ? "with-status" : ""} ${taskAction || taskMoveTargets ? "with-action" : ""} ${customOrder ? "custom-order" : "sorted-order"} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} {...reorderEvents}>
       {customOrder && <DragHandle {...reorder} label={`Reorder ${task.title}`} />}
       <label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label>
       <TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} />
-      {showStatus && moveTaskToStatus && taskMoveTargets && moveTask
-        ? <div className="task-row-trailing"><StatusControl task={task} moveTaskToStatus={moveTaskToStatus} /><TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} /></div>
-        : showStatus && moveTaskToStatus && <StatusControl task={task} moveTaskToStatus={moveTaskToStatus} />}
       {taskAction && <button type="button" className="task-queue-action" onClick={() => taskAction.action(task.id)}>{taskAction.label}</button>}
-      {!showStatus && taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} />}
+      {taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} moveTaskToStatus={moveTaskToStatus} openBelow={Boolean(moveTaskToStatus)} />}
     </div>;
   })}</div>;
 }
@@ -1639,7 +1665,7 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
   const [addingStatus, setAddingStatus] = useState<TaskStatus | null>(null);
   const [newStatusTask, setNewStatusTask] = useState("");
   const moveTargets: TaskMoveTarget[] = [
-    { value: `area:${area.id}`, label: "Today’s focus", kind: "focus" },
+    { value: `area:${area.id}`, label: "Today’s work", kind: "focus" },
     { value: `someday:${area.id}`, label: "Someday", kind: "someday" },
   ];
 
@@ -1675,18 +1701,18 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
 
   return <div className="page project-page"><nav className="breadcrumb" aria-label="Breadcrumb"><button type="button" onClick={() => navigate({ kind: "today" })}>Today</button><span aria-hidden="true">/</span><button type="button" onClick={() => navigate({ kind: "area", id: area.id })}>{area.name}</button><span aria-hidden="true">/</span><span aria-current="page">{project.name}</span></nav><div className="page-heading project-heading"><div><NameEditor large value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><textarea className="outcome-editor" value={project.outcome} onChange={(event) => updateProject({ outcome: event.target.value })} aria-label="Project outcome" /></div><div className="quiet-count">{tasks.filter((task) => task.status !== "done").length}<span>open tasks</span></div></div>
     <section className={`project-tasks project-view-${view}`}><div className="project-task-toolbar"><div><h2>Tasks</h2><div className="view-toggle" aria-label="Project task view"><button type="button" className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}>List</button><button type="button" className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => setView("board")}>Board</button></div></div><TaskSortControl value={taskSort} onChange={setTaskSort} /></div>
-      {view === "list" ? <div className="project-task-groups">{activeTaskGroups.map((group) => <section className={`task-group status-${group.value}`} key={group.value} aria-labelledby={`list-${project.id}-${group.value}`}><ProjectStatusHeading group={group} headingClass="task-group-heading" headingId={`list-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<TaskRows tasks={group.tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:${group.value}`} taskSort={taskSort} empty={group.empty} showStatus moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} /></section>)}</div>
+      {view === "list" ? <div className="project-task-groups">{activeTaskGroups.map((group) => <section className={`task-group status-${group.value}`} key={group.value} aria-labelledby={`list-${project.id}-${group.value}`}><ProjectStatusHeading group={group} headingClass="task-group-heading" headingId={`list-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<TaskRows tasks={group.tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:${group.value}`} taskSort={taskSort} empty={group.empty} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} /></section>)}</div>
       : <div className="kanban-board">{activeTaskGroups.map((group) => <section className={`kanban-column status-${group.value}`} key={group.value} aria-labelledby={`board-${project.id}-${group.value}`} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value)}><ProjectStatusHeading group={group} headingClass="kanban-column-heading" headingId={`board-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<div className="kanban-cards">{sortTasks(group.tasks, taskSort).map((task: Task) => {
         const descriptor = { kind: "task" as const, id: task.id, scope: `project:${project.id}:${group.value}` };
         const reorder = reorderProps(descriptor);
         return <article className={`kanban-card ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
-          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><StatusControl task={task} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} compact openBelow /></div></div>
+          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} openBelow /></div></div>
           <div className="kanban-card-body"><label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /></div>
         </article>;
       })}{!group.tasks.length && <div className="kanban-empty"><strong>No tasks here.</strong><p>{group.empty}</p></div>}</div></section>)}</div>}
       <section className={`completed-archive ${showCompleted ? "expanded" : ""}`} aria-label="Completed tasks" onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, "done")}>
         <button type="button" className="completed-archive-toggle" aria-expanded={showCompleted} aria-controls={`completed-${project.id}`} onClick={() => setShowCompleted((current) => !current)}><span><strong>Completed</strong><small>{completedTasks.length ? "Archived from the active workflow" : "Check a task or drag it here"}</small></span><span className="completed-archive-count">{completedTasks.length}</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6.5 8 3.5 3.5L13.5 8" /></svg></button>
-        {showCompleted && <div className="completed-archive-tasks" id={`completed-${project.id}`}>{completedTasks.length ? <TaskRows tasks={completedTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:done`} taskSort={taskSort} showStatus moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} empty="Completed tasks collect here." /> : <p>Nothing completed yet.</p>}</div>}
+        {showCompleted && <div className="completed-archive-tasks" id={`completed-${project.id}`}>{completedTasks.length ? <TaskRows tasks={completedTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:done`} taskSort={taskSort} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} empty="Completed tasks collect here." /> : <p>Nothing completed yet.</p>}</div>}
       </section>
     </section>
     <ProjectNotes project={project} addNote={addProjectNote} updateNote={updateProjectNote} removeNote={removeProjectNote} onEditorChange={onProjectNoteEditorChange} />

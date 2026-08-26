@@ -373,9 +373,13 @@ test("uses the three-state task contract and project view controls", () => {
   assert.match(page, /label: "Done"/);
   assert.match(page, /className="kanban-board"/);
   assert.match(css, /\.kanban-board\{[^}]*align-items:stretch/);
-  assert.match(page, /aria-label={`Status for \$\{task\.title\}`}/);
-  assert.match(page, /className="status-control-label"/);
-  assert.match(css, /\.task-status-control select,[^}]*opacity:0/);
+  assert.match(page, /<span className="task-move-menu-label first">Workflow<\/span>/);
+  assert.match(page, /role="menuitemradio" aria-checked=\{task\.status === status\.value\}/);
+  assert.match(page, /function TaskMoveIcon\(\)[\s\S]*?className="task-move-icon"/);
+  assert.match(page, /<TaskMoveIcon \/>[\s\S]*?!hasWorkflow/);
+  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:32px;height:32px;min-width:32px;min-height:32px/);
+  assert.doesNotMatch(page, /task-workflow-label/);
+  assert.doesNotMatch(page, /function StatusControl|task-status-control/);
   assert.doesNotMatch(page, /task\.done|done: false|done: true/);
 });
 
@@ -480,10 +484,10 @@ test("project status scopes preserve project IDs containing colons", () => {
 
 test("status moves clear a pending removal undo before mutating the workspace", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const chooseStatus = page.slice(page.indexOf("function chooseStatus"), page.indexOf("function handleMenuKeyDown"));
   assert.match(page, /function moveTaskToStatus[\s\S]*?setUndoWorkspace\(null\);[\s\S]*?setWorkspace\(\(current\) =>/);
-  assert.match(page, /function StatusControl[\s\S]*?moveTaskToStatus\(task\.id, event\.target\.value as TaskStatus\)/);
-  assert.match(page, /showStatus moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\}/);
-  assert.match(page, /<StatusControl task=\{task\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\}/);
+  assert.match(chooseStatus, /if \(status === task\.status\) \{[\s\S]*?setOpen\(false\);[\s\S]*?window\.requestAnimationFrame\(\(\) => triggerRef\.current\?\.focus\(\)\);[\s\S]*?return;[\s\S]*?moveTaskToStatus\?\.\(task\.id, status\)/);
+  assert.match(page, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} openBelow \/>/);
   assert.doesNotMatch(page, /updateTask\(task\.id, \{ status:/);
 });
 
@@ -561,26 +565,58 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name, kind: "project"/);
   assert.match(page, /function TaskMoveMenu/);
   assert.match(page, /aria-haspopup="menu"/);
-  assert.match(page, /role="menu" aria-label=\{`Move \$\{task\.title\}`\}/);
+  assert.match(page, /role="menu"[^>]*aria-label=\{`Move \$\{task\.title\}`\}/);
   assert.match(page, /role="menuitem" onClick=\{\(\) => choose\(target\)\}/);
   assert.match(page, /if \(event\.key !== "Escape"\) return;[\s\S]*?triggerRef\.current\?\.focus\(\)/);
   assert.match(css, /\.task-move-control\{position:relative;justify-self:end\}/);
-  assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
+  assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action:not\(\.with-status\)>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
   assert.match(page, /task\.status !== "done" && !task\.someday/);
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
 });
 
-test("project tasks move to focus or Someday without widening board cards", () => {
+test("project tasks use the original icon for one labeled workflow and destination menu", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
+  const taskMoveMenu = page.slice(page.indexOf("function TaskMoveMenu"), page.indexOf("function TaskRows"));
+  const taskRows = page.slice(page.indexOf("function TaskRows"), page.indexOf("function AreaView"));
   const projectView = page.slice(page.indexOf("function ProjectView"), page.indexOf("function Review"));
-  assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus"/);
+  const listBranch = projectView.slice(projectView.indexOf('{view === "list" ?'), projectView.indexOf(': <div className="kanban-board"'));
+  const completedArchiveStart = projectView.indexOf("{showCompleted &&");
+  const completedArchive = projectView.slice(completedArchiveStart, projectView.indexOf("</section>", completedArchiveStart));
+  const projectStatusCss = css.slice(css.indexOf("/* Project status views */"), css.indexOf("/* Project task workflow */"));
+  assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s work", kind: "focus"/);
   assert.match(projectView, /value: `someday:\$\{area\.id\}`, label: "Someday", kind: "someday"/);
-  assert.match(projectView, /taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
-  assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} compact openBelow \/>/);
-  assert.match(page, /aria-label=\{`Move \$\{task\.title\}`\} title="Move task"/);
-  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:32px;height:32px/);
-  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:44px;height:44px;min-height:44px\}/);
+  assert.match(listBranch, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
+  assert.match(completedArchive, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
+  assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} openBelow \/>/);
+  assert.match(taskRows, /\$\{moveTaskToStatus \? "with-status" : ""\}/);
+  assert.match(taskRows, /\{taskMoveTargets && moveTask && <TaskMoveMenu task=\{task\} targets=\{taskMoveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{moveTaskToStatus\} openBelow=\{Boolean\(moveTaskToStatus\)\} \/>\}/);
+  assert.doesNotMatch(taskRows, /showStatus/);
+  assert.match(taskMoveMenu, /\{hasWorkflow && <>[\s\S]*?PROJECT_STATUSES\.map\(\(status\) => <button[^>]*onClick=\{\(\) => chooseStatus\(status\.value\)\}/);
+  assert.doesNotMatch(taskMoveMenu, /onClick=\{\(\) => chooseStatus\(task\.status\)\}/);
+  assert.match(page, />Workflow<\/span>[\s\S]*?>Move to<\/span>/);
+  assert.match(page, /title=\{hasWorkflow \? `Manage task · \$\{statusLabel\}` : "Move task"\}/);
+  assert.match(page, /className="task-move-icon"/);
+  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:32px;height:32px/);
+  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:44px;height:44px;min-width:44px;min-height:44px\}/);
+  assert.match(css, /\.task-move-menu-label\.first\{[^}]*border-top:0/);
+  assert.match(css, /\.task-move-control\.open-below \.task-move-menu\{top:auto;bottom:calc\(100% \+ 7px\)\}/);
+  assert.match(projectStatusCss, /@media\(max-width:720px\)\{[\s\S]*?\.task-row\.with-status>\.task-move-control\{grid-area:status;justify-self:start;margin:6px 0 2px 44px\}/);
+  assert.match(css, /@media\(max-width:720px\)\{[^}]*[\s\S]*?\.task-row\.with-status \.task-move-menu\{right:auto;left:0\}[\s\S]*?\.kanban-card \.task-move-menu\{right:0;left:auto\}/);
+  assert.doesNotMatch(css, /task-move-control\.compact/);
+});
+
+test("task move menus focus the current workflow status and navigate without mutating", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const taskMoveMenu = page.slice(page.indexOf("function TaskMoveMenu"), page.indexOf("function TaskRows"));
+  const keyboardHandler = taskMoveMenu.slice(taskMoveMenu.indexOf("function handleMenuKeyDown"), taskMoveMenu.indexOf("return <div"));
+  assert.match(taskMoveMenu, /const hasWorkflow = Boolean\(moveTaskToStatus\);[\s\S]*?const currentStatus = hasWorkflow \? menu\.querySelector<HTMLButtonElement>\('button\[role="menuitemradio"\]\[aria-checked="true"\]:not\(:disabled\)'\) : null;/);
+  assert.match(taskMoveMenu, /\(currentStatus \?\? menu\.querySelector<HTMLButtonElement>\("button:not\(:disabled\)"\)\)\?\.focus\(\);/);
+  assert.match(keyboardHandler, /\["ArrowDown", "ArrowUp", "Home", "End"\]/);
+  assert.match(keyboardHandler, /querySelectorAll<HTMLButtonElement>\("button:not\(:disabled\)"\)/);
+  assert.match(keyboardHandler, /event\.preventDefault\(\);[\s\S]*?buttons\[nextIndex\]\.focus\(\);/);
+  assert.doesNotMatch(keyboardHandler, /chooseStatus|moveTaskToStatus/);
+  assert.match(taskMoveMenu, /role="menu"[^>]*aria-label=\{`Move \$\{task\.title\}`\}[^>]*onKeyDown=\{handleMenuKeyDown\}/);
 });
 
 test("task moves name their destination and can be undone", () => {
