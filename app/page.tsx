@@ -1331,56 +1331,17 @@ function StatusControl({ task, moveTaskToStatus }: { task: Task; moveTaskToStatu
   </select></label>;
 }
 
-function TaskMoveTargetIcon({ kind }: { kind: TaskMoveTarget["kind"] }) {
-  if (kind === "focus") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1.5" /></svg>;
-  if (kind === "someday") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.5l2.25 1.25" /></svg>;
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>;
-}
-
-function TaskMoveMenu({ task, targets, moveTask, compact = false, openBelow = false }: { task: Task; targets: TaskMoveTarget[]; moveTask: (id: string, value: string, destinationLabel?: string) => void; compact?: boolean; openBelow?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuId = `task-move-menu-${task.id}`;
-
-  useEffect(() => {
-    if (!open) return;
-    const focusFrame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus());
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    }
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
+function TaskMoveControl({ task, targets, moveTask }: { task: Task; targets: TaskMoveTarget[]; moveTask: (id: string, value: string, destinationLabel?: string) => void }) {
   const directTargets = targets.filter((target) => target.kind !== "project");
   const projectTargets = targets.filter((target) => target.kind === "project");
-  function choose(target: TaskMoveTarget) {
-    moveTask(task.id, target.value, target.label);
-    setOpen(false);
-  }
-
-  return <div className={`task-move-control ${compact ? "compact" : ""} ${openBelow ? "open-below" : ""}`}>
-    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`Move ${task.title}`} title="Move task" onClick={() => setOpen((current) => !current)}>
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h6.5M7.5 2.5l2 2-2 2M3 11.5h6.5M7.5 9.5l2 2-2 2" /></svg>
-      <span>Move</span>
-      <svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
-    </button>
-    {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" aria-label={`Move ${task.title}`}>
-      {directTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}
-      {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}</>}
-    </div>}
-  </div>;
+  return <label className="task-move-control" title="Move task"><span className="task-move-label">Move<svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg></span><select value="" aria-label={`Move ${task.title}`} onChange={(event) => {
+    const target = targets.find((item) => item.value === event.target.value);
+    if (target) moveTask(task.id, target.value, target.label);
+  }}>
+    <option value="" disabled>Move task</option>
+    {directTargets.map((target) => <option value={target.value} key={target.value}>{target.label}</option>)}
+    {projectTargets.length > 0 && <optgroup label="Projects">{projectTargets.map((target) => <option value={target.value} key={target.value}>{target.label}</option>)}</optgroup>}
+  </select></label>;
 }
 
 function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: TaskMoveTarget[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
@@ -1395,10 +1356,10 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTas
       <label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label>
       <TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} />
       {showStatus && moveTaskToStatus && taskMoveTargets && moveTask
-        ? <div className="task-row-trailing"><StatusControl task={task} moveTaskToStatus={moveTaskToStatus} /><TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} /></div>
+        ? <div className="task-row-trailing"><StatusControl task={task} moveTaskToStatus={moveTaskToStatus} /><TaskMoveControl task={task} targets={taskMoveTargets} moveTask={moveTask} /></div>
         : showStatus && moveTaskToStatus && <StatusControl task={task} moveTaskToStatus={moveTaskToStatus} />}
       {taskAction && <button type="button" className="task-queue-action" onClick={() => taskAction.action(task.id)}>{taskAction.label}</button>}
-      {!showStatus && taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} />}
+      {!showStatus && taskMoveTargets && moveTask && <TaskMoveControl task={task} targets={taskMoveTargets} moveTask={moveTask} />}
     </div>;
   })}</div>;
 }
@@ -1680,7 +1641,7 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
         const descriptor = { kind: "task" as const, id: task.id, scope: `project:${project.id}:${group.value}` };
         const reorder = reorderProps(descriptor);
         return <article className={`kanban-card ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
-          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><StatusControl task={task} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} compact openBelow /></div></div>
+          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><StatusControl task={task} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /><TaskMoveControl task={task} targets={moveTargets} moveTask={moveTask} /></div></div>
           <div className="kanban-card-body"><label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /></div>
         </article>;
       })}{!group.tasks.length && <div className="kanban-empty"><strong>No tasks here.</strong><p>{group.empty}</p></div>}</div></section>)}</div>}
