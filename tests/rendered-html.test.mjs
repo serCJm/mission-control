@@ -500,6 +500,7 @@ test("area projects disclose open tasks and can release them to the area", () =>
   assert.match(page, /task\.projectId === project\.id && task\.status !== "done"/);
   assert.match(page, /aria-label=\{`Move \$\{task\.title\} to area tasks`\} onClick=\{\(\) => moveTask\(task\.id, `area:\$\{area\.id\}`\)\}/);
   assert.match(css, /\.project-disclosure\{[^}]*align-self:center;justify-self:center/);
+  assert.match(css, /\.project-list \.project-disclosure\{grid-template-columns:1fr;gap:0\}/);
   assert.match(page, /task\.status === "doing" \? "Doing" : "Todo"/);
   assert.match(css, /\.project-task-preview-row\{grid-template-columns:48px minmax\(0,1fr\) auto;gap:9px\}/);
   assert.match(css, /\.project-task-status\{[^}]*background:#f0f2ee;[^}]*transform:scale\(\.625\)/);
