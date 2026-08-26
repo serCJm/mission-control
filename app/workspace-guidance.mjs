@@ -39,3 +39,16 @@ export function normalizeFocusTaskIds(value, tasks, currentAreaId) {
     .map((task) => task.id));
   return ids.every((id) => eligibleIds.has(id)) ? ids : null;
 }
+
+export function reconcileFocusTaskIdsAfterMove(focusTaskIds, movedTaskId, tasks, currentAreaId) {
+  if (!focusTaskIds.includes(movedTaskId)) return focusTaskIds;
+  return normalizeFocusTaskIds([movedTaskId], tasks, currentAreaId) ? focusTaskIds : focusTaskIds.filter((id) => id !== movedTaskId);
+}
+
+export function restoreFocusTaskAfterMove(focusTaskIds, movedTaskId, focusIndex, tasks, currentAreaId) {
+  if (focusIndex === undefined || focusTaskIds.includes(movedTaskId) || focusTaskIds.length >= 3) return focusTaskIds;
+  if (!normalizeFocusTaskIds([movedTaskId], tasks, currentAreaId)) return focusTaskIds;
+  const restored = [...focusTaskIds];
+  restored.splice(Math.min(focusIndex, restored.length), 0, movedTaskId);
+  return restored;
+}

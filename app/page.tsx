@@ -5,9 +5,9 @@ import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schem
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
 import { currentRoutineSession, isRoutineSuspended, normalizeRoutines, reconcileRoutines, routineConsistency, routineDateKey, routineScheduleLabel, routineScheduleStartsOn, shiftRoutineDate } from "./routine-schema.mjs";
-import { isTaskStatus, normalizeTaskNotes } from "./task-schema.mjs";
+import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
-import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview } from "./workspace-guidance.mjs";
+import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview, reconcileFocusTaskIdsAfterMove, restoreFocusTaskAfterMove } from "./workspace-guidance.mjs";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
 type Area = { id: string; name: string; icon: AreaIconName };
@@ -46,7 +46,8 @@ type TaskNoteEditorEvent = { taskId: string; open: boolean; draft?: string; save
 type TaskNoteEditorChange = (event: TaskNoteEditorEvent) => void;
 type TaskUndo = { task: Task; index: number };
 type TaskPlacement = Pick<Task, "areaId" | "projectId" | "someday">;
-type MoveTaskUndo = { taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string };
+type MoveTaskUndo = { taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string; focusIndex?: number };
+type TaskMoveTarget = { value: string; label: string; kind: "focus" | "someday" | "project" };
 type ReorderProps = {
   descriptor: DragItem;
   onDragStart: (event: DragEvent<HTMLButtonElement>, item: DragItem) => void;
@@ -786,7 +787,7 @@ export default function Home() {
         const currentTask = current.tasks.find((item) => item.id === moveTaskUndo.taskId);
         if (!currentTask || currentTask.areaId !== moveTaskUndo.to.areaId || currentTask.projectId !== moveTaskUndo.to.projectId || currentTask.someday !== moveTaskUndo.to.someday) return current;
         const tasks = current.tasks.map((item) => item.id === moveTaskUndo.taskId ? { ...item, ...moveTaskUndo.from } : item);
-        const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
+        const focusTaskIds = restoreFocusTaskAfterMove(current.focusTaskIds, moveTaskUndo.taskId, moveTaskUndo.focusIndex, tasks, current.currentAreaId);
         return { ...current, tasks, focusTaskIds };
       });
       setMoveTaskUndo(null);
@@ -826,19 +827,14 @@ export default function Home() {
 
   function moveTask(id: string, value: string, destinationLabel?: string) {
     const task = workspace.tasks.find((item) => item.id === id);
-    const project = value.startsWith("project:") ? workspace.projects.find((item) => item.id === value.slice(8)) : undefined;
-    const to: TaskPlacement | null = value === "inbox"
-      ? { areaId: undefined, projectId: undefined, someday: undefined }
-      : value.startsWith("area:")
-        ? { areaId: value.slice(5), projectId: undefined, someday: undefined }
-        : project
-          ? { areaId: project.areaId, projectId: project.id, someday: undefined }
-          : null;
+    const to = taskPlacementForDestination(value, workspace.projects) as TaskPlacement | null;
     const resolvedLabel = value === "inbox"
       ? "Inbox"
       : value.startsWith("area:")
         ? workspace.areas.find((area) => area.id === value.slice(5))?.name
-        : workspace.projects.find((project) => project.id === value.slice(8))?.name;
+        : value.startsWith("someday:")
+          ? "Someday"
+          : workspace.projects.find((project) => project.id === value.slice(8))?.name;
     const moveToast = `Moved to ${destinationLabel ?? resolvedLabel ?? "destination"}`;
     setUndoWorkspace(null);
     setTaskUndo(null);
@@ -847,13 +843,14 @@ export default function Home() {
       from: { areaId: task.areaId, projectId: task.projectId, someday: task.someday },
       to,
       toast: moveToast,
+      focusIndex: workspace.focusTaskIds.includes(id) ? workspace.focusTaskIds.indexOf(id) : undefined,
     } : null);
     setWorkspace((current) => {
       const tasks = current.tasks.map((task) => {
         if (task.id !== id) return task;
         return to ? { ...task, ...to } : task;
       });
-      const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
+      const focusTaskIds = reconcileFocusTaskIdsAfterMove(current.focusTaskIds, id, tasks, current.currentAreaId);
       return { ...current, tasks, focusTaskIds };
     });
     setToast(moveToast);
@@ -1032,7 +1029,7 @@ export default function Home() {
         {selection.kind === "today" && <Today key={workspace.currentAreaId ?? "today"} workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} navigate={navigate} reorderProps={reorderProps} setCurrentArea={setCurrentArea} toggleFocusTask={toggleFocusTask} routineNow={routineNow} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView key={activeArea.id} area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} routines={workspace.routines.filter((routine) => routine.areaId === activeArea.id)} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} addAreaTask={addAreaTask} addSomedayTask={addSomedayTask} addRoutine={addRoutine} updateRoutine={updateRoutine} removeRoutine={removeRoutine} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} toggleRoutinePause={toggleRoutinePause} addRoutineVacation={addRoutineVacation} removeRoutineVacation={removeRoutineVacation} routineNow={routineNow} navigate={navigate} toggleTask={toggleTask} updateArea={updateArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} focusSort={taskSortFor(`area:${activeArea.id}`)} setFocusSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} somedaySort={taskSortFor(`someday:${activeArea.id}`)} setSomedaySort={(sort) => setTaskSort(`someday:${activeArea.id}`, sort)} removeArea={removeArea} />}
-        {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} setDragged={setDragged} navigate={navigate} />}
+        {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} moveTask={moveTask} setDragged={setDragged} navigate={navigate} />}
         {selection.kind === "review" && <Review key={currentReview.weekKey} workspace={workspace} review={currentReview} completeStep={completeReviewStep} navigate={navigate} />}
       </main>
       {toast && <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || (moveTaskUndo && toast === moveTaskUndo.toast) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}
@@ -1334,7 +1331,13 @@ function StatusControl({ task, moveTaskToStatus }: { task: Task; moveTaskToStatu
   </select></label>;
 }
 
-function TaskMoveMenu({ task, targets, moveTask }: { task: Task; targets: { value: string; label: string }[]; moveTask: (id: string, value: string, destinationLabel?: string) => void }) {
+function TaskMoveTargetIcon({ kind }: { kind: TaskMoveTarget["kind"] }) {
+  if (kind === "focus") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1.5" /></svg>;
+  if (kind === "someday") return <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.5l2.25 1.25" /></svg>;
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg>;
+}
+
+function TaskMoveMenu({ task, targets, moveTask, compact = false, openBelow = false }: { task: Task; targets: TaskMoveTarget[]; moveTask: (id: string, value: string, destinationLabel?: string) => void; compact?: boolean; openBelow?: boolean }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1360,26 +1363,27 @@ function TaskMoveMenu({ task, targets, moveTask }: { task: Task; targets: { valu
     };
   }, [open]);
 
-  const [focusTarget, ...projectTargets] = targets;
-  function choose(target: { value: string; label: string }) {
+  const directTargets = targets.filter((target) => target.kind !== "project");
+  const projectTargets = targets.filter((target) => target.kind === "project");
+  function choose(target: TaskMoveTarget) {
     moveTask(task.id, target.value, target.label);
     setOpen(false);
   }
 
-  return <div className="task-move-control">
-    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" onClick={() => setOpen((current) => !current)}>
+  return <div className={`task-move-control ${compact ? "compact" : ""} ${openBelow ? "open-below" : ""}`}>
+    <button ref={triggerRef} className="task-move-trigger" type="button" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`Move ${task.title}`} title="Move task" onClick={() => setOpen((current) => !current)}>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h6.5M7.5 2.5l2 2-2 2M3 11.5h6.5M7.5 9.5l2 2-2 2" /></svg>
       <span>Move</span>
       <svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
     </button>
     {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" aria-label={`Move ${task.title}`}>
-      {focusTarget && <button type="button" role="menuitem" onClick={() => choose(focusTarget)}><span className="task-move-target-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" /><circle cx="8" cy="8" r="1.5" /></svg></span><span>{focusTarget.label}</span></button>}
-      {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" /></svg></span><span>{target.label}</span></button>)}</>}
+      {directTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}
+      {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}</>}
     </div>}
   </div>;
 }
 
-function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: { value: string; label: string }[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
+function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, reorderProps, empty, emptyTitle = "Nothing waiting here.", scope, taskSort, reorderable = true, showStatus = false, moveTaskToStatus, taskAction, taskMoveTargets, moveTask }: { tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; empty: string; emptyTitle?: string; scope: string; taskSort: TaskSort; reorderable?: boolean; showStatus?: boolean; moveTaskToStatus?: (id: string, status: TaskStatus) => void; taskAction?: { label: string; action: (id: string) => void }; taskMoveTargets?: TaskMoveTarget[]; moveTask?: (id: string, value: string, destinationLabel?: string) => void }) {
   if (!tasks.length) return <div className="empty-state"><strong>{emptyTitle}</strong><p>{empty}</p></div>;
   const customOrder = reorderable && taskSort === "custom";
   return <div className="task-list">{sortTasks(tasks, taskSort).map((task: Task) => {
@@ -1390,9 +1394,11 @@ function TaskRows({ tasks, toggleTask, renameTask, updateTask, removeTask, onTas
       {customOrder && <DragHandle {...reorder} label={`Reorder ${task.title}`} />}
       <label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label>
       <TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} />
-      {showStatus && moveTaskToStatus && <StatusControl task={task} moveTaskToStatus={moveTaskToStatus} />}
+      {showStatus && moveTaskToStatus && taskMoveTargets && moveTask
+        ? <div className="task-row-trailing"><StatusControl task={task} moveTaskToStatus={moveTaskToStatus} /><TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} /></div>
+        : showStatus && moveTaskToStatus && <StatusControl task={task} moveTaskToStatus={moveTaskToStatus} />}
       {taskAction && <button type="button" className="task-queue-action" onClick={() => taskAction.action(task.id)}>{taskAction.label}</button>}
-      {taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} />}
+      {!showStatus && taskMoveTargets && moveTask && <TaskMoveMenu task={task} targets={taskMoveTargets} moveTask={moveTask} />}
     </div>;
   })}</div>;
 }
@@ -1552,7 +1558,7 @@ function AreaView({ area, projects, tasks, routines, showProjectForm, setShowPro
     })}</div> : <div className="empty-state"><strong>No projects yet.</strong><p>Create one when this area has a finite outcome to move.</p></div>}</section>
     <section className="loose-tasks someday-tasks"><div className="section-title"><div><h2>Someday</h2><p className="section-note">Ideas worth keeping, without putting them in the current queue.</p></div><div className="section-header-actions"><TaskSortControl value={somedaySort} onChange={setSomedaySort} /><button type="button" className={`project-add-button ${showSomedayForm ? "active" : ""}`} onClick={() => setShowSomedayForm(!showSomedayForm)} aria-label={showSomedayForm ? "Close new Someday task form" : "New Someday task"} title={showSomedayForm ? "Close new Someday task form" : "New Someday task"} aria-expanded={showSomedayForm}><PlusIcon /></button></div></div>
     {showSomedayForm && <form className="someday-create" onSubmit={(event) => { event.preventDefault(); const title = newSomedayTask.trim(); if (!title) return; addSomedayTask(area.id, title); setNewSomedayTask(""); setShowSomedayForm(false); }}><input value={newSomedayTask} maxLength={2_000} onChange={(event) => setNewSomedayTask(event.target.value)} placeholder="Someday task" aria-label="Someday task" /><button disabled={!newSomedayTask.trim()}>Add task</button></form>}
-    <TaskRows tasks={somedayTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`someday:${area.id}`} taskSort={somedaySort} empty="Move an area task here when it matters, but not yet." taskMoveTargets={[{ value: `area:${area.id}`, label: "Today’s focus" }, ...projects.map((project) => ({ value: `project:${project.id}`, label: project.name }))]} moveTask={moveTask} /></section>
+    <TaskRows tasks={somedayTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`someday:${area.id}`} taskSort={somedaySort} empty="Move an area task here when it matters, but not yet." taskMoveTargets={[{ value: `area:${area.id}`, label: "Today’s focus", kind: "focus" }, ...projects.map((project) => ({ value: `project:${project.id}`, label: project.name, kind: "project" as const }))]} moveTask={moveTask} /></section>
     <div className="danger-zone"><div><strong>Remove this area</strong><p>This also removes its synced routines, projects, tasks, and all attached history.</p></div><button onClick={() => removeArea(area.id)}>Remove area</button></div>
   </div>;
 }
@@ -1626,12 +1632,16 @@ function ProjectStatusHeading({ group, headingClass, headingId, addingStatus, to
   return <div className={headingClass}><h3 id={headingId}>{group.label}</h3><div className="task-group-actions"><span>{group.tasks.length}</span><button type="button" className={`task-group-add-button ${adding ? "active" : ""}`} onClick={() => toggleStatusComposer(group.value)} aria-label={adding ? `Close new task form for ${group.label}` : `Add task to ${group.label}`} title={adding ? "Close" : `Add task to ${group.label}`} aria-expanded={adding}><PlusIcon /></button></div></div>;
 }
 
-function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTask, updateTask, removeTask, addProjectTask, onTaskNoteEditorChange, reorderProps, taskSort, setTaskSort, updateProject, addProjectNote, updateProjectNote, removeProjectNote, onProjectNoteEditorChange, removeProject, view, setView, dragged, moveTaskToStatus, setDragged, navigate }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; addProjectTask: AddProjectTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; updateProject: (patch: Partial<Project>) => void; addProjectNote: (title: string, body: string) => void; updateProjectNote: (noteId: string, patch: Partial<Pick<ProjectNote, "title" | "body" | "pinned">>) => void; removeProjectNote: (noteId: string) => void; onProjectNoteEditorChange: (noteId: string, open: boolean) => void; removeProject: (id: string) => void; view: ProjectViewMode; setView: (view: ProjectViewMode) => void; dragged: DragItem | null; moveTaskToStatus: (id: string, status: TaskStatus, expectedProjectId?: string, targetId?: string) => void; setDragged: (item: DragItem | null) => void; navigate: (selection: Selection) => void }) {
+function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTask, updateTask, removeTask, addProjectTask, onTaskNoteEditorChange, reorderProps, taskSort, setTaskSort, updateProject, addProjectNote, updateProjectNote, removeProjectNote, onProjectNoteEditorChange, removeProject, view, setView, dragged, moveTaskToStatus, moveTask, setDragged, navigate }: { project: Project; area: Area; tasks: Task[]; toggleTask: (id: string) => void; renameProject: (id: string, value: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; addProjectTask: AddProjectTask; onTaskNoteEditorChange: TaskNoteEditorChange; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void; updateProject: (patch: Partial<Project>) => void; addProjectNote: (title: string, body: string) => void; updateProjectNote: (noteId: string, patch: Partial<Pick<ProjectNote, "title" | "body" | "pinned">>) => void; removeProjectNote: (noteId: string) => void; onProjectNoteEditorChange: (noteId: string, open: boolean) => void; removeProject: (id: string) => void; view: ProjectViewMode; setView: (view: ProjectViewMode) => void; dragged: DragItem | null; moveTaskToStatus: (id: string, status: TaskStatus, expectedProjectId?: string, targetId?: string) => void; moveTask: (id: string, value: string, destinationLabel?: string) => void; setDragged: (item: DragItem | null) => void; navigate: (selection: Selection) => void }) {
   const activeTaskGroups = PROJECT_STATUSES.filter((status) => status.value !== "done").map((status) => ({ ...status, tasks: tasks.filter((task) => task.status === status.value) }));
   const completedTasks = tasks.filter((task) => task.status === "done");
   const [showCompleted, setShowCompleted] = useState(false);
   const [addingStatus, setAddingStatus] = useState<TaskStatus | null>(null);
   const [newStatusTask, setNewStatusTask] = useState("");
+  const moveTargets: TaskMoveTarget[] = [
+    { value: `area:${area.id}`, label: "Today’s focus", kind: "focus" },
+    { value: `someday:${area.id}`, label: "Someday", kind: "someday" },
+  ];
 
   function toggleStatusComposer(status: TaskStatus) {
     setNewStatusTask("");
@@ -1665,12 +1675,12 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
 
   return <div className="page project-page"><nav className="breadcrumb" aria-label="Breadcrumb"><button type="button" onClick={() => navigate({ kind: "today" })}>Today</button><span aria-hidden="true">/</span><button type="button" onClick={() => navigate({ kind: "area", id: area.id })}>{area.name}</button><span aria-hidden="true">/</span><span aria-current="page">{project.name}</span></nav><div className="page-heading project-heading"><div><NameEditor large value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><textarea className="outcome-editor" value={project.outcome} onChange={(event) => updateProject({ outcome: event.target.value })} aria-label="Project outcome" /></div><div className="quiet-count">{tasks.filter((task) => task.status !== "done").length}<span>open tasks</span></div></div>
     <section className={`project-tasks project-view-${view}`}><div className="project-task-toolbar"><div><h2>Tasks</h2><div className="view-toggle" aria-label="Project task view"><button type="button" className={view === "list" ? "active" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}>List</button><button type="button" className={view === "board" ? "active" : ""} aria-pressed={view === "board"} onClick={() => setView("board")}>Board</button></div></div><TaskSortControl value={taskSort} onChange={setTaskSort} /></div>
-      {view === "list" ? <div className="project-task-groups">{activeTaskGroups.map((group) => <section className={`task-group status-${group.value}`} key={group.value} aria-labelledby={`list-${project.id}-${group.value}`}><ProjectStatusHeading group={group} headingClass="task-group-heading" headingId={`list-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<TaskRows tasks={group.tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:${group.value}`} taskSort={taskSort} empty={group.empty} showStatus moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /></section>)}</div>
+      {view === "list" ? <div className="project-task-groups">{activeTaskGroups.map((group) => <section className={`task-group status-${group.value}`} key={group.value} aria-labelledby={`list-${project.id}-${group.value}`}><ProjectStatusHeading group={group} headingClass="task-group-heading" headingId={`list-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<TaskRows tasks={group.tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:${group.value}`} taskSort={taskSort} empty={group.empty} showStatus moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} /></section>)}</div>
       : <div className="kanban-board">{activeTaskGroups.map((group) => <section className={`kanban-column status-${group.value}`} key={group.value} aria-labelledby={`board-${project.id}-${group.value}`} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value)}><ProjectStatusHeading group={group} headingClass="kanban-column-heading" headingId={`board-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<div className="kanban-cards">{sortTasks(group.tasks, taskSort).map((task: Task) => {
         const descriptor = { kind: "task" as const, id: task.id, scope: `project:${project.id}:${group.value}` };
         const reorder = reorderProps(descriptor);
         return <article className={`kanban-card ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
-          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<StatusControl task={task} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /></div>
+          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><StatusControl task={task} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} /><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} compact openBelow /></div></div>
           <div className="kanban-card-body"><label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /></div>
         </article>;
       })}{!group.tasks.length && <div className="kanban-empty"><strong>No tasks here.</strong><p>{group.empty}</p></div>}</div></section>)}</div>}

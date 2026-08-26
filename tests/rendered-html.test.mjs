@@ -15,8 +15,8 @@ import {
   routineScheduleStartsOn,
 } from "../app/routine-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
-import { isTaskStatus, normalizeTaskNotes } from "../app/task-schema.mjs";
-import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
+import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "../app/task-schema.mjs";
+import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview, reconcileFocusTaskIdsAfterMove, restoreFocusTaskAfterMove } from "../app/workspace-guidance.mjs";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -52,6 +52,21 @@ test("keeps deliberate focus to three eligible tasks in the current area", () =>
   assert.equal(normalizeFocusTaskIds(["a", "b", "done", "later"], tasks, "trading"), null);
 });
 
+test("a Someday move removes and restores only the moved Focus three task", () => {
+  const focused = ["first", "moved", "third"];
+  const deferredTasks = [
+    { id: "first", areaId: "trading", status: "todo" },
+    { id: "moved", areaId: "trading", status: "todo", someday: true },
+    { id: "third", areaId: "trading", status: "doing" },
+  ];
+  const afterMove = reconcileFocusTaskIdsAfterMove(focused, "moved", deferredTasks, "trading");
+  assert.deepEqual(afterMove, ["first", "third"]);
+
+  const restoredTasks = deferredTasks.map((task) => task.id === "moved" ? { ...task, someday: undefined, projectId: "execution" } : task);
+  assert.deepEqual(restoreFocusTaskAfterMove(afterMove, "moved", 1, restoredTasks, "trading"), focused);
+  assert.deepEqual(restoreFocusTaskAfterMove(["first", "third", "new"], "moved", 1, restoredTasks, "trading"), ["first", "third", "new"]);
+});
+
 test("stores weekly review progress against an ISO week", () => {
   assert.equal(currentWeekKey(new Date("2026-08-25T12:00:00-07:00"), "America/Los_Angeles"), "2026-W35");
   assert.deepEqual(emptyWeeklyReview("2026-W35"), { weekKey: "2026-W35", completedSteps: [], intention: "" });
@@ -81,6 +96,14 @@ test("normalizes persisted task notes to the server contract", () => {
   assert.equal(normalizeTaskNotes(42), null);
   assert.equal(normalizeTaskNotes({ text: "invalid" }), null);
   assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
+});
+
+test("resolves task moves into area focus, Someday, and projects", () => {
+  const projects = [{ id: "execution", areaId: "trading" }];
+  assert.deepEqual(taskPlacementForDestination("area:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined });
+  assert.deepEqual(taskPlacementForDestination("someday:trading", projects), { areaId: "trading", projectId: undefined, someday: true });
+  assert.deepEqual(taskPlacementForDestination("project:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined });
+  assert.equal(taskPlacementForDestination("project:missing", projects), null);
 });
 
 test("validates and sorts project note cards", () => {
@@ -534,8 +557,8 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(page, /const somedayTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday\)/);
   assert.match(page, /<h2>Someday<\/h2>/);
   assert.match(page, /label: "Someday", action: \(id\) => updateTask\(id, \{ someday: true \}\)/);
-  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus" \}, \.\.\.projects\.map/);
-  assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name/);
+  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus" \}, \.\.\.projects\.map/);
+  assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name, kind: "project"/);
   assert.match(page, /function TaskMoveMenu/);
   assert.match(page, /aria-haspopup="menu"/);
   assert.match(page, /role="menu" aria-label=\{`Move \$\{task\.title\}`\}/);
@@ -547,11 +570,24 @@ test("area tasks can be deferred to a separate someday queue", () => {
   assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
 });
 
+test("project tasks move to focus or Someday without widening board cards", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  const projectView = page.slice(page.indexOf("function ProjectView"), page.indexOf("function Review"));
+  assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus"/);
+  assert.match(projectView, /value: `someday:\$\{area\.id\}`, label: "Someday", kind: "someday"/);
+  assert.match(projectView, /taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
+  assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} compact openBelow \/>/);
+  assert.match(page, /aria-label=\{`Move \$\{task\.title\}`\} title="Move task"/);
+  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:32px;height:32px/);
+  assert.match(css, /\.task-move-control\.compact \.task-move-trigger\{width:44px;height:44px;min-height:44px\}/);
+});
+
 test("task moves name their destination and can be undone", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const moveTaskSource = page.slice(page.indexOf("function moveTask(id:"), page.indexOf("function updateArea("));
   assert.match(moveTaskSource, /function moveTask\(id: string, value: string, destinationLabel\?: string\)/);
-  assert.match(page, /type MoveTaskUndo = \{ taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string \}/);
+  assert.match(page, /type MoveTaskUndo = \{ taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string; focusIndex\?: number \}/);
   assert.match(moveTaskSource, /setUndoWorkspace\(null\);[\s\S]*?setMoveTaskUndo\(task && to \? \{/);
   assert.doesNotMatch(moveTaskSource, /setUndoWorkspace\(workspace\)/);
   assert.match(page, /if \(undoWorkspace\) \{[\s\S]*?setWorkspace\(undoWorkspace\);[\s\S]*?return;[\s\S]*?if \(moveTaskUndo\) \{/);
