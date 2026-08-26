@@ -357,6 +357,7 @@ test("renders an accessible responsive project note board", () => {
   assert.match(page, /openProjectNoteEditors\.current\.size > 0/);
   assert.match(page, /No notes yet\./);
   assert.match(css, /\.notes-board\{column-count:3;column-gap:12px\}/);
+  assert.match(css, /\.project-note-open p:not\(\.note-empty-body\)\{[^}]*max-height:calc\(1\.62em \* 7\)[^}]*-webkit-line-clamp:7/);
   assert.match(css, /@media\(max-width:920px\)\{\.notes-board\{column-count:2\}\}/);
   assert.match(css, /@media\(max-width:580px\)[^{]*\{[^}]*[\s\S]*?\.notes-board\{column-count:1\}/);
   assert.match(css, /\.note-icon-button\{width:44px;height:44px/);
