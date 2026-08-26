@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
+import { currentWeekKey, emptyWeeklyReview } from "../../../workspace-guidance.mjs";
 import { getD1 } from "../../../../db";
 import { normalizeWorkspace } from "../route";
 
@@ -40,7 +41,18 @@ export async function POST() {
   }
 
   if (!candidate || typeof candidate !== "object") return html("<h1>The selected archive is invalid</h1>", 422);
-  const restored = normalizeWorkspace({ ...(candidate as Record<string, unknown>), routines: [] });
+  const legacy = candidate as Record<string, unknown>;
+  const legacyAreas = Array.isArray(legacy.areas) ? legacy.areas : [];
+  const firstAreaId = legacyAreas[0] && typeof legacyAreas[0] === "object"
+    ? (legacyAreas[0] as Record<string, unknown>).id
+    : undefined;
+  const restored = normalizeWorkspace({
+    ...legacy,
+    routines: [],
+    focusTaskIds: [],
+    weeklyReview: emptyWeeklyReview(currentWeekKey()),
+    currentAreaId: firstAreaId,
+  });
   if (!restored) return html("<h1>The selected archive cannot be restored safely</h1>", 422);
 
   const now = Date.now();
