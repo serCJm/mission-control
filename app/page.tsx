@@ -4,6 +4,8 @@ import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback,
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
+import { formatPlannerTime, isPlannerDeadline, normalizePlanner, plannerDateKey } from "./planner-schema.mjs";
+import { Planner, type PlannerData } from "./planner";
 import { currentRoutineSession, isRoutineSuspended, normalizeRoutines, reconcileRoutines, routineConsistency, routineDateKey, routineScheduleLabel, routineScheduleStartsOn, shiftRoutineDate } from "./routine-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
@@ -18,7 +20,7 @@ type TaskStatus = "todo" | "doing" | "done";
 type TaskSort = "custom" | "alphabetical" | "dueDate" | "priority";
 type ProjectSort = "custom" | "alphabetical";
 type ProjectViewMode = "list" | "board";
-type Task = { id: string; title: string; areaId?: string; projectId?: string; status: TaskStatus; createdAt: number; dueDate?: string; priority?: TaskPriority; notes?: string; someday?: boolean; waiting?: boolean };
+type Task = { id: string; title: string; areaId?: string; projectId?: string; status: TaskStatus; createdAt: number; dueDate?: string; dueTime?: string; priority?: TaskPriority; notes?: string; someday?: boolean; waiting?: boolean };
 type RoutineStatus = "pending" | "completed" | "skipped" | "missed";
 type RoutineChecklistItem = { id: string; text: string };
 type RoutineSession = { date: string; status: RoutineStatus; checklist: Array<RoutineChecklistItem & { checked: boolean }>; updatedAt: number };
@@ -27,16 +29,16 @@ type RoutineSchedule = { weekdays: number[]; allDay: boolean; windowStart?: stri
 type PendingRoutineSchedule = RoutineSchedule & { effectiveOn: string };
 type Routine = RoutineSchedule & { id: string; areaId: string; name: string; expectedMinutes: number; scheduleEffectiveOn: string; checklist: RoutineChecklistItem[]; suspensions: RoutineSuspension[]; sessions: RoutineSession[]; pendingSchedule?: PendingRoutineSchedule };
 type RoutineDraft = RoutineSchedule & { name: string; expectedMinutes: number; checklist: RoutineChecklistItem[] };
-type TaskPatch = Partial<Pick<Task, "dueDate" | "priority" | "notes" | "status" | "someday" | "waiting">>;
+type TaskPatch = Partial<Pick<Task, "dueDate" | "dueTime" | "priority" | "notes" | "status" | "someday" | "waiting">>;
 type UpdateTask = (id: string, patch: TaskPatch) => void;
 type RemoveTask = (id: string) => void;
 type AddProjectTask = (projectId: string, areaId: string, status: TaskStatus, title: string) => void;
 type Selection =
-  | { kind: "today" | "inbox" | "review" }
+  | { kind: "today" | "planner" | "inbox" | "review" }
   | { kind: "area"; id: string }
   | { kind: "project"; id: string };
 type WeeklyReview = { weekKey: string; completedSteps: number[]; intention: string };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; planner: PlannerData; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
 type SyncState = "loading" | "saving" | "saved" | "error";
 type Account = { displayName: string; email: string };
 type EntityKind = "area" | "project" | "task";
@@ -113,6 +115,16 @@ const seed: Workspace = {
       sessions: [],
     },
   ],
+  planner: {
+    areaBlockRules: [
+      { id: "trading-mornings", areaId: "trading", weekdays: [1, 2, 3, 4, 5], effectiveOn: plannerDateKey(), startTime: "06:30", endTime: "09:30" },
+      { id: "growth-evenings", areaId: "growth", weekdays: [2, 4], effectiveOn: plannerDateKey(), startTime: "18:00", endTime: "19:00" },
+      { id: "family-weekend", areaId: "family", weekdays: [6], effectiveOn: plannerDateKey(), startTime: "10:00", endTime: "13:00" },
+      { id: "life-friday", areaId: "life", weekdays: [5], effectiveOn: plannerDateKey(), startTime: "14:00", endTime: "15:00" },
+    ],
+    areaBlockExceptions: [],
+    projectSessions: [],
+  },
   focusTaskIds: ["t1", "t2", "t3"],
   weeklyReview: emptyWeeklyReview(currentWeekKey()),
   currentAreaId: "trading",
@@ -156,18 +168,20 @@ function normalizeClientWorkspace(value: unknown): Workspace | null {
   const tasks = candidate.tasks.map((task) => {
     if (!isTaskStatus(task.status)) return null;
     const notes = normalizeTaskNotes(task.notes);
+    const validTime = isPlannerDeadline(task.dueDate, task.dueTime);
     const validQueues = (task.someday === undefined || typeof task.someday === "boolean")
       && (task.waiting === undefined || typeof task.waiting === "boolean")
       && !(task.someday && task.waiting);
-    return notes === null || !validQueues ? null : { ...task, notes };
+    return notes === null || !validQueues || !validTime ? null : { ...task, notes };
   });
   if (tasks.some((task) => task === null)) return null;
   const routines = normalizeRoutines(candidate.routines, new Set(areas.map((area) => area.id))) as Routine[] | null;
-  if (routines === null) return null;
+  const planner = normalizePlanner(candidate.planner, new Set(areas.map((area) => area.id)), new Map((projects as Project[]).map((project) => [project.id, project.areaId]))) as PlannerData | null;
+  if (routines === null || planner === null) return null;
   const focusTaskIds = normalizeFocusTaskIds(candidate.focusTaskIds, tasks, currentAreaId);
   const weeklyReview = normalizeWeeklyReview(candidate.weeklyReview);
   if (focusTaskIds === null || weeklyReview === null) return null;
-  return { areas, projects: projects as Project[], tasks: tasks as Task[], routines, focusTaskIds, weeklyReview, currentAreaId };
+  return { areas, projects: projects as Project[], tasks: tasks as Task[], routines, planner, focusTaskIds, weeklyReview, currentAreaId };
 }
 
 function reorderScoped<T extends { id: string }>(items: T[], scopeIds: string[], sourceId: string, targetId: string) {
@@ -265,11 +279,14 @@ export default function Home() {
   const [syncState, setSyncState] = useState<SyncState>("loading");
   const [account, setAccount] = useState<Account | null>(null);
   const [routineNow, setRoutineNow] = useState(() => new Date());
+  const [plannerRefreshRequest, setPlannerRefreshRequest] = useState(0);
   const lastSyncedWorkspace = useRef("");
   const lastServerUpdatedAt = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const openTaskNoteEditors = useRef(new Set<string>());
   const openProjectNoteEditors = useRef(new Set<string>());
+  const plannerEditorOpen = useRef(false);
+  const handledPlannerRefreshRequest = useRef(0);
   const pendingTaskNoteCommits = useRef(new Map<string, string>());
 
   const handleTaskNoteEditorChange = useCallback(({ taskId, open, draft, saved }: TaskNoteEditorEvent) => {
@@ -294,6 +311,12 @@ export default function Home() {
   const handleProjectNoteEditorChange = useCallback((noteId: string, open: boolean) => {
     if (open) openProjectNoteEditors.current.add(noteId);
     else openProjectNoteEditors.current.delete(noteId);
+  }, []);
+
+  const handlePlannerEditorChange = useCallback((open: boolean) => {
+    const wasOpen = plannerEditorOpen.current;
+    plannerEditorOpen.current = open;
+    if (wasOpen && !open) setPlannerRefreshRequest((request) => request + 1);
   }, []);
 
   useEffect(() => {
@@ -402,16 +425,17 @@ export default function Home() {
   useEffect(() => {
     if (!cloudReady) return;
     let active = true;
+    const hasOpenEditor = () => plannerEditorOpen.current || openTaskNoteEditors.current.size > 0 || openProjectNoteEditors.current.size > 0;
 
     async function refreshFromCloud() {
-      if (document.visibilityState !== "visible" || openTaskNoteEditors.current.size > 0 || openProjectNoteEditors.current.size > 0 || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
+      if (document.visibilityState !== "visible" || hasOpenEditor() || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
       try {
         const response = await fetch("/api/workspace", { cache: "no-store" });
         if (!response.ok) return;
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number };
         const normalized = normalizeClientWorkspace(payload.workspace);
         const synced = normalized ? { ...normalized, routines: reconcileRoutines(normalized.routines, new Date()) } : null;
-        if (!active || openTaskNoteEditors.current.size > 0 || openProjectNoteEditors.current.size > 0 || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
+        if (!active || hasOpenEditor() || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
         lastServerUpdatedAt.current = payload.updatedAt;
         lastSyncedWorkspace.current = JSON.stringify(synced);
         setWorkspace(synced);
@@ -421,12 +445,16 @@ export default function Home() {
 
     window.addEventListener("focus", refreshFromCloud);
     document.addEventListener("visibilitychange", refreshFromCloud);
+    if (plannerRefreshRequest !== handledPlannerRefreshRequest.current) {
+      handledPlannerRefreshRequest.current = plannerRefreshRequest;
+      void refreshFromCloud();
+    }
     return () => {
       active = false;
       window.removeEventListener("focus", refreshFromCloud);
       document.removeEventListener("visibilitychange", refreshFromCloud);
     };
-  }, [cloudReady, workspace]);
+  }, [cloudReady, plannerRefreshRequest, workspace]);
 
   useEffect(() => {
     let timeout = 0;
@@ -509,7 +537,7 @@ export default function Home() {
 
   function completeReviewStep(index: number, intention?: string) {
     setWorkspace((current) => {
-      const review = current.weeklyReview.weekKey === reviewWeekKey ? current.weeklyReview : emptyWeeklyReview(reviewWeekKey);
+      const review: WeeklyReview = current.weeklyReview.weekKey === reviewWeekKey ? current.weeklyReview : emptyWeeklyReview(reviewWeekKey) as WeeklyReview;
       return {
         ...current,
         weeklyReview: {
@@ -632,7 +660,7 @@ export default function Home() {
           name: draft.name,
           expectedMinutes: draft.expectedMinutes,
           checklist: draft.checklist,
-          sessions: currentRoutine.sessions.map((session) => mergePendingChecklist(session, draft.checklist)),
+          sessions: currentRoutine.sessions.map((session: RoutineSession) => mergePendingChecklist(session, draft.checklist)),
         };
         if (routineSchedulesEqual(activeSchedule, requestedSchedule)) delete next.pendingSchedule;
         else next.pendingSchedule = { ...requestedSchedule, effectiveOn };
@@ -661,7 +689,7 @@ export default function Home() {
         if (!currentRoutineSession(reconciled, now)) return reconciled;
         return {
           ...reconciled,
-          sessions: reconciled.sessions.map((session) => session.date === today ? { ...session, status: session.status === status ? "pending" : status, updatedAt: now.getTime() } : session),
+          sessions: reconciled.sessions.map((session: RoutineSession) => session.date === today ? { ...session, status: session.status === status ? "pending" : status, updatedAt: now.getTime() } : session),
         };
       }),
     }));
@@ -737,6 +765,11 @@ export default function Home() {
       projects: current.projects.filter((project) => project.areaId !== areaId),
       tasks: current.tasks.filter((task) => task.areaId !== areaId && !projectIds.includes(task.projectId ?? "")),
       routines: current.routines.filter((routine) => routine.areaId !== areaId),
+      planner: {
+        areaBlockRules: current.planner.areaBlockRules.filter((rule) => rule.areaId !== areaId),
+        areaBlockExceptions: current.planner.areaBlockExceptions.filter((item) => current.planner.areaBlockRules.some((rule) => rule.id === item.ruleId && rule.areaId !== areaId)),
+        projectSessions: current.planner.projectSessions.filter((item) => !projectIds.includes(item.projectId)),
+      },
       focusTaskIds: current.currentAreaId === areaId ? [] : current.focusTaskIds,
       currentAreaId: current.currentAreaId === areaId ? current.areas.find((item) => item.id !== areaId)?.id : current.currentAreaId,
     }));
@@ -752,6 +785,7 @@ export default function Home() {
       ...current,
       projects: current.projects.filter((item) => item.id !== projectId),
       tasks: current.tasks.filter((task) => task.projectId !== projectId),
+      planner: { ...current.planner, projectSessions: current.planner.projectSessions.filter((session) => session.projectId !== projectId) },
       focusTaskIds: current.focusTaskIds.filter((taskId) => current.tasks.some((task) => task.id === taskId && task.projectId !== projectId)),
     }));
     navigate(project ? { kind: "area", id: project.areaId } : { kind: "today" });
@@ -884,7 +918,11 @@ export default function Home() {
 
   function updateTask(id: string, patch: TaskPatch) {
     setWorkspace((current) => {
-      const tasks = current.tasks.map((task) => task.id === id ? { ...task, ...patch } : task);
+      const tasks = current.tasks.map((task) => {
+        if (task.id !== id) return task;
+        const next = { ...task, ...patch, ...(("dueDate" in patch && !patch.dueDate) ? { dueTime: undefined } : {}) };
+        return isPlannerDeadline(next.dueDate, next.dueTime) ? next : task;
+      });
       const focusTaskIds = normalizeFocusTaskIds(current.focusTaskIds, tasks, current.currentAreaId) ?? [];
       return { ...current, tasks, focusTaskIds };
     });
@@ -1002,6 +1040,7 @@ export default function Home() {
 
         <nav className="primary-nav" aria-label="Workspace">
           <button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length}</small></button>
+          <button className={selection.kind === "planner" ? "active" : ""} onClick={() => navigate({ kind: "planner" })}><span>Planner</span><small>{workspace.planner.areaBlockRules.length}</small></button>
           <button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button>
         </nav>
 
@@ -1038,6 +1077,7 @@ export default function Home() {
         </header>
 
         {selection.kind === "today" && <Today key={workspace.currentAreaId ?? "today"} workspace={workspace} inboxTasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} navigate={navigate} reorderProps={reorderProps} setCurrentArea={setCurrentArea} toggleFocusTask={toggleFocusTask} routineNow={routineNow} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} />}
+        {selection.kind === "planner" && <Planner areas={workspace.areas} projects={workspace.projects} tasks={workspace.tasks} planner={workspace.planner} focusTaskIds={workspace.focusTaskIds} currentAreaId={workspace.currentAreaId} onChange={(planner) => setWorkspace((current) => ({ ...current, planner }))} onTaskChange={(taskId, patch) => updateTask(taskId, patch)} makeId={makeId} renderAreaIcon={(icon) => <AreaIcon icon={icon as AreaIconName} />} onNotice={setToast} onEditorOpenChange={handlePlannerEditorChange} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView key={activeArea.id} area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} routines={workspace.routines.filter((routine) => routine.areaId === activeArea.id)} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} addAreaTask={addAreaTask} addBacklogTask={addBacklogTask} addWaitingTask={addWaitingTask} addRoutine={addRoutine} updateRoutine={updateRoutine} removeRoutine={removeRoutine} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} toggleRoutinePause={toggleRoutinePause} addRoutineVacation={addRoutineVacation} removeRoutineVacation={removeRoutineVacation} routineNow={routineNow} navigate={navigate} toggleTask={toggleTask} updateArea={updateArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} focusSort={taskSortFor(`area:${activeArea.id}`)} setFocusSort={(sort) => setTaskSort(`area:${activeArea.id}`, sort)} backlogSort={taskSortFor(`backlog:${activeArea.id}`)} setBacklogSort={(sort) => setTaskSort(`backlog:${activeArea.id}`, sort)} waitingSort={taskSortFor(`waiting:${activeArea.id}`)} setWaitingSort={(sort) => setTaskSort(`waiting:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} moveTask={moveTask} setDragged={setDragged} navigate={navigate} />}
@@ -1054,6 +1094,10 @@ function LogoMark() {
 
 function MenuIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" /></svg>;
+}
+
+function ClockIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>;
 }
 
 function PlusIcon() {
@@ -1233,7 +1277,7 @@ function ProjectSortControl({ value, onChange }: { value: ProjectSort; onChange:
   return <SortControl value={value} onChange={onChange} options={PROJECT_SORT_OPTIONS} ariaLabel="Sort projects" />;
 }
 
-function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "priority">>) => void }) {
+function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "dueTime" | "priority">>) => void }) {
   const dateInput = useRef<HTMLInputElement>(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const dueDateLabel = task.dueDate ? dueLabel(task.dueDate) : "";
@@ -1253,6 +1297,7 @@ function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string
       </button>
       <input ref={dateInput} className="task-date-input" type="date" tabIndex={-1} value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} />
     </div>
+    {task.dueDate && <label className={`task-time-direct ${task.dueTime ? "active" : ""}`} title={task.dueTime ? `Deadline at ${task.dueTime}` : "Add deadline time"}><span className="sr-only">Deadline time for {task.title}</span><ClockIcon /><input type="time" step="900" min="06:00" max="22:45" value={task.dueTime ?? ""} onChange={(event) => updateTask(task.id, { dueTime: event.target.value || undefined })} aria-label={`Deadline time for ${task.title}`} /></label>}
     <div className={`task-direct-control priority priority-picker ${task.priority ? `active priority-${task.priority}` : "priority-none"}`}>
       <button type="button" className="priority-trigger" onClick={() => setPriorityOpen((open) => !open)} aria-expanded={priorityOpen} aria-haspopup="menu" aria-label={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`} title={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`}><PriorityFlag priority={task.priority} /></button>
       {priorityOpen && <div className="priority-menu" role="menu" aria-label={`Choose priority for ${task.title}`}>{([undefined, "low", "medium", "high"] as Array<TaskPriority | undefined>).map((priority) => {
@@ -1325,7 +1370,7 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
       <TaskDetails task={task} updateTask={updateTask} />
       <button ref={noteButton} type="button" className={`task-direct-control task-note-trigger ${hasNotes ? "has-notes" : ""}`} onClick={() => notesOpen ? closeNotes() : openNotes()} aria-expanded={notesOpen} aria-controls={noteEditorId} aria-label={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`} title={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`}><NoteIcon /></button>
     </div>}
-    {task.dueDate && <p className="task-due-date">{dueDateLabel === "Overdue" ? dueDateLabel : `Due ${dueDateLabel}`}</p>}
+    {task.dueDate && <p className="task-due-date">{dueDateLabel === "Overdue" ? dueDateLabel : `Due ${dueDateLabel}`}{task.dueTime ? ` · ${formatPlannerTime(task.dueTime)}` : ""}</p>}
     {hasNotes && !notesOpen && <p className="task-note-preview">{task.notes?.replace(/\s+/g, " ").trim()}</p>}
     {notesOpen && <div className="task-note-editor" id={noteEditorId}>
       <div className="task-note-editor-heading"><span>Task notes</span><button type="button" onClick={closeNotes}>Close</button></div>

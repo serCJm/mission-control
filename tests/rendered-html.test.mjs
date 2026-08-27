@@ -4,6 +4,7 @@ import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
+import { areaBlockConflict, isPlannerDeadline, materializeAreaBlocks, normalizePlanner, plannerWeekDates, recurringAreaBlockRulesConflict } from "../app/planner-schema.mjs";
 import {
   currentRoutineSession,
   normalizeRoutine,
@@ -236,6 +237,168 @@ test("uses one strict routine contract on the client and server", () => {
   assert.doesNotMatch(page, /focusTaskIds:[^\n]*routine/);
 });
 
+function plannerFixture(overrides = {}) {
+  return {
+    areaBlockRules: [{ id: "trading-am", areaId: "trading", weekdays: [1, 3, 5], effectiveOn: "2026-08-24", startTime: "06:30", endTime: "09:30" }],
+    areaBlockExceptions: [],
+    projectSessions: [],
+    ...overrides,
+  };
+}
+
+test("normalizes the strict planner workspace contract", () => {
+  const planner = plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 30, durationMinutes: 60 }] });
+  assert.deepEqual(normalizePlanner(planner, new Set(["trading"]), new Map([["execution", "trading"]])), planner);
+  assert.equal(normalizePlanner(undefined, new Set(["trading"]), new Map()), null);
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], weekdays: [] }] }), new Set(["trading"]), new Map()), null);
+  assert.equal(normalizePlanner(planner, new Set(["family"]), new Map([["execution", "trading"]])), null);
+  assert.equal(normalizePlanner(planner, new Set(["trading"]), new Map([["execution", "family"]])), null);
+  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-25", startOffsetMinutes: 30, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 150, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockExceptions: [{ id: "skip", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "skip" }], projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 30, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  for (const [startTime, endTime] of [["05:45", "07:00"], ["06:10", "07:00"], ["22:45", "23:15"], ["09:00", "09:15"], ["", "09:00"]]) {
+    assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], startTime, endTime }] }), new Set(["trading"]), new Map()), null);
+  }
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], effectiveOn: "2026-02-30" }] }), new Set(["trading"]), new Map()), null);
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockExceptions: [{ id: "move", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "override", date: "2026-02-30", startTime: "10:00", endTime: "11:00" }] }), new Set(["trading"]), new Map()), null);
+  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 10, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 15, durationMinutes: 50 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+});
+
+test("rejects overlapping planner sessions after grouping and sorting them", () => {
+  const sessions = [
+    { id: "late", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 60, durationMinutes: 60 },
+    { id: "early", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 15, durationMinutes: 60 },
+  ];
+  assert.equal(normalizePlanner(plannerFixture({ projectSessions: sessions }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  assert.deepEqual(normalizePlanner(plannerFixture({ projectSessions: [{ ...sessions[1], durationMinutes: 45 }, sessions[0]] }), new Set(["trading"]), new Map([["execution", "trading"]]))?.projectSessions, [{ ...sessions[1], durationMinutes: 45 }, sessions[0]]);
+});
+
+test("rejects permanently overlapping recurring area rules regardless of effective date", () => {
+  const first = plannerFixture().areaBlockRules[0];
+  const farFuture = { ...first, id: "family-future", areaId: "family", effectiveOn: "2027-01-01", weekdays: [1], startTime: "09:00", endTime: "10:00" };
+  assert.equal(recurringAreaBlockRulesConflict(first, farFuture), true);
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [first, farFuture] }), new Set(["trading", "family"]), new Map()), null);
+  assert.notEqual(normalizePlanner(plannerFixture({ areaBlockRules: [first, { ...farFuture, startTime: "09:30", endTime: "10:30" }] }), new Set(["trading", "family"]), new Map()), null);
+});
+
+test("rejects materialized collisions involving occurrence overrides", () => {
+  const monday = { id: "monday", areaId: "trading", weekdays: [1], effectiveOn: "2026-08-24", startTime: "08:00", endTime: "09:00" };
+  const tuesday = { id: "tuesday", areaId: "family", weekdays: [2], effectiveOn: "2026-08-25", startTime: "09:00", endTime: "10:00" };
+  const laterMonday = { id: "monday-later", areaId: "family", weekdays: [1], effectiveOn: "2026-08-24", startTime: "10:00", endTime: "11:00" };
+  const moveToTuesday = { id: "move-monday", ruleId: monday.id, occurrenceDate: "2026-08-24", kind: "override", date: "2026-08-25", startTime: "09:00", endTime: "10:00" };
+  const retimeMonday = { ...moveToTuesday, date: "2026-08-24", startTime: "10:00", endTime: "11:00" };
+  const overlappingMove = { id: "move-later-monday", ruleId: laterMonday.id, occurrenceDate: "2026-08-24", kind: "override", date: "2026-08-25", startTime: "09:30", endTime: "10:30" };
+  const normalize = (areaBlockRules, areaBlockExceptions) => normalizePlanner(plannerFixture({ areaBlockRules, areaBlockExceptions }), new Set(["trading", "family"]), new Map());
+
+  assert.equal(normalize([monday, tuesday], [moveToTuesday]), null);
+  assert.equal(normalize([monday, laterMonday], [retimeMonday]), null);
+  assert.equal(normalize([monday, laterMonday], [moveToTuesday, overlappingMove]), null);
+  assert.notEqual(normalize([monday, { ...tuesday, startTime: "10:00", endTime: "11:00" }], [moveToTuesday]), null);
+  assert.notEqual(normalize([monday, laterMonday], [moveToTuesday, { ...overlappingMove, startTime: "10:00", endTime: "11:00" }]), null);
+});
+
+test("groups a large valid planner session set without copying groups on insertion", () => {
+  const schema = readFileSync(new URL("../app/planner-schema.mjs", import.meta.url), "utf8");
+  assert.match(schema, /if \(group\) group\.push\(session\)/);
+  assert.doesNotMatch(schema, /sessionsByOccurrence\.set\(key, \[\.\.\./);
+  const rule = { ...plannerFixture().areaBlockRules[0], startTime: "06:00", endTime: "23:00" };
+  const sessions = Array.from({ length: 68 }, (_, index) => ({ id: `session-${index}`, projectId: "execution", ruleId: rule.id, occurrenceDate: "2026-08-26", startOffsetMinutes: index * 15, durationMinutes: 15 }));
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [rule], projectSessions: sessions }), new Set(["trading"]), new Map([["execution", "trading"]]))?.projectSessions.length, 68);
+});
+
+test("requires a valid planner date whenever a task has a deadline time", () => {
+  assert.equal(isPlannerDeadline(undefined, undefined), true);
+  assert.equal(isPlannerDeadline("2026-08-26", "09:15"), true);
+  assert.equal(isPlannerDeadline(undefined, "09:15"), false);
+  assert.equal(isPlannerDeadline("2026-02-30", "09:15"), false);
+  assert.equal(isPlannerDeadline("2026-08-26", "09:10"), false);
+  assert.equal(isPlannerDeadline("2026-08-26", "23:00"), false);
+});
+
+test("materializes weekly area blocks and carries moved exceptions across week boundaries", () => {
+  const currentWeek = plannerWeekDates("2026-08-26");
+  assert.deepEqual(materializeAreaBlocks(plannerFixture(), currentWeek).map((item) => [item.date, item.startTime]), [["2026-08-24", "06:30"], ["2026-08-26", "06:30"], ["2026-08-28", "06:30"]]);
+  const moved = plannerFixture({ areaBlockExceptions: [{ id: "move", ruleId: "trading-am", occurrenceDate: "2026-08-28", kind: "override", date: "2026-09-01", startTime: "10:00", endTime: "11:00" }] });
+  assert.equal(materializeAreaBlocks(moved, currentWeek).some((item) => item.sourceDate === "2026-08-28"), false);
+  assert.deepEqual(materializeAreaBlocks(moved, plannerWeekDates("2026-09-01")).find((item) => item.sourceDate === "2026-08-28"), { id: "trading-am:2026-08-28", ruleId: "trading-am", sourceDate: "2026-08-28", areaId: "trading", date: "2026-09-01", startTime: "10:00", endTime: "11:00", exception: true });
+});
+
+test("does not materialize a skipped area-block occurrence", () => {
+  const skipped = plannerFixture({ areaBlockExceptions: [{ id: "skip", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "skip" }] });
+  assert.deepEqual(materializeAreaBlocks(skipped, plannerWeekDates("2026-08-26")).map((item) => item.sourceDate), ["2026-08-24", "2026-08-28"]);
+});
+
+test("detects collisions between area blocks while allowing adjacent buffer", () => {
+  const occurrences = [
+    { id: "first", date: "2026-08-26", startTime: "09:00", endTime: "10:00" },
+    { id: "second", date: "2026-08-26", startTime: "10:00", endTime: "11:00" },
+  ];
+  assert.equal(areaBlockConflict({ id: "candidate", date: "2026-08-26", startTime: "09:30", endTime: "10:30" }, occurrences), true);
+  assert.equal(areaBlockConflict({ id: "candidate", date: "2026-08-26", startTime: "11:00", endTime: "11:30" }, occurrences), false);
+  assert.equal(areaBlockConflict({ id: "first", date: "2026-08-26", startTime: "09:30", endTime: "10:30" }, occurrences, "first"), true);
+  assert.equal(areaBlockConflict({ id: "first", date: "2026-08-26", startTime: "09:00", endTime: "10:00" }, [occurrences[0]], "first"), false);
+});
+
+test("keeps sessions that fit a retained occurrence override when shortening a series", () => {
+  const rule = { ...plannerFixture().areaBlockRules[0], endTime: "07:30" };
+  const exception = { id: "long-block", ruleId: rule.id, occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-26", startTime: "06:30", endTime: "09:30" };
+  const session = { id: "late-session", projectId: "execution", ruleId: rule.id, occurrenceDate: "2026-08-26", startOffsetMinutes: 120, durationMinutes: 60 };
+  assert.notEqual(normalizePlanner(plannerFixture({ areaBlockRules: [rule], areaBlockExceptions: [exception], projectSessions: [session] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [rule], projectSessions: [session] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
+});
+
+test("closes only after a successful occurrence move leaves the visible week", () => {
+  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+  assert.match(plannerView, /if \(issue\) \{[\s\S]*?setError\(issue\);[\s\S]*?return;[\s\S]*?\}/);
+  assert.match(plannerView, /plannerWeekDates\(date\)\[0\] !== plannerWeekDates\(occurrence\.date\)\[0\]\) onClose\(\)/);
+});
+
+test("changing weeks clears only an open occurrence editor", () => {
+  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+  assert.match(plannerView, /function showWeek\(next: string\) \{[\s\S]*?if \(nextDates\[0\] !== dates\[0\]\) setEditor\(\(current\) => current\?\.kind === "occurrence" \? null : current\);[\s\S]*?setAnchorDate\(next\)/);
+  assert.match(plannerView, /function changeWeek\(distance: number\) \{\s*showWeek\(shiftPlannerDate\(dates\[0\], distance \* 7\)\);\s*\}/);
+  assert.match(plannerView, /className="planner-range" onClick=\{\(\) => showWeek\(today\)\}/);
+});
+
+test("uses one strict planner contract on the client and server", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+  const plannerCss = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+  assert.match(page, /normalizePlanner\(candidate\.planner/);
+  assert.match(route, /normalizePlanner\(candidate\.planner/);
+  assert.match(route, /validDueTime/);
+  assert.match(route, /isPlannerDeadline\(item\.dueDate, item\.dueTime\)/);
+  assert.doesNotMatch(route, /DELETE FROM workspaces/);
+  assert.match(page, /projectSessions: current\.planner\.projectSessions\.filter/);
+  assert.match(plannerView, /isMoving \? "moving"/);
+  assert.match(plannerView, /isResizing \? "resizing"/);
+  assert.match(plannerView, /displayEndTime/);
+  assert.doesNotMatch(plannerView, /isMoving \|\| isResizing \? "dragging"/);
+  assert.match(plannerCss, /planner-area-block\.resizing/);
+  assert.match(plannerView, /className="planner-block-title"/);
+  assert.doesNotMatch(plannerView, /planner-exception-label/);
+  assert.doesNotMatch(plannerView, /className="planner-block-icon"/);
+  assert.match(plannerView, /formatBlockTime\(occurrence\.startTime\)/);
+  assert.match(plannerView, /editProjectSession\(session\)/);
+  assert.match(plannerView, /removeTaskTime\(task\)/);
+  assert.match(plannerView, /Focused automatically/);
+  assert.match(plannerCss, /Scheduled work is actionable from the block/);
+  assert.match(plannerCss, /Compact calendar chrome and broad, readable area fields/);
+  assert.match(plannerView, /className="planner-area-context"/);
+  assert.match(plannerView, /selectedAreaProjects\.slice\(0, 2\)/);
+  assert.match(plannerView, /className="planner-context-backlog"/);
+  assert.match(plannerView, /initialProjectId=\{editor\.projectId\}/);
+  assert.match(plannerView, /initialTaskId=\{editor\.taskId\}/);
+  assert.doesNotMatch(plannerView, /sourceSearch/);
+  assert.match(plannerView, /className="planner-schedule-fields"/);
+  assert.match(plannerView, /normalizePlanner\(candidate/);
+  assert.match(plannerView, /required type="date"/);
+  assert.match(plannerView, /min=\{CALENDAR_START\} max="22:30"/);
+  assert.match(plannerCss, /@media\(min-width:921px\)[\s\S]*?\.planner-layout\{grid-template-columns:minmax\(0,1fr\)/);
+});
+
 test("renders routines above projects and separately from Focus three", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = readFileSync(new URL("../app/routines.css", import.meta.url), "utf8");
@@ -451,12 +614,33 @@ test("provides isolated identity and storage for local development", () => {
 test("recovers from an incompatible saved workspace without a sync dead-end", () => {
   const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(route, /DELETE FROM workspaces WHERE user_id = \?/);
-  assert.match(route, /UPDATE workspaces SET user_id = \? WHERE user_id = \?/);
+  assert.doesNotMatch(route, /DELETE FROM workspaces WHERE user_id = \?/);
+  assert.match(route, /UPDATE workspaces SET user_id = \? WHERE user_id = \? AND updated_at = \? AND data = \?/);
+  assert.match(route, /\.bind\(archiveUserId, user\.userId, row\.updatedAt, row\.data\)/);
+  assert.match(route, /result\.meta\.changes[\s\S]*?continue/);
   assert.match(route, /resetIncompatibleWorkspace: true/);
   assert.match(page, /payload\.resetIncompatibleWorkspace/);
   assert.match(page, /previous cloud workspace was archived/);
   assert.doesNotMatch(route, /The saved workspace is invalid/);
+});
+
+test("keeps cloud refresh from replacing open planner drafts", () => {
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const planner = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+  assert.match(planner, /onEditorOpenChange\(editor !== null\)/);
+  assert.match(page, /onEditorOpenChange=\{handlePlannerEditorChange\}/);
+  assert.equal((page.match(/plannerEditorOpen\.current/g) ?? []).length >= 3, true);
+  assert.match(page, /const hasOpenEditor = \(\) => plannerEditorOpen\.current \|\| openTaskNoteEditors\.current\.size > 0 \|\| openProjectNoteEditors\.current\.size > 0/);
+  assert.match(page, /document\.visibilityState[^\n]*hasOpenEditor\(\)/);
+  assert.match(page, /if \(!active \|\| hasOpenEditor\(\)/);
+  assert.match(page, /if \(wasOpen && !open\) setPlannerRefreshRequest\(\(request\) => request \+ 1\)/);
+  assert.match(page, /if \(plannerRefreshRequest !== handledPlannerRefreshRequest\.current\)[\s\S]*?void refreshFromCloud\(\)/);
+  assert.match(planner, /useEffect\(\(\) => \(\) => onEditorOpenChange\(false\)/);
+});
+
+test("explains when a dropped area cannot fit its default block", () => {
+  const planner = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+  assert.match(planner, /if \(over\.minutes \+ 60 > END_HOUR \* 60\)[\s\S]*?Drop the area earlier so its 60-minute block ends by 11 PM/);
 });
 
 test("persists a dirty task-note draft when its row unmounts without blur", () => {
