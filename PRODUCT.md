@@ -20,17 +20,20 @@ The product treats time as broad area ownership first, then places projects and 
 
 ## Operating Context
 
-- Areas contain one or two active projects and their tasks.
-- Today holds a current area and up to three focused tasks.
-- Weekly review prunes work and chooses the next useful direction.
-- Recurring routines are check-in practices with completion history; calendar area blocks are separate time-ownership structures.
+- Areas are the durable overview for projects, an area backlog, waiting work, and routines.
+- Projects are outcome-oriented subareas for work that needs multiple tasks, with their own backlog, in-progress work, and waiting state.
+- Calendar protects broad area time. Each occurrence has one ordered block queue containing up to three existing tasks or routines; source lists use a single “Add to queue” action.
+- “Now” is derived automatically as the first unfinished item in the active block queue; it is never another queue to maintain.
+- Today is the unified calendar and execution surface: the week stays visible while a contextual workbench selects the current or next block's work.
+- Weekly review prunes area queues and protects enough recurring area time without pre-planning every block.
 - Planning uses the America/Los_Angeles timezone and a Monday-first week.
 
 ## Capabilities and Constraints
 
 - Persistent workspace data syncs through the existing authenticated D1-backed workspace API.
 - Calendar planning uses recurring weekly area blocks with per-occurrence exceptions.
-- Tasks keep a deadline date and may add an exact deadline time; project work sessions reserve time inside matching area blocks.
+- Calendar block selections reference existing task and routine records; completing or waiting an item advances the block without creating duplicates.
+- Tasks may still keep deadline dates and exact times when a real external constraint exists.
 - The interface must remain usable with pointer, touch, and keyboard input.
 - Development and validation run locally through Docker with development data enabled.
 - External calendar integration, collaboration, and production publishing are not part of the current product.
@@ -47,7 +50,7 @@ The repository contains a working authenticated app, persistent example workspac
 
 - Protect broad area blocks instead of over-scheduling every minute.
 - Keep projects directional and tasks concrete.
-- Choose only a few consequential tasks at a time.
+- Choose only one to three consequential items for the block closest to execution.
 - Preserve buffer and make replanning inexpensive.
 - Keep the system simpler to maintain than the work it supports.
 

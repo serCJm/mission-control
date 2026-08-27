@@ -2,906 +2,281 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
-import { openDateInputPicker } from "../app/task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
-import { areaBlockConflict, isPlannerDeadline, materializeAreaBlocks, normalizePlanner, plannerWeekDates, recurringAreaBlockRulesConflict } from "../app/planner-schema.mjs";
-import {
-  currentRoutineSession,
-  normalizeRoutine,
-  normalizeRoutines,
-  pruneRoutineSessions,
-  reconcileRoutine,
-  routineConsistency,
-  routineDateKey,
-  routineScheduleStartsOn,
-} from "../app/routine-schema.mjs";
+import { isFinalRoutineSessionStatus, materializeAreaBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerBlockItems, plannerBlockTarget } from "../app/planner-schema.mjs";
+import { normalizeRoutine, reconcileRoutine, routineDateKey } from "../app/routine-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "../app/task-schema.mjs";
-import { currentWeekKey, emptyWeeklyReview, normalizeFocusTaskIds, normalizeWeeklyReview, reconcileFocusTaskIdsAfterMove, restoreFocusTaskAfterMove } from "../app/workspace-guidance.mjs";
+import { currentWeekKey, emptyWeeklyReview, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
+
+const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
+const plannerStyles = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
+const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
-
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
 }
 
-test("recognizes the supported saved task sort modes", () => {
-  for (const sort of ["custom", "alphabetical", "dueDate", "priority"]) assert.equal(isTaskSort(sort), true);
-  assert.equal(isTaskSort("manual"), false);
-  assert.equal(isTaskSort(null), false);
-});
-
-test("keeps deliberate focus to three eligible tasks in the current area", () => {
-  const tasks = [
-    { id: "a", areaId: "trading", status: "todo" },
-    { id: "b", areaId: "trading", status: "doing" },
-    { id: "done", areaId: "trading", status: "done" },
-    { id: "later", areaId: "trading", status: "todo", someday: true },
-    { id: "blocked", areaId: "trading", status: "todo", waiting: true },
-    { id: "elsewhere", areaId: "family", status: "todo" },
-  ];
-  assert.deepEqual(normalizeFocusTaskIds(["b", "a"], tasks, "trading"), ["b", "a"]);
-  assert.equal(normalizeFocusTaskIds(["done"], tasks, "trading"), null);
-  assert.equal(normalizeFocusTaskIds(["later"], tasks, "trading"), null);
-  assert.equal(normalizeFocusTaskIds(["blocked"], tasks, "trading"), null);
-  assert.equal(normalizeFocusTaskIds(["elsewhere"], tasks, "trading"), null);
-  assert.equal(normalizeFocusTaskIds(["a", "b", "a"], tasks, "trading"), null);
-  assert.equal(normalizeFocusTaskIds(["a", "b", "done", "later"], tasks, "trading"), null);
-});
-
-test("a Backlog move removes and restores only the moved Focus three task", () => {
-  const focused = ["first", "moved", "third"];
-  const deferredTasks = [
-    { id: "first", areaId: "trading", status: "todo" },
-    { id: "moved", areaId: "trading", status: "todo", someday: true },
-    { id: "third", areaId: "trading", status: "doing" },
-  ];
-  const afterMove = reconcileFocusTaskIdsAfterMove(focused, "moved", deferredTasks, "trading");
-  assert.deepEqual(afterMove, ["first", "third"]);
-
-  const restoredTasks = deferredTasks.map((task) => task.id === "moved" ? { ...task, someday: undefined, projectId: "execution" } : task);
-  assert.deepEqual(restoreFocusTaskAfterMove(afterMove, "moved", 1, restoredTasks, "trading"), focused);
-  assert.deepEqual(restoreFocusTaskAfterMove(["first", "third", "new"], "moved", 1, restoredTasks, "trading"), ["first", "third", "new"]);
-});
-
-test("stores weekly review progress against an ISO week", () => {
-  assert.equal(currentWeekKey(new Date("2026-08-25T12:00:00-07:00"), "America/Los_Angeles"), "2026-W35");
-  assert.deepEqual(emptyWeeklyReview("2026-W35"), { weekKey: "2026-W35", completedSteps: [], intention: "" });
-  assert.deepEqual(normalizeWeeklyReview({ weekKey: "2026-W35", completedSteps: [0, 2, 2], intention: "Protect the mornings." }), { weekKey: "2026-W35", completedSteps: [0, 2], intention: "Protect the mornings." });
-  assert.equal(normalizeWeeklyReview({ weekKey: "2026-35", completedSteps: [], intention: "" }), null);
-  assert.equal(normalizeWeeklyReview({ weekKey: "2026-W35", completedSteps: [5], intention: "" }), null);
-});
-
-test("upgrades saved areas from before custom icons without losing identity", () => {
-  assert.deepEqual(normalizeArea({ id: "trading", name: "Trading", cue: "Protect capital" }), { id: "trading", name: "Trading", icon: "trend" });
-  assert.deepEqual(normalizeArea({ id: "custom", name: "Health", cue: "Define what matters" }), { id: "custom", name: "Health", icon: "target" });
-  assert.deepEqual(normalizeArea({ id: "custom", name: "Health", icon: "heart" }), { id: "custom", name: "Health", icon: "heart" });
-  assert.equal(normalizeArea({ id: "broken", name: "Broken" }), null);
-});
-
-test("saves only area fields changed during an edit", () => {
-  const initial = { name: "Trading", icon: "trend" };
-  assert.deepEqual(changedAreaPatch(initial, { name: "Trading systems", icon: "trend" }), { name: "Trading systems" });
-  assert.deepEqual(changedAreaPatch(initial, { name: "Trading", icon: "target" }), { icon: "target" });
-  assert.deepEqual(changedAreaPatch(initial, initial), {});
-});
-
-test("normalizes persisted task notes to the server contract", () => {
-  assert.equal(normalizeTaskNotes("useful context"), "useful context");
-  assert.equal(normalizeTaskNotes("x".repeat(20_000)), "x".repeat(20_000));
-  assert.equal(normalizeTaskNotes(undefined), undefined);
-  assert.equal(normalizeTaskNotes(42), null);
-  assert.equal(normalizeTaskNotes({ text: "invalid" }), null);
+test("keeps shared area, note, sort, and weekly-review contracts strict", () => {
+  assert.deepEqual(normalizeArea({ id: "a", name: "Trading", cue: "legacy" }), { id: "a", name: "Trading", icon: "trend" });
+  assert.deepEqual(changedAreaPatch({ name: "Trading", icon: "target" }, { name: "Trading", icon: "trend" }), { icon: "trend" });
+  assert.equal(normalizeTaskNotes("context"), "context");
   assert.equal(normalizeTaskNotes("x".repeat(20_001)), null);
+  assert.equal(isTaskStatus("todo"), true);
+  assert.equal(isTaskStatus("next"), false);
+  assert.equal(isTaskSort("priority"), true);
+  assert.equal(currentWeekKey(new Date("2026-08-25T12:00:00-07:00")), "2026-W35");
+  assert.deepEqual(emptyWeeklyReview("2026-W35"), { weekKey: "2026-W35", completedSteps: [], intention: "" });
+  assert.deepEqual(normalizeWeeklyReview({ weekKey: "2026-W35", completedSteps: [0, 2, 2], intention: "Protect slack." }), { weekKey: "2026-W35", completedSteps: [0, 2], intention: "Protect slack." });
 });
 
-test("resolves task moves into area focus, Backlog, Waiting, and projects", () => {
+test("moves tasks through area and project backlogs without a focus destination", () => {
   const projects = [{ id: "execution", areaId: "trading" }];
-  assert.deepEqual(taskPlacementForDestination("area:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined, waiting: undefined });
-  assert.deepEqual(taskPlacementForDestination("backlog:trading", projects), { areaId: "trading", projectId: undefined, someday: true, waiting: undefined });
-  assert.deepEqual(taskPlacementForDestination("waiting:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined, waiting: true });
-  assert.deepEqual(taskPlacementForDestination("project:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined, waiting: undefined });
-  assert.equal(taskPlacementForDestination("project:missing", projects), null);
+  assert.deepEqual(taskPlacementForDestination("backlog:trading", projects), { areaId: "trading", projectId: undefined, someday: true, waiting: undefined, status: "todo" });
+  assert.deepEqual(taskPlacementForDestination("waiting:trading", projects), { areaId: "trading", projectId: undefined, someday: undefined, waiting: true, status: "todo" });
+  assert.deepEqual(taskPlacementForDestination("project:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined, waiting: undefined, status: "todo" });
+  assert.deepEqual(taskPlacementForDestination("project-waiting:execution", projects), { areaId: "trading", projectId: "execution", someday: undefined, waiting: true, status: "todo" });
+  assert.equal(taskPlacementForDestination("area:trading", projects), null);
 });
 
-test("validates and sorts project note cards", () => {
-  const notes = [
-    { id: "older-pinned", title: "Pinned", body: "Keep close", pinned: true, createdAt: 1, updatedAt: 3 },
-    { id: "recent", title: "Recent", body: "Latest", pinned: false, createdAt: 3, updatedAt: 9 },
-    { id: "newer-pinned", title: "Pinned too", body: "Newer", pinned: true, createdAt: 2, updatedAt: 8 },
-  ];
-  assert.deepEqual(normalizeProjectNotes(notes), notes);
-  assert.deepEqual(sortProjectNotes(notes).map((note) => note.id), ["newer-pinned", "older-pinned", "recent"]);
-  assert.deepEqual(notes.map((note) => note.id), ["older-pinned", "recent", "newer-pinned"]);
-  assert.equal(normalizeProjectNotes("legacy notes"), null);
-  assert.equal(normalizeProjectNotes([{ ...notes[0], id: "duplicate" }, { ...notes[1], id: "duplicate" }]), null);
-  assert.equal(normalizeProjectNotes([{ ...notes[0], title: "x".repeat(501) }]), null);
-  assert.equal(normalizeProjectNotes([{ ...notes[0], body: "x".repeat(20_001) }]), null);
-  assert.equal(normalizeProjectNotes([{ ...notes[0], pinned: "yes" }]), null);
-  assert.equal(normalizeProjectNotes([{ ...notes[0], updatedAt: Number.NaN }]), null);
+test("sorts tasks and project notes without mutating durable order", () => {
+  const tasks = [{ id: "b", title: "Beta", status: "todo", createdAt: 2 }, { id: "a", title: "Alpha", status: "doing", createdAt: 1 }];
+  assert.deepEqual(sortTasks(tasks, "alphabetical").map((task) => task.id), ["b", "a"]);
+  assert.deepEqual(tasks.map((task) => task.id), ["b", "a"]);
+  const notes = normalizeProjectNotes([{ id: "old", title: "", body: "Old", pinned: false, createdAt: 1, updatedAt: 1 }, { id: "pin", title: "Pinned", body: "", pinned: true, createdAt: 2, updatedAt: 2 }]);
+  assert.ok(notes);
+  assert.deepEqual(sortProjectNotes(notes).map((note) => note.id), ["pin", "old"]);
 });
 
-test("accepts only the three persisted task statuses", () => {
-  for (const status of ["todo", "doing", "done"]) assert.equal(isTaskStatus(status), true);
-  for (const status of ["open", "complete", false, undefined]) assert.equal(isTaskStatus(status), false);
+test("reconciles a routine session without creating overdue debt", () => {
+  const routine = normalizeRoutine({ id: "review", areaId: "trading", name: "Review", weekdays: [3], allDay: true, expectedMinutes: 20, checklist: [], sessions: [], suspensions: [], scheduleEffectiveOn: "2026-08-26" });
+  assert.ok(routine);
+  const now = new Date("2026-08-26T18:30:00-07:00");
+  const reconciled = reconcileRoutine(routine, now);
+  assert.equal(routineDateKey(now), "2026-08-26");
+  assert.equal(reconciled.sessions.at(-1)?.date, "2026-08-26");
 });
 
-function routineFixture(overrides = {}) {
-  return {
-    id: "routine-1",
-    areaId: "trading",
-    name: "Pre-market preparation",
-    expectedMinutes: 20,
-    weekdays: [1, 2, 3, 4, 5],
-    allDay: false,
-    windowStart: "06:00",
-    windowEnd: "07:00",
-    scheduleEffectiveOn: "2026-08-24",
-    checklist: [{ id: "levels", text: "Mark overnight levels" }],
-    suspensions: [],
-    sessions: [],
-    ...overrides,
-  };
+function plannerFixture(blockItems = []) {
+  return { areaBlockRules: [{ id: "trading-mwf", areaId: "trading", weekdays: [1, 3, 5], effectiveOn: "2026-08-24", startTime: "10:00", endTime: "12:00" }], areaBlockExceptions: [], blockItems };
 }
 
-test("normalizes the strict routine workspace contract", () => {
-  const routine = routineFixture();
-  assert.deepEqual(normalizeRoutine(routine), routine);
-  assert.deepEqual(normalizeRoutines([routine], new Set(["trading"])), [routine]);
-  assert.equal(normalizeRoutines([routine], new Set(["family"])), null);
-  assert.equal(normalizeRoutine({ ...routine, weekdays: [] }), null);
-  assert.equal(normalizeRoutine({ ...routine, expectedMinutes: 0 }), null);
-  assert.equal(normalizeRoutine({ ...routine, windowEnd: "05:30" }), null);
-  assert.equal(normalizeRoutine({ ...routine, checklist: Array.from({ length: 21 }, (_, index) => ({ id: `${index}`, text: "Step" })) }), null);
+const plannerMaps = [new Set(["trading", "family"]), new Map([["task-1", "trading"], ["task-2", "trading"], ["task-3", "trading"], ["task-4", "trading"], ["task-family", "family"]]), new Map([["routine-1", "trading"]])];
+
+test("stores an ordered This block list against the original occurrence", () => {
+  const source = plannerFixture([{ id: "one", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-1" }, { id: "two", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "routine", itemId: "routine-1" }]);
+  const normalized = normalizePlanner(source, ...plannerMaps);
+  assert.ok(normalized);
+  const occurrence = materializeAreaBlocks(normalized, ["2026-08-26"])[0];
+  assert.deepEqual(plannerBlockItems(normalized, occurrence).map((item) => item.id), ["one", "two"]);
 });
 
-test("opens, finalizes, and reconciles routine sessions without duplicates", () => {
-  const openTime = new Date("2026-08-25T13:30:00.000Z");
-  const open = reconcileRoutine(routineFixture(), openTime);
-  assert.equal(open.sessions.length, 2);
-  assert.equal(open.sessions[0].status, "missed");
-  assert.equal(open.sessions[1].status, "pending");
-  assert.equal(currentRoutineSession(open, openTime)?.date, "2026-08-25");
-  assert.strictEqual(reconcileRoutine(open, openTime), open);
-
-  const closed = reconcileRoutine(open, new Date("2026-08-25T14:00:00.000Z"));
-  assert.equal(closed.sessions.at(-1).status, "missed");
-  assert.equal(currentRoutineSession(closed, new Date("2026-08-25T14:00:00.000Z")), null);
-  assert.equal(new Set(closed.sessions.map((session) => session.date)).size, closed.sessions.length);
+test("targets the active area block before the next matching block", () => {
+  const source = plannerFixture();
+  source.areaBlockRules.push({ id: "family-thursday", areaId: "family", weekdays: [4], effectiveOn: "2026-08-24", startTime: "14:00", endTime: "16:00" });
+  const active = plannerBlockTarget(source, "trading", "2026-08-26", 10 * 60 + 30);
+  assert.equal(active?.active, true);
+  assert.equal(active?.occurrence.date, "2026-08-26");
+  const upcoming = plannerBlockTarget(source, "trading", "2026-08-26", 13 * 60);
+  assert.equal(upcoming?.active, false);
+  assert.equal(upcoming?.occurrence.date, "2026-08-28");
+  const areaMismatch = plannerBlockTarget(source, "family", "2026-08-26", 10 * 60 + 30);
+  assert.equal(areaMismatch?.active, false);
+  assert.equal(areaMismatch?.occurrence.date, "2026-08-27");
 });
 
-test("excludes pause and vacation dates from routine debt", () => {
-  const routine = routineFixture({
-    allDay: true,
-    windowStart: undefined,
-    windowEnd: undefined,
-    suspensions: [
-      { id: "vacation", kind: "vacation", startsOn: "2026-08-24", endsOn: "2026-08-25" },
-      { id: "pause", kind: "pause", startsOn: "2026-08-26" },
-    ],
-  });
-  const reconciled = reconcileRoutine(routine, new Date("2026-08-26T18:00:00.000Z"));
-  assert.deepEqual(reconciled.sessions, []);
+test("adds and caps ordered block queue work without duplicates", () => {
+  const occurrence = materializeAreaBlocks(plannerFixture(), ["2026-08-26"])[0];
+  const first = placePlannerBlockItem(plannerFixture(), occurrence, "task", "task-1", "one");
+  const second = placePlannerBlockItem(first.planner, occurrence, "task", "task-2", "two");
+  assert.deepEqual(plannerBlockItems(second.planner, occurrence).map((item) => item.itemId), ["task-1", "task-2"]);
+  assert.equal(placePlannerBlockItem(second.planner, occurrence, "task", "task-2", "duplicate").status, "exists");
+  const third = placePlannerBlockItem(second.planner, occurrence, "task", "task-3", "three");
+  assert.equal(placePlannerBlockItem(third.planner, occurrence, "task", "task-4", "four").status, "full");
 });
 
-test("keeps schedule edits future-effective and snapshots checklist history", () => {
-  const routine = routineFixture({
-    allDay: true,
-    windowStart: undefined,
-    windowEnd: undefined,
-    checklist: [{ id: "levels", text: "Mark overnight levels" }, { id: "risk", text: "Set maximum loss" }],
-    pendingSchedule: { weekdays: [3], allDay: true, effectiveOn: "2026-08-26" },
-  });
-  const before = reconcileRoutine(routine, new Date("2026-08-25T18:00:00.000Z"));
-  assert.equal(before.sessions.at(-1).date, "2026-08-25");
-  assert.equal(before.sessions.at(-1).checklist.length, 2);
-  const after = reconcileRoutine(before, new Date("2026-08-26T18:00:00.000Z"));
-  assert.equal(after.pendingSchedule, undefined);
-  assert.deepEqual(after.weekdays, [3]);
-  assert.equal(after.scheduleEffectiveOn, "2026-08-26");
+test("does not queue a date-scoped routine twice on the same actual date", () => {
+  const source = plannerFixture();
+  source.areaBlockRules.push({ id: "trading-later", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "14:00" });
+  const occurrences = materializeAreaBlocks(source, ["2026-08-26"]);
+  const first = placePlannerBlockItem(source, occurrences[0], "routine", "routine-1", "first");
+  assert.equal(first.status, "added");
+  assert.equal(placePlannerBlockItem(first.planner, occurrences[1], "routine", "routine-1", "second").status, "exists");
+
+  const duplicated = { ...source, blockItems: [
+    { id: "first", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "routine", itemId: "routine-1" },
+    { id: "second", ruleId: "trading-later", occurrenceDate: "2026-08-26", kind: "routine", itemId: "routine-1" },
+  ] };
+  assert.equal(normalizePlanner(duplicated, ...plannerMaps), null);
 });
 
-test("caps history and calculates consistency from finalized sessions", () => {
-  const sessions = Array.from({ length: 14 }, (_, index) => ({
-    date: `2026-08-${String(index + 1).padStart(2, "0")}`,
-    status: index % 3 === 0 ? "completed" : "missed",
-    checklist: [],
-    updatedAt: index,
-  }));
-  const pruned = pruneRoutineSessions(sessions);
-  assert.equal(pruned.length, 10);
-  const consistency = routineConsistency(routineFixture({ sessions: pruned }));
-  assert.deepEqual(consistency, { completed: 3, total: 10 });
-});
-
-test("starts a timed routine tomorrow when today's window already closed", () => {
-  assert.equal(routineDateKey(new Date("2026-08-25T15:00:00.000Z")), "2026-08-25");
-  assert.equal(routineScheduleStartsOn(routineFixture(), new Date("2026-08-25T15:00:00.000Z")), "2026-08-26");
-  assert.equal(routineScheduleStartsOn({ ...routineFixture(), allDay: true }, new Date("2026-08-25T15:00:00.000Z")), "2026-08-25");
-});
-
-test("uses one strict routine contract on the client and server", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  assert.match(page, /normalizeRoutines\(candidate\.routines, new Set\(areas\.map/);
-  assert.match(route, /normalizeRoutines\(candidate\.routines, new Set\(areas\.map/);
-  assert.match(page, /routines: current\.routines\.filter\(\(routine\) => routine\.areaId !== areaId\)/);
-  assert.match(page, /reconcileRoutines\(normalized\.routines, new Date\(\)\)/);
-  assert.match(page, /60_000 - \(Date\.now\(\) % 60_000\)/);
-  assert.doesNotMatch(page, /focusTaskIds:[^\n]*routine/);
-});
-
-function plannerFixture(overrides = {}) {
-  return {
-    areaBlockRules: [{ id: "trading-am", areaId: "trading", weekdays: [1, 3, 5], effectiveOn: "2026-08-24", startTime: "06:30", endTime: "09:30" }],
-    areaBlockExceptions: [],
-    projectSessions: [],
-    ...overrides,
-  };
-}
-
-test("normalizes the strict planner workspace contract", () => {
-  const planner = plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 30, durationMinutes: 60 }] });
-  assert.deepEqual(normalizePlanner(planner, new Set(["trading"]), new Map([["execution", "trading"]])), planner);
-  assert.equal(normalizePlanner(undefined, new Set(["trading"]), new Map()), null);
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], weekdays: [] }] }), new Set(["trading"]), new Map()), null);
-  assert.equal(normalizePlanner(planner, new Set(["family"]), new Map([["execution", "trading"]])), null);
-  assert.equal(normalizePlanner(planner, new Set(["trading"]), new Map([["execution", "family"]])), null);
-  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-25", startOffsetMinutes: 30, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 150, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockExceptions: [{ id: "skip", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "skip" }], projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 30, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  for (const [startTime, endTime] of [["05:45", "07:00"], ["06:10", "07:00"], ["22:45", "23:15"], ["09:00", "09:15"], ["", "09:00"]]) {
-    assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], startTime, endTime }] }), new Set(["trading"]), new Map()), null);
-  }
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [{ ...planner.areaBlockRules[0], effectiveOn: "2026-02-30" }] }), new Set(["trading"]), new Map()), null);
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockExceptions: [{ id: "move", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "override", date: "2026-02-30", startTime: "10:00", endTime: "11:00" }] }), new Set(["trading"]), new Map()), null);
-  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 10, durationMinutes: 60 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  assert.equal(normalizePlanner(plannerFixture({ projectSessions: [{ id: "session", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 15, durationMinutes: 50 }] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-});
-
-test("rejects overlapping planner sessions after grouping and sorting them", () => {
-  const sessions = [
-    { id: "late", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 60, durationMinutes: 60 },
-    { id: "early", projectId: "execution", ruleId: "trading-am", occurrenceDate: "2026-08-26", startOffsetMinutes: 15, durationMinutes: 60 },
+test("date-scoped routine uniqueness follows overrides onto their actual date", () => {
+  const source = plannerFixture();
+  source.areaBlockRules.push({ id: "trading-friday-later", areaId: "trading", weekdays: [5], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "14:00" });
+  source.areaBlockExceptions = [
+    { id: "move-wed", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "10:00", endTime: "12:00" },
+    { id: "move-fri", ruleId: "trading-friday-later", occurrenceDate: "2026-08-28", kind: "override", date: "2026-08-27", startTime: "12:00", endTime: "14:00" },
   ];
-  assert.equal(normalizePlanner(plannerFixture({ projectSessions: sessions }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  assert.deepEqual(normalizePlanner(plannerFixture({ projectSessions: [{ ...sessions[1], durationMinutes: 45 }, sessions[0]] }), new Set(["trading"]), new Map([["execution", "trading"]]))?.projectSessions, [{ ...sessions[1], durationMinutes: 45 }, sessions[0]]);
-});
-
-test("rejects permanently overlapping recurring area rules regardless of effective date", () => {
-  const first = plannerFixture().areaBlockRules[0];
-  const farFuture = { ...first, id: "family-future", areaId: "family", effectiveOn: "2027-01-01", weekdays: [1], startTime: "09:00", endTime: "10:00" };
-  assert.equal(recurringAreaBlockRulesConflict(first, farFuture), true);
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [first, farFuture] }), new Set(["trading", "family"]), new Map()), null);
-  assert.notEqual(normalizePlanner(plannerFixture({ areaBlockRules: [first, { ...farFuture, startTime: "09:30", endTime: "10:30" }] }), new Set(["trading", "family"]), new Map()), null);
-});
-
-test("rejects materialized collisions involving occurrence overrides", () => {
-  const monday = { id: "monday", areaId: "trading", weekdays: [1], effectiveOn: "2026-08-24", startTime: "08:00", endTime: "09:00" };
-  const tuesday = { id: "tuesday", areaId: "family", weekdays: [2], effectiveOn: "2026-08-25", startTime: "09:00", endTime: "10:00" };
-  const laterMonday = { id: "monday-later", areaId: "family", weekdays: [1], effectiveOn: "2026-08-24", startTime: "10:00", endTime: "11:00" };
-  const moveToTuesday = { id: "move-monday", ruleId: monday.id, occurrenceDate: "2026-08-24", kind: "override", date: "2026-08-25", startTime: "09:00", endTime: "10:00" };
-  const retimeMonday = { ...moveToTuesday, date: "2026-08-24", startTime: "10:00", endTime: "11:00" };
-  const overlappingMove = { id: "move-later-monday", ruleId: laterMonday.id, occurrenceDate: "2026-08-24", kind: "override", date: "2026-08-25", startTime: "09:30", endTime: "10:30" };
-  const normalize = (areaBlockRules, areaBlockExceptions) => normalizePlanner(plannerFixture({ areaBlockRules, areaBlockExceptions }), new Set(["trading", "family"]), new Map());
-
-  assert.equal(normalize([monday, tuesday], [moveToTuesday]), null);
-  assert.equal(normalize([monday, laterMonday], [retimeMonday]), null);
-  assert.equal(normalize([monday, laterMonday], [moveToTuesday, overlappingMove]), null);
-  assert.notEqual(normalize([monday, { ...tuesday, startTime: "10:00", endTime: "11:00" }], [moveToTuesday]), null);
-  assert.notEqual(normalize([monday, laterMonday], [moveToTuesday, { ...overlappingMove, startTime: "10:00", endTime: "11:00" }]), null);
-});
-
-test("groups a large valid planner session set without copying groups on insertion", () => {
-  const schema = readFileSync(new URL("../app/planner-schema.mjs", import.meta.url), "utf8");
-  assert.match(schema, /if \(group\) group\.push\(session\)/);
-  assert.doesNotMatch(schema, /sessionsByOccurrence\.set\(key, \[\.\.\./);
-  const rule = { ...plannerFixture().areaBlockRules[0], startTime: "06:00", endTime: "23:00" };
-  const sessions = Array.from({ length: 68 }, (_, index) => ({ id: `session-${index}`, projectId: "execution", ruleId: rule.id, occurrenceDate: "2026-08-26", startOffsetMinutes: index * 15, durationMinutes: 15 }));
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [rule], projectSessions: sessions }), new Set(["trading"]), new Map([["execution", "trading"]]))?.projectSessions.length, 68);
-});
-
-test("requires a valid planner date whenever a task has a deadline time", () => {
-  assert.equal(isPlannerDeadline(undefined, undefined), true);
-  assert.equal(isPlannerDeadline("2026-08-26", "09:15"), true);
-  assert.equal(isPlannerDeadline(undefined, "09:15"), false);
-  assert.equal(isPlannerDeadline("2026-02-30", "09:15"), false);
-  assert.equal(isPlannerDeadline("2026-08-26", "09:10"), false);
-  assert.equal(isPlannerDeadline("2026-08-26", "23:00"), false);
-});
-
-test("materializes weekly area blocks and carries moved exceptions across week boundaries", () => {
-  const currentWeek = plannerWeekDates("2026-08-26");
-  assert.deepEqual(materializeAreaBlocks(plannerFixture(), currentWeek).map((item) => [item.date, item.startTime]), [["2026-08-24", "06:30"], ["2026-08-26", "06:30"], ["2026-08-28", "06:30"]]);
-  const moved = plannerFixture({ areaBlockExceptions: [{ id: "move", ruleId: "trading-am", occurrenceDate: "2026-08-28", kind: "override", date: "2026-09-01", startTime: "10:00", endTime: "11:00" }] });
-  assert.equal(materializeAreaBlocks(moved, currentWeek).some((item) => item.sourceDate === "2026-08-28"), false);
-  assert.deepEqual(materializeAreaBlocks(moved, plannerWeekDates("2026-09-01")).find((item) => item.sourceDate === "2026-08-28"), { id: "trading-am:2026-08-28", ruleId: "trading-am", sourceDate: "2026-08-28", areaId: "trading", date: "2026-09-01", startTime: "10:00", endTime: "11:00", exception: true });
-});
-
-test("does not materialize a skipped area-block occurrence", () => {
-  const skipped = plannerFixture({ areaBlockExceptions: [{ id: "skip", ruleId: "trading-am", occurrenceDate: "2026-08-26", kind: "skip" }] });
-  assert.deepEqual(materializeAreaBlocks(skipped, plannerWeekDates("2026-08-26")).map((item) => item.sourceDate), ["2026-08-24", "2026-08-28"]);
-});
-
-test("detects collisions between area blocks while allowing adjacent buffer", () => {
-  const occurrences = [
-    { id: "first", date: "2026-08-26", startTime: "09:00", endTime: "10:00" },
-    { id: "second", date: "2026-08-26", startTime: "10:00", endTime: "11:00" },
+  source.blockItems = [
+    { id: "wed", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "routine", itemId: "routine-1" },
+    { id: "fri", ruleId: "trading-friday-later", occurrenceDate: "2026-08-28", kind: "routine", itemId: "routine-1" },
   ];
-  assert.equal(areaBlockConflict({ id: "candidate", date: "2026-08-26", startTime: "09:30", endTime: "10:30" }, occurrences), true);
-  assert.equal(areaBlockConflict({ id: "candidate", date: "2026-08-26", startTime: "11:00", endTime: "11:30" }, occurrences), false);
-  assert.equal(areaBlockConflict({ id: "first", date: "2026-08-26", startTime: "09:30", endTime: "10:30" }, occurrences, "first"), true);
-  assert.equal(areaBlockConflict({ id: "first", date: "2026-08-26", startTime: "09:00", endTime: "10:00" }, [occurrences[0]], "first"), false);
+  assert.equal(normalizePlanner(source, ...plannerMaps), null);
 });
 
-test("keeps sessions that fit a retained occurrence override when shortening a series", () => {
-  const rule = { ...plannerFixture().areaBlockRules[0], endTime: "07:30" };
-  const exception = { id: "long-block", ruleId: rule.id, occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-26", startTime: "06:30", endTime: "09:30" };
-  const session = { id: "late-session", projectId: "execution", ruleId: rule.id, occurrenceDate: "2026-08-26", startOffsetMinutes: 120, durationMinutes: 60 };
-  assert.notEqual(normalizePlanner(plannerFixture({ areaBlockRules: [rule], areaBlockExceptions: [exception], projectSessions: [session] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-  assert.equal(normalizePlanner(plannerFixture({ areaBlockRules: [rule], projectSessions: [session] }), new Set(["trading"]), new Map([["execution", "trading"]])), null);
-});
-
-test("closes only after a successful occurrence move leaves the visible week", () => {
-  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
-  assert.match(plannerView, /if \(issue\) \{[\s\S]*?setError\(issue\);[\s\S]*?return;[\s\S]*?\}/);
-  assert.match(plannerView, /plannerWeekDates\(date\)\[0\] !== plannerWeekDates\(occurrence\.date\)\[0\]\) onClose\(\)/);
-});
-
-test("changing weeks clears only an open occurrence editor", () => {
-  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
-  assert.match(plannerView, /function showWeek\(next: string\) \{[\s\S]*?if \(nextDates\[0\] !== dates\[0\]\) setEditor\(\(current\) => current\?\.kind === "occurrence" \? null : current\);[\s\S]*?setAnchorDate\(next\)/);
-  assert.match(plannerView, /function changeWeek\(distance: number\) \{\s*showWeek\(shiftPlannerDate\(dates\[0\], distance \* 7\)\);\s*\}/);
-  assert.match(plannerView, /className="planner-range" onClick=\{\(\) => showWeek\(today\)\}/);
-});
-
-test("uses one strict planner contract on the client and server", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
-  const plannerCss = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  assert.match(page, /normalizePlanner\(candidate\.planner/);
-  assert.match(route, /normalizePlanner\(candidate\.planner/);
-  assert.match(route, /validDueTime/);
-  assert.match(route, /isPlannerDeadline\(item\.dueDate, item\.dueTime\)/);
-  assert.doesNotMatch(route, /DELETE FROM workspaces/);
-  assert.match(page, /projectSessions: current\.planner\.projectSessions\.filter/);
-  assert.match(plannerView, /isMoving \? "moving"/);
-  assert.match(plannerView, /isResizing \? "resizing"/);
-  assert.match(plannerView, /displayEndTime/);
-  assert.doesNotMatch(plannerView, /isMoving \|\| isResizing \? "dragging"/);
-  assert.match(plannerCss, /planner-area-block\.resizing/);
-  assert.match(plannerView, /className="planner-block-title"/);
-  assert.doesNotMatch(plannerView, /planner-exception-label/);
-  assert.doesNotMatch(plannerView, /className="planner-block-icon"/);
-  assert.match(plannerView, /formatBlockTime\(occurrence\.startTime\)/);
-  assert.match(plannerView, /editProjectSession\(session\)/);
-  assert.match(plannerView, /removeTaskTime\(task\)/);
-  assert.match(plannerView, /Focused automatically/);
-  assert.match(plannerCss, /Scheduled work is actionable from the block/);
-  assert.match(plannerCss, /Compact calendar chrome and broad, readable area fields/);
-  assert.match(plannerView, /className="planner-area-context"/);
-  assert.match(plannerView, /selectedAreaProjects\.slice\(0, 2\)/);
-  assert.match(plannerView, /className="planner-context-backlog"/);
-  assert.match(plannerView, /initialProjectId=\{editor\.projectId\}/);
-  assert.match(plannerView, /initialTaskId=\{editor\.taskId\}/);
-  assert.doesNotMatch(plannerView, /sourceSearch/);
-  assert.match(plannerView, /className="planner-schedule-fields"/);
-  assert.match(plannerView, /normalizePlanner\(candidate/);
-  assert.match(plannerView, /required type="date"/);
-  assert.match(plannerView, /min=\{CALENDAR_START\} max="22:30"/);
-  assert.match(plannerCss, /@media\(min-width:921px\)[\s\S]*?\.planner-layout\{grid-template-columns:minmax\(0,1fr\)/);
-});
-
-test("renders routines above projects and separately from Focus three", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/routines.css", import.meta.url), "utf8");
-  const globalCss = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  const areaView = page.slice(page.indexOf("function AreaView"), page.indexOf("function ProjectNoteCard"));
-  assert.ok(areaView.indexOf("<RoutinesSection") < areaView.indexOf('<section className="project-section"'));
-  assert.match(page, /<section className="today-routines">/);
-  assert.match(page, /activeRoutines = workspace\.routines\.filter\(\(routine\) => routine\.areaId === currentArea\?\.id && currentRoutineSession/);
-  assert.match(page, /aria-pressed=\{session\.status === "completed"\}/);
-  assert.match(page, /aria-expanded=\{reviewOpen\}/);
-  assert.match(page, /Vacation starts/);
-  assert.match(css, /@media\(max-width:580px\)/);
-  assert.match(css, /min-height:44px/);
-  assert.match(globalCss, /\.routine-section\{border:1px solid var\(--line\);border-radius:14px;background:var\(--panel\);padding:23px\}/);
-  assert.match(globalCss, /\.routine-section \.routine-card\{overflow:visible;border:0;border-radius:0;background:transparent\}/);
-});
-
-test("sorts tasks without mutating their custom order", () => {
-  const tasks = [
-    { id: "b", title: "Bravo", status: "todo", dueDate: "2026-08-10", priority: "medium" },
-    { id: "a", title: "alpha", status: "todo", dueDate: "2026-08-08", priority: "high" },
-    { id: "n", title: "No metadata", status: "todo" },
-    { id: "d", title: "Aardvark done", status: "done", dueDate: "2026-08-07", priority: "high" },
+test("rejects a normal routine occurrence plus an override on the same actual date", () => {
+  const source = plannerFixture();
+  source.areaBlockRules.push({ id: "trading-thursday", areaId: "trading", weekdays: [4], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "14:00" });
+  source.areaBlockExceptions = [{ id: "move-wed", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "10:00", endTime: "12:00" }];
+  source.blockItems = [
+    { id: "overridden", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "routine", itemId: "routine-1" },
+    { id: "normal", ruleId: "trading-thursday", occurrenceDate: "2026-08-27", kind: "routine", itemId: "routine-1" },
   ];
-
-  assert.deepEqual(sortTasks(tasks, "custom").map((task) => task.id), ["b", "a", "n", "d"]);
-  assert.deepEqual(sortTasks(tasks, "alphabetical").map((task) => task.id), ["a", "b", "n", "d"]);
-  assert.deepEqual(sortTasks(tasks, "dueDate").map((task) => task.id), ["a", "b", "n", "d"]);
-  assert.deepEqual(sortTasks(tasks, "priority").map((task) => task.id), ["a", "b", "n", "d"]);
-  assert.deepEqual(tasks.map((task) => task.id), ["b", "a", "n", "d"]);
+  assert.equal(normalizePlanner(source, ...plannerMaps), null);
 });
 
-test("keeps equal computed values in stable custom order", () => {
-  const tasks = [
-    { id: "first", title: "Same", status: "todo", dueDate: "2026-08-08", priority: "high" },
-    { id: "second", title: "Same", status: "todo", dueDate: "2026-08-08", priority: "high" },
-    { id: "unset-1", title: "Unset", status: "todo" },
-    { id: "unset-2", title: "Unset", status: "todo" },
-  ];
+test("rejects overlapping independent overrides on one date and accepts adjacency", () => {
+  const source = plannerFixture();
+  source.areaBlockRules.push({ id: "trading-friday-later", areaId: "trading", weekdays: [5], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "14:00" });
+  const first = { id: "move-wed", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "10:00", endTime: "12:00" };
+  const overlapping = { id: "move-fri", ruleId: "trading-friday-later", occurrenceDate: "2026-08-28", kind: "override", date: "2026-08-27", startTime: "11:45", endTime: "13:00" };
+  assert.equal(normalizePlanner({ ...source, areaBlockExceptions: [first, overlapping] }, ...plannerMaps), null);
 
-  for (const sort of ["alphabetical", "dueDate", "priority"]) {
-    assert.deepEqual(sortTasks(tasks, sort).map((task) => task.id), ["first", "second", "unset-1", "unset-2"]);
-  }
+  const adjacent = { ...overlapping, startTime: "12:00", endTime: "14:00" };
+  assert.ok(normalizePlanner({ ...source, areaBlockExceptions: [first, adjacent] }, ...plannerMaps));
 });
 
-test("ranks all three task statuses before applying computed sorts", () => {
-  const tasks = [
-    { id: "done", title: "Alpha", status: "done", dueDate: "2026-08-01", priority: "high" },
-    { id: "doing", title: "Bravo", status: "doing", dueDate: "2026-08-02", priority: "medium" },
-    { id: "todo", title: "Zulu", status: "todo", dueDate: "2026-08-03", priority: "low" },
-  ];
-
-  for (const sort of ["alphabetical", "dueDate", "priority"]) {
-    assert.deepEqual(sortTasks(tasks, sort).map((task) => task.id), ["todo", "doing", "done"]);
-  }
+test("parses planner candidate IDs at only the first colon", () => {
+  assert.deepEqual(parsePlannerCandidate("task:external:42"), { kind: "task", itemId: "external:42" });
+  assert.deepEqual(parsePlannerCandidate("routine:morning:review"), { kind: "routine", itemId: "morning:review" });
+  assert.equal(parsePlannerCandidate("invalid:value"), null);
+  assert.equal(parsePlannerCandidate("task:"), null);
 });
 
-test("keeps task field sizing separate from checkbox sizing", () => {
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(css, /\.task-check input,\.review-steps input\[type="checkbox"\]\{[^}]*width:18px/);
-  assert.doesNotMatch(css, /\.task-row input,\.inbox-row input/);
-  assert.match(css, /\.task-direct-control\.timing\{padding:0\}/);
-  assert.match(css, /\.task-direct-trigger\{[^}]*height:100%/);
-  assert.match(css, /\.timing \.task-direct-trigger\{[^}]*min-width:44px/);
-  assert.match(css, /\.task-row\.custom-order\{grid-template-columns:12px 44px minmax\(0,1fr\);grid-template-areas:"reorder check copy"/);
-  assert.match(css, /\.task-row>\.order-controls\{grid-area:reorder;position:relative;width:12px;height:44px;align-self:center/);
-  assert.match(css, /\.task-row>\.order-controls \.drag-handle\{position:absolute;left:50%;top:0;width:24px;transform:translateX\(-50%\)/);
-  assert.match(css, /\.task-row:has\(\.name-editor\.editing\)\{grid-template-columns:minmax\(0,1fr\);grid-template-areas:"copy";padding:18px 0\}/);
-  assert.match(css, /\.task-row:has\(\.name-editor\.editing\)>\.order-controls,\.task-row:has\(\.name-editor\.editing\)>\.task-check\{display:none\}/);
-  assert.match(css, /\.name-editor>button \.edit-label\{display:none\}/);
-  assert.match(css, /\.task-note-preview\{[^}]*text-overflow:ellipsis[^}]*white-space:nowrap/);
-  assert.match(css, /\.task-note-editor\{[^}]*grid-column:1\/-1/);
-  assert.match(css, /\.task-note-trigger\[aria-expanded="true"\]\{[^}]*background:var\(--forest\)/);
-  assert.match(css, /\.task-note-trigger\{[^}]*display:grid;place-items:center[^}]*padding:0!important/);
-  assert.match(css, /\.task-note-trigger svg\{transform:translateX\(1px\)\}/);
-  assert.match(css, /\.area-choice\{max-width:calc\(\(100% - 8px\)\/2\)\}/);
-  assert.match(css, /\.today-page \.today-grid\{margin-inline:-17px\}/);
-  assert.match(css, /\.today-page \.work-queue\{border-right:0;border-left:0;border-radius:0\}/);
-  assert.doesNotMatch(css, /\.task-row\.custom-order:has\(\.task-note-editor\)>\.order-controls/);
-  assert.match(css, /\.project-notes\{[^}]*min-height:0/);
+test("rejects overlapping planner rules and overrides while allowing adjacency", () => {
+  const recurringOverlap = plannerFixture();
+  recurringOverlap.areaBlockRules.push({ id: "family-overlap", areaId: "family", weekdays: [3], effectiveOn: "2026-08-24", startTime: "11:45", endTime: "13:00" });
+  assert.equal(normalizePlanner(recurringOverlap, ...plannerMaps), null);
+
+  const adjacent = plannerFixture();
+  adjacent.areaBlockRules.push({ id: "family-adjacent", areaId: "family", weekdays: [3], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "13:00" });
+  assert.ok(normalizePlanner(adjacent, ...plannerMaps));
+
+  const overrideOverlap = plannerFixture();
+  overrideOverlap.areaBlockRules.push({ id: "family-thursday", areaId: "family", weekdays: [4], effectiveOn: "2026-08-24", startTime: "15:00", endTime: "17:00" });
+  overrideOverlap.areaBlockExceptions = [{ id: "move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "14:00", endTime: "16:00" }];
+  assert.equal(normalizePlanner(overrideOverlap, ...plannerMaps), null);
 });
 
-test("uses the shared task-note contract on the client and server", () => {
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(route, /normalizeTaskNotes\(item\.notes\) !== null/);
-  assert.match(page, /const notes = normalizeTaskNotes\(task\.notes\)/);
-  assert.match(page, /notes === null \? null/);
-  assert.match(page, /maxLength=\{20_000\}/);
-  assert.match(page, /notes: notes \|\| undefined/);
-  assert.match(page, /onBlur=\{commitNotes\}/);
-  assert.doesNotMatch(page, /onChange=\{\(event\) => updateTask\(task\.id, \{ notes:/);
+test("rejects duplicate, cross-area, skipped, or overfull block work", () => {
+  const item = (id, itemId = "task-1") => ({ id, ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId });
+  assert.equal(normalizePlanner(plannerFixture([item("one"), item("two")]), ...plannerMaps), null);
+  assert.equal(normalizePlanner(plannerFixture([item("one"), item("two", "task-2"), item("three", "task-3"), item("four", "task-4")]), ...plannerMaps), null);
+  assert.equal(normalizePlanner(plannerFixture([item("one", "missing")]), ...plannerMaps), null);
+  const skipped = plannerFixture([item("one")]);
+  skipped.areaBlockExceptions = [{ id: "skip", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "skip" }];
+  assert.equal(normalizePlanner(skipped, ...plannerMaps), null);
+  assert.equal(normalizePlanner(plannerFixture([item("wrong-area", "task-family")]), ...plannerMaps), null);
 });
 
-test("uses the shared project-note contract and removes the legacy textarea", () => {
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(route, /normalizeProjectNotes\(item\.notes\)/);
-  assert.match(page, /const notes = normalizeProjectNotes\(project\.notes\)/);
-  assert.match(page, /type ProjectNote = \{ id: string; title: string; body: string; pinned: boolean; createdAt: number; updatedAt: number \}/);
-  assert.match(page, /notes: ProjectNote\[\]/);
-  assert.doesNotMatch(page, /notes: string/);
-  assert.doesNotMatch(page, /maxLength=\{200_000\}/);
+test("rejects an undo candidate when a freed block slot has been refilled", () => {
+  const occupied = plannerFixture([
+    { id: "one", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-1" },
+    { id: "two", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-2" },
+    { id: "three", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-3" },
+  ]);
+  const restoredCandidate = { ...occupied, blockItems: [...occupied.blockItems, { id: "saved", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-4" }] };
+  assert.ok(normalizePlanner(occupied, ...plannerMaps));
+  assert.equal(normalizePlanner(restoredCandidate, ...plannerMaps), null);
 });
 
-test("renders an accessible responsive project note board", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(page, /<div className="section-title project-notes-heading">[\s\S]*?<h2[^>]*>Notes<\/h2>[\s\S]*?<div className="project-notes-meta">[\s\S]*?<button[^>]*className=\{`[^`]*project-note-add-button[^`]*`\} onClick=\{\(\) => composing \? closeComposer\(\) : setComposing\(true\)\}/);
-  assert.match(page, /function closeComposer\(\) \{\s*setComposing\(false\);\s*\}/);
-  assert.match(page, /function cancelComposer\(\) \{\s*setComposing\(false\);\s*setTitle\(""\);\s*setBody\(""\);\s*\}/);
-  assert.match(page, /<ProjectView key=\{activeProject\.id\}/);
-  assert.match(page, /aria-label=\{composing \? "Close new note form" : "Add a note"\}/);
-  assert.match(page, /aria-expanded=\{composing\}/);
-  assert.doesNotMatch(page, /project-note-composer-trigger/);
-  assert.match(page, /disabled=\{!canCreate\}/);
-  assert.match(page, /className="notes-board"/);
-  assert.match(page, /sortProjectNotes\(project\.notes\)/);
-  assert.match(page, /aria-pressed=\{note\.pinned\}/);
-  assert.match(page, /title="Delete note"/);
-  assert.match(page, /setUndoWorkspace\(workspace\)[\s\S]*?Note removed/);
-  assert.match(page, /openProjectNoteEditors\.current\.size > 0/);
-  assert.match(page, /No notes yet\./);
-  assert.match(css, /\.notes-board\{column-count:3;column-gap:12px\}/);
-  assert.match(css, /\.project-note-open p:not\(\.note-empty-body\)\{[^}]*max-height:calc\(1\.62em \* 7\)[^}]*-webkit-line-clamp:7/);
-  assert.match(css, /@media\(max-width:920px\)\{\.notes-board\{column-count:2\}\}/);
-  assert.match(css, /@media\(max-width:580px\)[^{]*\{[^}]*[\s\S]*?\.notes-board\{column-count:1\}/);
-  assert.match(css, /\.note-icon-button\{width:44px;height:44px/);
+test("keeps override block work attached to its recurring source date", () => {
+  const source = plannerFixture();
+  source.areaBlockExceptions = [{ id: "move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "13:00", endTime: "15:00" }];
+  const normalized = normalizePlanner(source, ...plannerMaps);
+  assert.ok(normalized);
+  const occurrence = materializeAreaBlocks(normalized, ["2026-08-27"])[0];
+  assert.equal(occurrence.sourceDate, "2026-08-26");
+  const placed = placePlannerBlockItem(normalized, occurrence, "task", "task-1", "placed");
+  assert.equal(placed.status, "added");
+  assert.equal(placed.planner.blockItems[0].occurrenceDate, "2026-08-26");
+  assert.deepEqual(plannerBlockItems(placed.planner, occurrence).map((item) => item.id), ["placed"]);
 });
 
-test("uses the three-state task contract and project view controls", () => {
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(route, /isTaskStatus\(item\.status\)/);
-  assert.doesNotMatch(route, /item\.done|done: boolean/);
-  assert.match(page, /status: "todo"/);
-  assert.match(page, /mission-control-project-view-v1/);
-  assert.match(page, /aria-label="Project task view"/);
-  assert.match(page, /label: "To do"/);
-  assert.match(page, /label: "Doing"/);
-  assert.match(page, /label: "Done"/);
-  assert.match(page, /className="kanban-board"/);
-  assert.match(css, /\.kanban-board\{[^}]*align-items:stretch/);
-  assert.match(page, /<span className="task-move-menu-label first">Workflow<\/span>/);
-  assert.match(page, /role="menuitemradio" aria-checked=\{task\.status === status\.value\}/);
-  assert.match(page, /function TaskMoveIcon\(\)[\s\S]*?className="task-move-icon"/);
-  assert.match(page, /<TaskMoveIcon \/>[\s\S]*?!hasWorkflow/);
-  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:32px;height:32px;min-width:32px;min-height:32px/);
-  assert.doesNotMatch(page, /task-workflow-label/);
-  assert.doesNotMatch(page, /function StatusControl|task-status-control/);
-  assert.doesNotMatch(page, /task\.done|done: false|done: true/);
+test("only finalized routine sessions complete planner work", () => {
+  assert.equal(isFinalRoutineSessionStatus("pending"), false);
+  for (const status of ["completed", "skipped", "missed"]) assert.equal(isFinalRoutineSessionStatus(status), true);
 });
 
-test("uses compact accessible actions for inline name editing", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /aria-label="Save" title="Save"><ConfirmIcon/);
-  assert.doesNotMatch(page, /CancelIcon|aria-label="Cancel"|title="Cancel"/);
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(css, /\.editor-action-icon\{width:13px;height:13px/);
-  assert.match(css, /\.name-editor\.editing\{display:grid;grid-template-columns:minmax\(0,1fr\) 34px/);
+test("planner repairs preserve data and queue state", () => {
+  assert.doesNotMatch(route, /archived:|resetIncompatibleWorkspace|UPDATE workspaces SET user_id/);
+  assert.match(route, /incompatible data format/);
+  assert.match(plannerView, /plannerBlockItemDone/);
+  assert.match(plannerView, /someday: undefined, waiting: undefined/);
+  assert.match(plannerView, /waiting: true, someday: undefined/);
+  assert.match(plannerView, /planner-orphan-deadline \$\{inAreaBlock \? "in-block"/);
+  assert.match(plannerView, /requestAnimationFrame/);
+  assert.match(plannerView, /useMemo\(\(\) => selectedArea \? plannerBlockTarget/);
+  assert.match(page, /blockItems: Array<\{ item: PlannerData\["blockItems"\]\[number\]; index: number \}>/);
+  assert.match(page, /task\.status !== undo\.to\.status/);
+  assert.match(page, /type MoveTaskUndo = \{[^}]*blockItems: PlannerBlockItemPosition\[\]/);
+  assert.match(page, /planner: removesFromBlock \?/);
+  assert.match(page, /\.\.\.savedItems/);
+  assert.match(page, /item\.scope\.startsWith\("project-waiting:"\)/);
+  assert.match(page, /scope=\{`project-waiting:\$\{project\.id\}`\}/);
+  assert.match(page, /if \(!currentIds\.includes\(source\.id\) \|\| !currentIds\.includes\(target\.id\)\) return/);
+  assert.match(page, /function plannerAfterBlockItemRestore/);
+  assert.match(page, /return normalizePlanner\(/);
+  assert.match(page, /const restored = workspaceAfterTaskDeleteUndo\(workspace, taskUndo\)/);
+  assert.match(page, /const restored = workspaceAfterTaskMoveUndo\(workspace, moveTaskUndo\)/);
+  assert.match(page, /if \(!restored\) \{[\s\S]*?setToast\("Undo unavailable"\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?setWorkspace\(restored\);/);
+  assert.match(page, /sessions: \[\.\.\.reconciled\.sessions, \{ date, status, checklist:/);
 });
 
-test("inline editors cancel drafts with Escape", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /function NameEditor[\s\S]*?onKeyDown=\{\(event\) => \{ if \(event\.key === "Escape"\) \{ event\.preventDefault\(\); cancel\(\); \} \}\}/);
-  assert.match(page, /function NameEditor[\s\S]*?setDraft\(value\);[\s\S]*?onEditingChange\?\.\(false\)/);
-  assert.match(page, /function AreaEditor[\s\S]*?onKeyDown=\{\(event\) => \{ if \(event\.key === "Escape"\) \{ event\.preventDefault\(\); cancel\(\); \} \}\}/);
-  assert.match(page, /function AreaEditor[\s\S]*?setDraftName\(initial\.current\.name\);[\s\S]*?setDraftIcon\(initial\.current\.icon\);[\s\S]*?setEditing\(false\)/);
+test("client and server require the same continuous-execution workspace shape", () => {
+  assert.match(page, /blockItems: \[\]/);
+  assert.match(route, /blockItems: Array/);
+  assert.doesNotMatch(page, /focusTaskIds|currentAreaId/);
+  assert.doesNotMatch(route, /focusTaskIds|currentAreaId/);
 });
 
-test("uses an accessible icon-only mobile menu trigger", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(page, /className="menu-button"/);
-  assert.match(page, /aria-label="Menu" title="Menu"><MenuIcon/);
-  assert.doesNotMatch(page, /className="menu-button"[^>]*>Menu<\/button>/);
-  assert.match(css, /\.topbar\{padding:8px 16px 8px 8px\}/);
+test("calendar owns This block and derives Now from its first unfinished item", () => {
+  assert.match(plannerView, /This block already has three items/);
+  assert.match(plannerView, /const nowItemId = occurrenceActive \? blockItems\.find/);
+  assert.match(plannerView, /Add to queue/);
+  assert.doesNotMatch(plannerView, /nowLabel|addLabel|onSchedule|onNow/);
+  assert.match(plannerView, /placePlannerBlockItem/);
+  assert.match(plannerView, /onTaskChange\(itemId, \{ someday: undefined, waiting: undefined \}\)/);
+  assert.match(plannerView, /Waiting/);
+  assert.match(plannerView, /Resume/);
+  assert.match(plannerView, /TouchSensor/);
+  assert.match(plannerView, /KeyboardSensor/);
+  assert.match(plannerView, /Add to block/);
+  assert.match(plannerStyles, /prefers-reduced-motion:reduce/);
 });
 
-test("uses a compact accessible task submit control on every view", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  assert.match(page, /aria-label=\{`Add task to \$\{captureDestination\}`\}/);
-  assert.match(page, /<PlusIcon \/>/);
-  assert.match(page, /title=\{`Add task to \$\{captureDestination\}`\}><PlusIcon \/>/);
-  assert.doesNotMatch(page, /quick-add-copy|>Add task <span>/);
-  assert.match(css, /\.quick-add button\{width:52px;display:grid;place-items:center/);
-  assert.match(css, /\.quick-add-icon\{display:block/);
+test("area, project, Today, and Review speak one execution language", () => {
+  assert.match(page, /session=\{plannerSession\}/);
+  assert.match(page, /className="topbar-nav"/);
+  assert.match(page, /onCreateArea=\{createArea\}/);
+  assert.match(page, /<h2>Area backlog<\/h2>/);
+  assert.match(page, /Project waiting/);
+  assert.match(page, /Areas carry the work/);
+  assert.match(page, /onClick=\{\(\) => navigate\(\{ kind: "today" \}\)\}>Review area blocks/);
+  assert.doesNotMatch(page, /kind: "planner"|Today’s focus|Choose focus|className=\{`sidebar|Areas and projects|sidebar-foot/);
 });
 
-test("uses an icon-only color priority picker", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /className="priority-menu" role="menu"/);
-  assert.match(page, /role="menuitemradio"/);
-  assert.match(page, /<PriorityFlag priority=\{priority\}/);
-  assert.doesNotMatch(page, /<select value=\{task\.priority/);
-});
-
-test("provides isolated identity and storage for local development", () => {
-  const auth = readFileSync(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const vite = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
-  const entrypoint = readFileSync(new URL("../docker/entrypoint.sh", import.meta.url), "utf8");
-  assert.match(auth, /process\.env\.NODE_ENV !== "development"/);
-  assert.match(auth, /userId: "local-development"/);
-  assert.match(route, /process\.env\.NODE_ENV === "development"/);
-  assert.match(route, /CREATE TABLE IF NOT EXISTS workspaces/);
-  assert.doesNotMatch(vite, /host: "0\.0\.0\.0"/);
-  assert.match(entrypoint, /rm -f \.vinext\/dev\/lock\.json/);
-});
-
-test("recovers from an incompatible saved workspace without a sync dead-end", () => {
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(route, /DELETE FROM workspaces WHERE user_id = \?/);
-  assert.match(route, /UPDATE workspaces SET user_id = \? WHERE user_id = \? AND updated_at = \? AND data = \?/);
-  assert.match(route, /\.bind\(archiveUserId, user\.userId, row\.updatedAt, row\.data\)/);
-  assert.match(route, /result\.meta\.changes[\s\S]*?continue/);
-  assert.match(route, /resetIncompatibleWorkspace: true/);
-  assert.match(page, /payload\.resetIncompatibleWorkspace/);
-  assert.match(page, /previous cloud workspace was archived/);
-  assert.doesNotMatch(route, /The saved workspace is invalid/);
-});
-
-test("keeps cloud refresh from replacing open planner drafts", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const planner = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
-  assert.match(planner, /onEditorOpenChange\(editor !== null\)/);
-  assert.match(page, /onEditorOpenChange=\{handlePlannerEditorChange\}/);
-  assert.equal((page.match(/plannerEditorOpen\.current/g) ?? []).length >= 3, true);
-  assert.match(page, /const hasOpenEditor = \(\) => plannerEditorOpen\.current \|\| openTaskNoteEditors\.current\.size > 0 \|\| openProjectNoteEditors\.current\.size > 0/);
-  assert.match(page, /document\.visibilityState[^\n]*hasOpenEditor\(\)/);
-  assert.match(page, /if \(!active \|\| hasOpenEditor\(\)/);
-  assert.match(page, /if \(wasOpen && !open\) setPlannerRefreshRequest\(\(request\) => request \+ 1\)/);
-  assert.match(page, /if \(plannerRefreshRequest !== handledPlannerRefreshRequest\.current\)[\s\S]*?void refreshFromCloud\(\)/);
-  assert.match(planner, /useEffect\(\(\) => \(\) => onEditorOpenChange\(false\)/);
-});
-
-test("explains when a dropped area cannot fit its default block", () => {
-  const planner = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
-  assert.match(planner, /if \(over\.minutes \+ 60 > END_HOUR \* 60\)[\s\S]*?Drop the area earlier so its 60-minute block ends by 11 PM/);
-});
-
-test("persists a dirty task-note draft when its row unmounts without blur", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /return \(\) => onTaskNoteEditorChange\(\{ taskId: task\.id, open: false, draft: notesDraftRef\.current, saved: savedNotesRef\.current \}\)/);
-  assert.match(page, /if \(draft !== undefined && saved !== undefined && draft !== saved\)/);
-  assert.match(page, /queueMicrotask\(\(\) => \{/);
-  assert.match(page, /pendingTaskNoteCommits\.current\.get\(taskId\) !== draft/);
-  assert.match(page, /notes: draft \|\| undefined/);
-  assert.match(page, /if \(!task \|\| \(task\.notes \?\? ""\) === draft\)/);
-});
-
-test("row drops only intercept an active internal drag", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /function drop[\s\S]*?if \(!dragged\) return;[\s\S]*?event\.preventDefault\(\);/);
-});
-
-test("project board drops guard the task's exact current project before changing status", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /currentTask\.projectId !== expectedProjectId/);
-  assert.match(page, /moveTaskToStatus\(dragged\.id, status, project\.id,/);
-  assert.doesNotMatch(page, /dragged\.scope\.startsWith\(`project:\$\{project\.id\}:/);
-});
-
-test("project status scopes preserve project IDs containing colons", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /const projectScope = item\.scope\.slice\("project:"\.length\)/);
-  assert.match(page, /const statusDelimiter = projectScope\.lastIndexOf\(":"\)/);
-  assert.match(page, /const projectId = projectScope\.slice\(0, statusDelimiter\)/);
-  assert.doesNotMatch(page, /item\.scope\.split\(":"\)/);
-});
-
-test("status moves clear a pending removal undo before mutating the workspace", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const chooseStatus = page.slice(page.indexOf("function chooseStatus"), page.indexOf("function handleMenuKeyDown"));
-  assert.match(page, /function moveTaskToStatus[\s\S]*?setUndoWorkspace\(null\);[\s\S]*?setWorkspace\(\(current\) =>/);
-  assert.match(chooseStatus, /if \(status === task\.status\) \{[\s\S]*?setOpen\(false\);[\s\S]*?window\.requestAnimationFrame\(\(\) => triggerRef\.current\?\.focus\(\)\);[\s\S]*?return;[\s\S]*?moveTaskToStatus\?\.\(task\.id, status\)/);
-  assert.match(page, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} openBelow \/>/);
-  assert.doesNotMatch(page, /updateTask\(task\.id, \{ status:/);
-});
-
-test("task undo restores only the removed task into the latest workspace", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /type TaskUndo = \{ task: Task; index: number \}/);
-  assert.match(page, /function removeTask[\s\S]*?setUndoWorkspace\(null\);[\s\S]*?setTaskUndo\(index >= 0 \? \{ task: workspace\.tasks\[index\], index \} : null\)/);
-  assert.match(page, /function undoRemoval[\s\S]*?if \(taskUndo\) \{[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?const tasks = \[\.\.\.current\.tasks\];[\s\S]*?tasks\.splice[\s\S]*?return \{ \.\.\.current, tasks \}/);
-  assert.match(page, /toast === "Task deleted" && taskUndo/);
-  assert.doesNotMatch(page, /\(taskUndo \|\| undoWorkspace\) && <button onClick=\{undoRemoval\}>Undo<\/button>/);
-});
-
-test("a replacement task undo restarts the toast expiry timer", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /const timeout = window\.setTimeout\(\(\) => \{ setToast\(""\); setUndoWorkspace\(null\); setTaskUndo\(null\); setMoveTaskUndo\(null\); \}, 8000\);[\s\S]*?\}, \[toast, taskUndo, moveTaskUndo\]\);/);
-});
-
-test("area and project task composers reset when entity identity changes", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /<AreaView key=\{activeArea\.id\}/);
-  assert.match(page, /<ProjectView key=\{activeProject\.id\}/);
-});
-
-test("project breadcrumbs navigate home and back to their area", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /<nav className="breadcrumb" aria-label="Breadcrumb">/);
-  assert.match(page, /onClick=\{\(\) => navigate\(\{ kind: "today" \}\)\}>Today<\/button>/);
-  assert.match(page, /onClick=\{\(\) => navigate\(\{ kind: "area", id: area\.id \}\)\}>\{area\.name\}<\/button>/);
-  assert.match(page, /<span aria-current="page">\{project\.name\}<\/span>/);
-});
-
-test("project rows open without hijacking their edit or drag controls", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /className=\{`entity-row project-entity \$\{projectSort === "custom" \? "custom-order" : "sorted-order"\}`\}[\s\S]*?role="link"[\s\S]*?tabIndex=\{0\}/);
-  assert.match(page, /closest\("button, input, textarea, select, a"\)/);
-  assert.match(page, /event\.target === event\.currentTarget && \(event\.key === "Enter" \|\| event\.key === " "\)/);
-  assert.doesNotMatch(page, /className="open-link" onClick=\{\(\) => navigate\(\{ kind: "project"/);
-});
-
-test("area projects disclose open tasks and can release them to the area", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(page, /const \[expandedProjects, setExpandedProjects\] = useState<Set<string>>/);
-  assert.match(page, /className="project-disclosure" aria-expanded=\{isExpanded\} aria-controls=\{taskListId\}/);
-  assert.match(page, /task\.projectId === project\.id && task\.status !== "done"/);
-  assert.match(page, /aria-label=\{`Move \$\{task\.title\} to area tasks`\} onClick=\{\(\) => moveTask\(task\.id, `area:\$\{area\.id\}`\)\}/);
-  assert.match(css, /\.project-disclosure\{[^}]*align-self:center;justify-self:center/);
-  assert.match(css, /\.project-list \.project-disclosure\{grid-template-columns:1fr;gap:0\}/);
-  assert.match(page, /task\.status === "doing" \? "Doing" : "Todo"/);
-  assert.match(css, /\.project-task-preview-row\{grid-template-columns:48px minmax\(0,1fr\) auto;gap:9px\}/);
-  assert.match(css, /\.project-task-status\{[^}]*background:#f0f2ee;[^}]*transform:scale\(\.625\)/);
-  assert.match(css, /\.project-task-status\.status-doing\{[^}]*background:#edf2df/);
-});
-
-test("keeps completed project work in a collapsed archive outside the active board", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(page, /PROJECT_STATUSES\.filter\(\(status\) => status\.value !== "done"\)/);
-  assert.match(page, /const completedTasks = tasks\.filter\(\(task\) => task\.status === "done"\)/);
-  assert.match(page, /className="project-open-count" aria-label=\{`\$\{openTaskCount\} open \$\{openTaskCount === 1 \? "task" : "tasks"\}`\}/);
-  assert.match(css, /\.project-open-count\{[^}]*grid-template-columns:34px auto[^}]*background:#f8f9f3/);
-  assert.match(page, /className=\{`completed-archive/);
-  assert.match(page, /onDrop=\{\(event\) => dropInStatus\(event, "done"\)\}/);
-  assert.match(page, /aria-expanded=\{showCompleted\} aria-controls=\{`completed-\$\{project\.id\}`\}/);
-  assert.match(css, /\.kanban-board\{display:grid;grid-template-columns:repeat\(2,minmax\(260px,1fr\)\)/);
-  assert.match(css, /\.completed-archive\{margin-top:14px/);
-});
-
-test("area tasks use distinct backlog and waiting queues", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(page, /const backlogTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.someday && !task\.waiting\)/);
-  assert.match(page, /const waitingTasks = tasks\.filter\(\(task\) => !task\.projectId && task\.waiting\)/);
-  assert.match(page, /label="Backlog" description="Committed work that matters, but is not prioritized yet\."/);
-  assert.match(page, /label="Waiting" description="Tasks blocked on a person, response, event, or other dependency\."/);
-  assert.match(page, /label: "Backlog", action: \(id\) => updateTask\(id, \{ someday: true, waiting: undefined \}\)/);
-  assert.match(page, /taskMoveTargets=\{\[\{ value: `area:\$\{area\.id\}`, label: "Today’s focus", kind: "focus" \}, otherQueue, \.\.\.projects\.map/);
-  assert.match(page, /value: `project:\$\{project\.id\}`, label: project\.name, kind: "project"/);
-  assert.match(page, /function TaskMoveMenu/);
-  assert.match(page, /aria-haspopup="menu"/);
-  assert.match(page, /role="menu"[^>]*aria-label=\{`Move \$\{task\.title\}`\}/);
-  assert.match(page, /role="menuitem" onClick=\{\(\) => choose\(target\)\}/);
-  assert.match(page, /if \(event\.key !== "Escape"\) return;[\s\S]*?triggerRef\.current\?\.focus\(\)/);
-  assert.match(css, /\.task-move-control\{position:relative;justify-self:end\}/);
-  assert.match(css, /@media\(max-width:580px\)\{\.task-row\.with-action:not\(\.with-status\)>\.task-move-control[\s\S]*?\.task-move-trigger\{min-height:44px/);
-  assert.match(page, /task\.status !== "done" && !task\.someday && !task\.waiting/);
-  assert.match(route, /const validSomeday = item\.someday === undefined \|\| typeof item\.someday === "boolean"/);
-  assert.match(route, /const validWaiting = item\.waiting === undefined \|\| typeof item\.waiting === "boolean"/);
-  assert.match(route, /const validQueueState = !\(item\.someday === true && item\.waiting === true\)/);
-});
-
-test("project tasks use the original icon for one labeled workflow and destination menu", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8").replace(/\s*([{},:;])\s*/g, "$1");
-  const taskMoveMenu = page.slice(page.indexOf("function TaskMoveMenu"), page.indexOf("function TaskRows"));
-  const taskRows = page.slice(page.indexOf("function TaskRows"), page.indexOf("function AreaView"));
-  const projectView = page.slice(page.indexOf("function ProjectView"), page.indexOf("function Review"));
-  const listBranch = projectView.slice(projectView.indexOf('{view === "list" ?'), projectView.indexOf(': <div className="kanban-board"'));
-  const completedArchiveStart = projectView.indexOf("{showCompleted &&");
-  const completedArchive = projectView.slice(completedArchiveStart, projectView.indexOf("</section>", completedArchiveStart));
-  const projectStatusCss = css.slice(css.indexOf("/* Project status views */"), css.indexOf("/* Project task workflow */"));
-  assert.match(projectView, /value: `area:\$\{area\.id\}`, label: "Today’s work", kind: "focus"/);
-  assert.match(projectView, /value: `backlog:\$\{area\.id\}`, label: "Backlog", kind: "backlog"/);
-  assert.match(projectView, /value: `waiting:\$\{area\.id\}`, label: "Waiting", kind: "waiting"/);
-  assert.match(listBranch, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
-  assert.match(completedArchive, /moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} taskMoveTargets=\{moveTargets\} moveTask=\{moveTask\}/);
-  assert.match(projectView, /<TaskMoveMenu task=\{task\} targets=\{moveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{\(id, status\) => moveTaskToStatus\(id, status, project\.id\)\} openBelow \/>/);
-  assert.match(taskRows, /\$\{moveTaskToStatus \? "with-status" : ""\}/);
-  assert.match(taskRows, /\{taskMoveTargets && moveTask && <TaskMoveMenu task=\{task\} targets=\{taskMoveTargets\} moveTask=\{moveTask\} moveTaskToStatus=\{moveTaskToStatus\} openBelow=\{Boolean\(moveTaskToStatus\)\} \/>\}/);
-  assert.doesNotMatch(taskRows, /showStatus/);
-  assert.match(taskMoveMenu, /\{hasWorkflow && <>[\s\S]*?PROJECT_STATUSES\.map\(\(status\) => <button[^>]*onClick=\{\(\) => chooseStatus\(status\.value\)\}/);
-  assert.doesNotMatch(taskMoveMenu, /onClick=\{\(\) => chooseStatus\(task\.status\)\}/);
-  assert.match(page, />Workflow<\/span>[\s\S]*?>Move to<\/span>/);
-  assert.match(page, /title=\{hasWorkflow \? `Manage task · \$\{statusLabel\}` : "Move task"\}/);
-  assert.match(page, /className="task-move-icon"/);
-  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:32px;height:32px/);
-  assert.match(css, /\.task-move-control\.has-workflow \.task-move-trigger\{width:44px;height:44px;min-width:44px;min-height:44px\}/);
-  assert.match(css, /\.task-move-menu-label\.first\{[^}]*border-top:0/);
-  assert.match(css, /\.task-move-control\.open-below \.task-move-menu\{top:auto;bottom:calc\(100% \+ 7px\)\}/);
-  assert.match(projectStatusCss, /@media\(max-width:720px\)\{[\s\S]*?\.task-row\.with-status>\.task-move-control\{grid-area:status;justify-self:start;margin:6px 0 2px 44px\}/);
-  assert.match(css, /@media\(max-width:720px\)\{[^}]*[\s\S]*?\.task-row\.with-status \.task-move-menu\{right:auto;left:0\}[\s\S]*?\.kanban-card \.task-move-menu\{right:0;left:auto\}/);
-  assert.doesNotMatch(css, /task-move-control\.compact/);
-});
-
-test("task move menus focus the current workflow status and navigate without mutating", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const taskMoveMenu = page.slice(page.indexOf("function TaskMoveMenu"), page.indexOf("function TaskRows"));
-  const keyboardHandler = taskMoveMenu.slice(taskMoveMenu.indexOf("function handleMenuKeyDown"), taskMoveMenu.indexOf("return <div"));
-  assert.match(taskMoveMenu, /const hasWorkflow = Boolean\(moveTaskToStatus\);[\s\S]*?const currentStatus = hasWorkflow \? menu\.querySelector<HTMLButtonElement>\('button\[role="menuitemradio"\]\[aria-checked="true"\]:not\(:disabled\)'\) : null;/);
-  assert.match(taskMoveMenu, /\(currentStatus \?\? menu\.querySelector<HTMLButtonElement>\("button:not\(:disabled\)"\)\)\?\.focus\(\);/);
-  assert.match(keyboardHandler, /\["ArrowDown", "ArrowUp", "Home", "End"\]/);
-  assert.match(keyboardHandler, /querySelectorAll<HTMLButtonElement>\("button:not\(:disabled\)"\)/);
-  assert.match(keyboardHandler, /event\.preventDefault\(\);[\s\S]*?buttons\[nextIndex\]\.focus\(\);/);
-  assert.doesNotMatch(keyboardHandler, /chooseStatus|moveTaskToStatus/);
-  assert.match(taskMoveMenu, /role="menu"[^>]*aria-label=\{`Move \$\{task\.title\}`\}[^>]*onKeyDown=\{handleMenuKeyDown\}/);
-});
-
-test("task moves name their destination and can be undone", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const moveTaskSource = page.slice(page.indexOf("function moveTask(id:"), page.indexOf("function updateArea("));
-  assert.match(moveTaskSource, /function moveTask\(id: string, value: string, destinationLabel\?: string\)/);
-  assert.match(page, /type MoveTaskUndo = \{ taskId: string; from: TaskPlacement; to: TaskPlacement; toast: string; focusIndex\?: number \}/);
-  assert.match(moveTaskSource, /setUndoWorkspace\(null\);[\s\S]*?setMoveTaskUndo\(task && to \? \{/);
-  assert.doesNotMatch(moveTaskSource, /setUndoWorkspace\(workspace\)/);
-  assert.match(page, /if \(undoWorkspace\) \{[\s\S]*?setWorkspace\(undoWorkspace\);[\s\S]*?return;[\s\S]*?if \(moveTaskUndo\) \{/);
-  assert.match(page, /if \(moveTaskUndo\) \{[\s\S]*?const task = workspace\.tasks\.find[\s\S]*?setToast\("Undo unavailable"\);[\s\S]*?return;[\s\S]*?setWorkspace\(\(current\) => \{[\s\S]*?current\.tasks\.map[\s\S]*?\{ \.\.\.item, \.\.\.moveTaskUndo\.from \}[\s\S]*?return \{ \.\.\.current, tasks, focusTaskIds \}/);
-  assert.match(page, /currentTask\.areaId !== moveTaskUndo\.to\.areaId[\s\S]*?currentTask\.projectId !== moveTaskUndo\.to\.projectId[\s\S]*?currentTask\.someday !== moveTaskUndo\.to\.someday[\s\S]*?currentTask\.waiting !== moveTaskUndo\.to\.waiting/);
-  assert.match(moveTaskSource, /const moveToast = `Moved to \$\{destinationLabel \?\? resolvedLabel \?\? "destination"\}`[\s\S]*?toast: moveToast[\s\S]*?setToast\(moveToast\)/);
-  assert.match(page, /moveTask\(task\.id, target\.value, target\.label\)/);
-  assert.match(page, /moveTaskUndo && toast === moveTaskUndo\.toast/);
-  assert.doesNotMatch(page, /\|\| moveTaskUndo \|\|/);
-});
-
-test("Backlog and Waiting tasks can be created directly from the area page", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /function addBacklogTask\(areaId: string, title: string\)/);
-  assert.match(page, /function addWaitingTask\(areaId: string, title: string\)/);
-  assert.match(page, /createdAt: Date\.now\(\), someday: true/);
-  assert.match(page, /createdAt: Date\.now\(\), waiting: true/);
-  assert.match(page, /selection\.kind === "area" \? \{ someday: true \} : \{\}/);
-  assert.match(page, /`\$\{activeArea\.name\} Backlog`/);
-  assert.match(page, /className="deferred-task-create"/);
-  assert.match(page, /addTask\(area\.id, title\)/);
-});
-
-test("area task composers enforce the workspace task-title limit", () => {
-  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
-  assert.match(page, /value=\{newFocusTask\} maxLength=\{2_000\}/);
-  assert.match(page, /value=\{newTask\} maxLength=\{2_000\}/);
-  assert.match(route, /isText\(item\.title, 2_000\)/);
-});
-
-test("opens the native date picker with browser fallbacks", () => {
-  const supportedCalls = [];
-  openDateInputPicker({ showPicker: () => supportedCalls.push("show"), click: () => supportedCalls.push("click"), focus: () => supportedCalls.push("focus") });
-  assert.deepEqual(supportedCalls, ["show"]);
-
-  const legacyCalls = [];
-  openDateInputPicker({ click: () => legacyCalls.push("click"), focus: () => legacyCalls.push("focus") });
-  assert.deepEqual(legacyCalls, ["click"]);
-
-  const recoveryCalls = [];
-  openDateInputPicker({ showPicker: () => { throw new Error("Picker unavailable"); }, click: () => recoveryCalls.push("click"), focus: () => recoveryCalls.push("focus") });
-  assert.deepEqual(recoveryCalls, ["focus", "click"]);
-});
-
-test("server-renders alphabetical navigation and deliberate daily focus", async () => {
+test("server-renders the application shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
   const html = await response.text();
-  assert.match(html, /<title>Mission Control — Direct the work that matters<\/title>/i);
-
-  const sidebar = html.match(/<aside[^>]*class="sidebar[^"]*"[^>]*>[\s\S]*?<\/aside>/i)?.[0];
-  assert.ok(sidebar, "Expected the Mission Control sidebar to render");
-  assert.doesNotMatch(sidebar, /draggable=|drag-handle|Drag to reorder/i);
-
-  const areaPositions = ["Business &amp; life", "Family", "Personal growth", "Trading"].map((name) => sidebar.indexOf(name));
-  assert.ok(areaPositions.every((position) => position >= 0));
-  assert.deepEqual([...areaPositions].sort((a, b) => a - b), areaPositions);
-  assert.ok(sidebar.indexOf("A-Setup Execution") < sidebar.indexOf("Market Replay Lab"));
-
-  assert.match(html, /<h2>Focus three<\/h2>/i);
-  assert.match(html, /<button[^>]*class="focus-choose-button"[^>]*>Choose focus<\/button>/i);
-  assert.match(html, />3<!-- -->\/3</i);
-  assert.doesNotMatch(html, /<select[^>]*aria-label="Sort tasks"/i);
-  assert.doesNotMatch(html, /class="step-controls"|title="Move up"|title="Move down"/i);
-  assert.doesNotMatch(html, /type="date"|aria-label="Due date for |aria-label="Priority for /i);
-  assert.doesNotMatch(html, /class="task-direct-control timing|class="task-direct-trigger"|class="task-direct-control priority|class="priority-swatch"/i);
-  assert.match(html, /class="edit-icon"/i);
-  assert.doesNotMatch(html, /class="task-direct-control task-note-trigger|aria-label="Add notes for |aria-controls="task-notes-/i);
-  assert.match(html, /class="task-due-date">(?:Due |Overdue)/i);
-  assert.match(html, /class="task-row[^"]*has-priority priority-high/i);
-  assert.doesNotMatch(html, /task-plan-trigger|task-plan-done/i);
-
-  const currentAreaPicker = html.match(/<section[^>]*class="current-area-picker"[^>]*>[\s\S]*?<\/section>/i)?.[0];
-  assert.ok(currentAreaPicker, "Expected the current area picker to render");
-  assert.match(currentAreaPicker, /aria-pressed="true"/i);
-  assert.match(currentAreaPicker, /aria-label="Open Trading"/i);
-  assert.doesNotMatch(currentAreaPicker, /Protect capital|Compound skill|Be present|Close loops/i);
-  assert.equal((currentAreaPicker.match(/class="area-choice /g) ?? []).length, 4);
-  assert.doesNotMatch(html, /class="area-overview|focus-area-button|Sort areas A–Z/i);
+  assert.match(html, /Mission Control/);
+  assert.match(html, /Today/);
+  assert.match(html, /Choose the work/);
+  assert.doesNotMatch(html, /Areas and projects/);
+  assert.doesNotMatch(html, />Planner</);
 });

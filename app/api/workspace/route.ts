@@ -4,7 +4,7 @@ import { normalizeProjectNotes } from "../../project-note-schema.mjs";
 import { isPlannerDeadline, normalizePlanner } from "../../planner-schema.mjs";
 import { normalizeRoutines } from "../../routine-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
-import { normalizeFocusTaskIds, normalizeWeeklyReview } from "../../workspace-guidance.mjs";
+import { normalizeWeeklyReview } from "../../workspace-guidance.mjs";
 import { getD1 } from "../../../db";
 
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
@@ -34,9 +34,9 @@ type Routine = RoutineSchedule & { id: string; areaId: string; name: string; exp
 type Planner = {
   areaBlockRules: Array<{ id: string; areaId: string; weekdays: number[]; effectiveOn: string; startTime: string; endTime: string }>;
   areaBlockExceptions: Array<{ id: string; ruleId: string; occurrenceDate: string; kind: "skip" | "override"; date?: string; startTime?: string; endTime?: string }>;
-  projectSessions: Array<{ id: string; projectId: string; ruleId: string; occurrenceDate: string; startOffsetMinutes: number; durationMinutes: number }>;
+  blockItems: Array<{ id: string; ruleId: string; occurrenceDate: string; kind: "task" | "routine"; itemId: string }>;
 };
-type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; planner: Planner; focusTaskIds: string[]; weeklyReview: WeeklyReview; currentAreaId?: string };
+type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; planner: Planner; weeklyReview: WeeklyReview };
 
 const MAX_WORKSPACE_BYTES = 2_000_000;
 let developmentSchemaInitialization: Promise<void> | undefined;
@@ -79,16 +79,17 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     return isText(item.id, 200) && isText(item.title, 2_000) && optionalText(item.areaId, 200) && optionalText(item.projectId, 200) && isTaskStatus(item.status) && typeof item.createdAt === "number" && Number.isFinite(item.createdAt) && optionalText(item.dueDate, 20) && validDueTime && validPriority && validNotes && validSomeday && validWaiting && validQueueState;
   });
   const routines = normalizeRoutines(candidate.routines, new Set(areas.map((area) => area.id))) as Routine[] | null;
-  const planner = normalizePlanner(candidate.planner, new Set(areas.map((area) => area.id)), new Map(projects.map((project) => [project.id, project.areaId]))) as Planner | null;
+  const planner = normalizePlanner(
+    candidate.planner,
+    new Set(areas.map((area) => area.id)),
+    new Map(tasks.filter((task) => task.areaId).map((task) => [task.id, task.areaId!])),
+    new Map((routines ?? []).map((routine) => [routine.id, routine.areaId])),
+  ) as Planner | null;
 
   if (areas.length !== candidate.areas.length || projects.length !== candidate.projects.length || tasks.length !== candidate.tasks.length || routines === null || planner === null) return null;
-  const currentAreaId = isText(candidate.currentAreaId, 200) && areas.some((area) => area.id === candidate.currentAreaId)
-    ? candidate.currentAreaId
-    : areas[0]?.id;
-  const focusTaskIds = normalizeFocusTaskIds(candidate.focusTaskIds, tasks, currentAreaId);
   const weeklyReview = normalizeWeeklyReview(candidate.weeklyReview);
-  if (focusTaskIds === null || weeklyReview === null) return null;
-  return { areas, projects, tasks, routines, planner, focusTaskIds, weeklyReview, currentAreaId };
+  if (weeklyReview === null) return null;
+  return { areas, projects, tasks, routines, planner, weeklyReview };
 }
 
 function unauthorized() {
@@ -116,41 +117,25 @@ export async function GET() {
   if (!user) return unauthorized();
 
   const database = await workspaceDatabase();
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const row = await database
-      .prepare("SELECT data, updated_at AS updatedAt FROM workspaces WHERE user_id = ?")
-      .bind(user.userId)
-      .first<{ data: string; updatedAt: number }>();
+  const row = await database
+    .prepare("SELECT data, updated_at AS updatedAt FROM workspaces WHERE user_id = ?")
+    .bind(user.userId)
+    .first<{ data: string; updatedAt: number }>();
 
-    if (!row) {
-      return Response.json({ workspace: null, updatedAt: 0, user: { displayName: user.displayName, email: user.email } });
-    }
-
-    let workspace: Workspace | null = null;
-    try {
-      workspace = normalizeWorkspace(JSON.parse(row.data) as unknown);
-    } catch { /* Invalid JSON is handled like any other obsolete workspace. */ }
-
-    if (workspace) {
-      return Response.json({ workspace, updatedAt: row.updatedAt, user: { displayName: user.displayName, email: user.email } });
-    }
-
-    const archiveUserId = `archived:${Date.now()}:${crypto.randomUUID()}:${user.userId}`;
-    const result = await database
-      .prepare("UPDATE workspaces SET user_id = ? WHERE user_id = ? AND updated_at = ? AND data = ?")
-      .bind(archiveUserId, user.userId, row.updatedAt, row.data)
-      .run();
-    if ((result.meta.changes ?? 0) === 0) continue;
-
-    return Response.json({
-      workspace: null,
-      updatedAt: 0,
-      resetIncompatibleWorkspace: true,
-      user: { displayName: user.displayName, email: user.email },
-    });
+  if (!row) {
+    return Response.json({ workspace: null, updatedAt: 0, user: { displayName: user.displayName, email: user.email } });
   }
 
-  return Response.json({ error: "Workspace changed while it was being loaded. Try again." }, { status: 409 });
+  let workspace: Workspace | null = null;
+  try {
+    workspace = normalizeWorkspace(JSON.parse(row.data) as unknown);
+  } catch { /* Invalid JSON is reported without modifying the saved row. */ }
+
+  if (workspace) {
+    return Response.json({ workspace, updatedAt: row.updatedAt, user: { displayName: user.displayName, email: user.email } });
+  }
+
+  return Response.json({ error: "The saved workspace uses an incompatible data format and must be recovered before it can be loaded." }, { status: 409 });
 }
 
 export async function PUT(request: Request) {

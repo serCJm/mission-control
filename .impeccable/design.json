@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-25T20:32:42Z",
+  "generatedAt": "2026-08-27T05:15:00Z",
   "title": "Design System: Mission Control",
   "extensions": {
     "colorMeta": {
@@ -75,17 +75,18 @@
     "shadows": [
       { "name": "forest-ambient", "value": "0 14px 35px rgba(23,61,51,.14)", "purpose": "Calm lift for the featured day brief." },
       { "name": "command-mark", "value": "0 8px 20px rgba(4,24,18,.18)", "purpose": "Compact lift for the lime orbit tile." },
-      { "name": "drawer-lift", "value": "16px 0 40px rgba(16,30,25,.22)", "purpose": "Separates the mobile navigation drawer from its scrim." },
+      { "name": "drawer-lift", "value": "16px 0 40px rgba(16,30,25,.22)", "purpose": "Separates the contextual workbench overlay from its scrim." },
       { "name": "toast-lift", "value": "0 12px 30px rgba(18,31,26,.22)", "purpose": "Temporary confirmation and undo feedback." }
     ],
     "motion": [
-      { "name": "drawer", "value": "transform .2s ease-out", "purpose": "Moves the mobile rail into and out of view." },
+      { "name": "drawer", "value": "transform .2s ease-out", "purpose": "Moves the contextual workbench into and out of view." },
       { "name": "disclosure", "value": "transform .16s ease-out", "purpose": "Rotates project-tree disclosure indicators." },
       { "name": "reveal", "value": "opacity .16s ease-out", "purpose": "Reveals compact row editing affordances." },
       { "name": "reduced-motion", "value": "none", "purpose": "Disables transitions when prefers-reduced-motion is set." }
     ],
     "breakpoints": [
-      { "name": "drawer", "value": "920px" },
+      { "name": "workbench-overlay", "value": "980px" },
+      { "name": "workspace-menu", "value": "920px" },
       { "name": "touch-list", "value": "720px" },
       { "name": "stacked-mobile", "value": "580px" },
       { "name": "compact-list", "value": "460px" }
@@ -120,9 +121,9 @@
       "name": "Active Navigation Item",
       "kind": "nav",
       "refersTo": "nav-active",
-      "description": "Warm-paper selection state inside the fixed forest rail.",
+      "description": "Compact navigation in the top bar with a forest active state.",
       "html": "<nav class=\"ds-nav\"><button>Today <small>5</small></button><button class=\"ds-active\">Inbox <small>3</small></button><button>Weekly review <small>2/5</small></button></nav>",
-      "css": ".ds-nav { display: grid; gap: 4px; width: 220px; padding: 12px; border-radius: 12px; background: var(--forest, #173d33); font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-nav button { display: flex; justify-content: space-between; width: 100%; border: 0; border-radius: 9px; background: transparent; color: #c5d0ca; padding: 10px 11px; text-align: left; cursor: pointer; } .ds-nav button:hover { background: #21493e; color: #fff; } .ds-nav button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-nav button.ds-active { background: #f0f3e7; color: var(--forest, #173d33); font-weight: 680; } .ds-nav small { font: 600 10px/1 var(--font-geist-mono, monospace); opacity: .72; }"
+      "css": ".ds-nav { display: flex; gap: 3px; width: fit-content; padding: 3px; border: 1px solid #d3d8cf; border-radius: 10px; background: #f8f8f3; font-family: var(--font-geist-sans, Arial, sans-serif); } .ds-nav button { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 7px; background: transparent; color: #607069; padding: 7px 9px; cursor: pointer; } .ds-nav button:hover { background: #fff; color: var(--forest, #173d33); } .ds-nav button:focus-visible { outline: 3px solid #93ad55; outline-offset: 2px; } .ds-nav button.ds-active { background: var(--forest, #173d33); color: #fff; font-weight: 680; } .ds-nav small { font: 600 8px/1 var(--font-geist-mono, monospace); opacity: .72; }"
     },
     {
       "name": "Working Panel",
@@ -149,7 +150,7 @@
   ],
   "narrative": {
     "northStar": "The Quiet Operations Desk",
-    "overview": "Mission Control feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.\n\nThis is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the navigation becomes a drawer or the content stacks.",
+    "overview": "Mission Control feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.\n\nThis is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the contextual workbench becomes a drawer or content stacks.",
     "keyCharacteristics": [
       "Warm paper canvas with crisp, nearly white working panels.",
       "Deep forest navigation and callouts, with signal lime used selectively.",
@@ -160,7 +161,7 @@
     ],
     "rules": [
       { "name": "The Scarce Signal Rule", "body": "Signal lime marks identity, state, or a consequential cue; it never becomes a broad decorative fill across ordinary work surfaces.", "section": "colors" },
-      { "name": "The Forest Anchor Rule", "body": "Deep forest owns the navigation rail and the strongest operational actions so the application always has a stable visual bearing.", "section": "colors" },
+      { "name": "The Forest Anchor Rule", "body": "Deep forest owns active navigation and the strongest operational actions so the application always has a stable visual bearing.", "section": "colors" },
       { "name": "The Instrument Label Rule", "body": "Use Geist Mono for terse values, timing, counts, and uppercase metadata—not for paragraphs or primary task names.", "section": "typography" },
       { "name": "The Editorial Pause Rule", "body": "Georgia is a rare reflective accent for principles and prompts; it never replaces Geist as the operating typeface.", "section": "typography" },
       { "name": "The Actions Survive Rule", "body": "Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Manual-order drag handles.", "section": "layout" },
@@ -172,14 +173,14 @@
       "Do use Warm Paper for the canvas and Quiet Panel for primary work surfaces.",
       "Do keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.",
       "Do keep project notes compact, project-owned, pin-first, and readable as a responsive board rather than one undifferentiated document.",
-      "Do preserve the 252px rail on desktop and convert it to a drawer below 920px.",
+      "Do keep the contextual workbench as the only side surface, persistent above 980px and a drawer below it.",
       "Do use signal lime sparingly for identity, status, and consequential cues.",
       "Do keep touch actions at least 44px tall in compact list layouts.",
       "Do preserve the concentric-orbit mark and compact two-line Mission Control wordmark as the core identity lockup."
     ],
     "donts": [
       "Don't turn every row into an elevated card or add shadow to ordinary panels.",
-      "Don't show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.",
+      "Don't show drag affordances when a computed task sort is active or add manual ordering clutter to compact navigation.",
       "Don't introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.",
       "Don't use Georgia for operational copy, task names, or navigation.",
       "Don't let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Manual-order drag handles.",

@@ -4,13 +4,16 @@ export function normalizeTaskNotes(value) {
 }
 
 export function taskPlacementForDestination(value, projects) {
-  if (value === "inbox") return { areaId: undefined, projectId: undefined, someday: undefined, waiting: undefined };
-  if (value.startsWith("area:")) return { areaId: value.slice(5), projectId: undefined, someday: undefined, waiting: undefined };
-  if (value.startsWith("backlog:")) return { areaId: value.slice(8), projectId: undefined, someday: true, waiting: undefined };
-  if (value.startsWith("waiting:")) return { areaId: value.slice(8), projectId: undefined, someday: undefined, waiting: true };
+  if (value === "inbox") return { areaId: undefined, projectId: undefined, someday: undefined, waiting: undefined, status: "todo" };
+  if (value.startsWith("backlog:")) return { areaId: value.slice(8), projectId: undefined, someday: true, waiting: undefined, status: "todo" };
+  if (value.startsWith("waiting:")) return { areaId: value.slice(8), projectId: undefined, someday: undefined, waiting: true, status: "todo" };
+  if (value.startsWith("project-waiting:")) {
+    const project = projects.find((item) => item.id === value.slice(16));
+    return project ? { areaId: project.areaId, projectId: project.id, someday: undefined, waiting: true, status: "todo" } : null;
+  }
   if (!value.startsWith("project:")) return null;
   const project = projects.find((item) => item.id === value.slice(8));
-  return project ? { areaId: project.areaId, projectId: project.id, someday: undefined, waiting: undefined } : null;
+  return project ? { areaId: project.areaId, projectId: project.id, someday: undefined, waiting: undefined, status: "todo" } : null;
 }
 
 export const TASK_STATUSES = ["todo", "doing", "done"];

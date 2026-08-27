@@ -94,7 +94,7 @@ components:
 
 Mission Control feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.
 
-This is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the navigation becomes a drawer or the content stacks.
+This is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the contextual workbench becomes a drawer or content stacks.
 
 **Key Characteristics:**
 
@@ -111,12 +111,12 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 ### Primary
 
-- **Deep Forest:** The structural anchor for the sidebar, primary actions, focus-bearing callouts, check controls, and the orbit mark.
+- **Deep Forest:** The structural anchor for active navigation, primary actions, focus-bearing callouts, check controls, and the orbit mark.
 - **Forest Action:** A lighter forest reserved for hover feedback and secondary emphasis inside the green family.
 
 ### Secondary
 
-- **Signal Lime:** A high-contrast cue for the logo tile, key values, rail actions, and compact status signals.
+- **Signal Lime:** A high-contrast cue for the logo tile, key values, active navigation, and compact status signals.
 - **Soft Signal Field:** A pale lime wash for completed review steps, area initials, and supportive selected states.
 
 ### Neutral
@@ -132,7 +132,7 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 **The Scarce Signal Rule.** Signal lime marks identity, state, or a consequential cue; it never becomes a broad decorative fill across ordinary work surfaces.
 
-**The Forest Anchor Rule.** Deep forest owns the navigation rail and the strongest operational actions so the application always has a stable visual bearing.
+**The Forest Anchor Rule.** Deep forest owns active workspace navigation and the strongest operational actions so the application always has a stable visual bearing.
 
 ## Typography
 
@@ -148,7 +148,7 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 - **Headline** (700, 17px, 1.3): Section headings and prominent panel titles.
 - **Title** (680, 14px, 1.35): Entity names, primary controls, and concise navigational emphasis.
 - **Body** (400, 14px, 1.45): General interface copy; supporting paragraphs typically stay near 620px or 76 characters.
-- **Label** (650, 9px, 0.12em): Uppercase rail labels, status captions, and instrument-like metadata.
+- **Label** (650, 9px, 0.12em): Uppercase field labels, status captions, and instrument-like metadata.
 
 ### Named Rules
 
@@ -158,9 +158,9 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 ## Layout
 
-Desktop uses a fixed 252px forest rail and a fluid content column. The sticky 72px top bar holds a centered quick-capture control, while page content is capped at 1180px with fluid horizontal padding from 24px to 60px. Primary work areas use two-column grids with 16px gaps; panels usually carry 23px internal padding and 14px corners.
+Desktop uses one fluid content column. The sticky 72px top bar holds the command mark, compact Today/Inbox/Review navigation, quick capture, and sync state. Calendar-first Today places a 320px contextual workbench directly beside the fluid week, while management pages remain capped at 1180px with fluid horizontal padding from 24px to 60px. Primary work areas use two-column grids with 16px gaps; panels usually carry 23px internal padding and 14px corners.
 
-At 920px and below, the rail becomes an off-canvas drawer with a dimmed scrim, the menu control appears, and Today, project, and review grids stack. At 720px and below, task sort, due-date, priority, Edit, and move controls gain touch-sized targets while list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and stacks task metadata into a readable single column.
+At 980px and below, the contextual workbench becomes an overlay drawer with a dimmed scrim. At 920px and below, the week becomes one selected day and global navigation moves into a compact top-bar menu; project and review grids stack. At 720px and below, task sort, due-date, priority, Edit, and move controls gain touch-sized targets while list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and stacks task metadata into a readable single column.
 
 **The Actions Survive Rule.** Responsive collapse may remove secondary metadata, but it must preserve Edit, Open, task sorting, due dates, priorities, and Manual-order drag handles.
 
@@ -168,13 +168,13 @@ At 920px and below, the rail becomes an off-canvas drawer with a dimmed scrim, t
 
 ## Elevation & Depth
 
-The system is flat and tonal by default. Warm paper, quiet panels, forest fields, and hairline borders establish most depth. Ambient shadows appear selectively on the forest day brief, orbit mark, mobile drawer, and toast—elements that float above the ordinary working plane or need temporary emphasis.
+The system is flat and tonal by default. Warm paper, quiet panels, forest fields, and hairline borders establish most depth. Ambient shadows appear selectively on the forest day brief, orbit mark, overlay workbench, compact workspace menu, and toast—elements that float above the ordinary working plane or need temporary emphasis.
 
 ### Shadow Vocabulary
 
 - **Forest Ambient** (`0 14px 35px rgba(23,61,51,.14)`): The dark day brief only, giving one editorial panel a calm lift.
-- **Command Mark** (`0 8px 20px rgba(4,24,18,.18)`): The lime orbit tile inside the forest rail.
-- **Drawer Lift** (`16px 0 40px rgba(16,30,25,.22)`): The mobile navigation drawer while it overlays content.
+- **Command Mark** (`0 8px 20px rgba(4,24,18,.18)`): The lime orbit tile in the top-bar identity lockup.
+- **Drawer Lift** (`16px 0 40px rgba(16,30,25,.22)`): The contextual workbench while it overlays the calendar.
 - **Toast Lift** (`0 12px 30px rgba(18,31,26,.22)`): Temporary confirmation and undo feedback.
 
 ### Named Rules
@@ -212,7 +212,7 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The deep forest rail uses muted cool-green labels at rest, a darker forest hover field, and a warm near-white active field with forest text. Areas and the projects nested within each area render alphabetically so navigation stays predictable without drag handles. The two-line Mission Control wordmark and orbit mark anchor the top. Below 920px, navigation becomes a left drawer with a scrim and an explicit Close action.
+The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. Area and project navigation lives in the adjacent contextual workbench through selectors and explicit management links, avoiding a second persistent rail. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
 ### Hierarchy Lists
 
@@ -224,7 +224,7 @@ Project notes form a lightweight working board below the task workflow. A center
 
 ### Command Mark
 
-The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is always paired with the compact two-line Mission Control wordmark in the product rail.
+The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is paired with the compact two-line Mission Control wordmark in the desktop top bar.
 
 ## Do's and Don'ts
 
@@ -233,7 +233,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Do** use Warm Paper for the canvas and Quiet Panel for primary work surfaces.
 - **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.
 - **Do** keep project notes compact, project-owned, pin-first, and readable as a responsive board rather than one undifferentiated document.
-- **Do** preserve the 252px rail on desktop and convert it to a drawer below 920px.
+- **Do** keep one side surface: the 320px contextual workbench beside the calendar, becoming a drawer below 980px.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
 - **Do** preserve the concentric-orbit mark and compact two-line Mission Control wordmark as the core identity lockup.
@@ -241,7 +241,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 ### Don't:
 
 - **Don't** turn every row into an elevated card or add shadow to ordinary panels.
-- **Don't** show drag affordances when a computed task sort is active or add manual ordering clutter to the alphabetical navigation rail.
+- **Don't** show drag affordances when a computed task sort is active or duplicate area/project navigation in a second persistent rail.
 - **Don't** introduce bright multicolor accents, cold white application chrome, or blue-gray enterprise styling.
 - **Don't** use Georgia for operational copy, task names, or navigation.
 - **Don't** let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Manual-order drag handles.

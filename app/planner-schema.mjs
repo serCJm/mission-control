@@ -103,17 +103,31 @@ function normalizeException(value, rulesById) {
   return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "override", date: value.date, startTime: value.startTime, endTime: value.endTime };
 }
 
-function normalizeSession(value, projectAreas, rulesById) {
-  if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.projectId) || !isText(value.ruleId) || !isPlannerDate(value.occurrenceDate)) return null;
+function normalizeBlockItem(value, rulesById, taskAreas, routineAreas) {
+  if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.ruleId) || !isPlannerDate(value.occurrenceDate) || !isText(value.itemId)) return null;
   const rule = rulesById.get(value.ruleId);
-  if (!rule || projectAreas.get(value.projectId) !== rule.areaId) return null;
-  if (value.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(value.occurrenceDate))) return null;
-  if (!Number.isInteger(value.startOffsetMinutes) || value.startOffsetMinutes < 0 || value.startOffsetMinutes % PLANNER_SNAP_MINUTES !== 0 || !Number.isInteger(value.durationMinutes) || value.durationMinutes < PLANNER_SNAP_MINUTES || value.durationMinutes % PLANNER_SNAP_MINUTES !== 0 || value.durationMinutes > 12 * 60) return null;
-  return { id: value.id, projectId: value.projectId, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, startOffsetMinutes: value.startOffsetMinutes, durationMinutes: value.durationMinutes };
+  if (!rule || value.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(value.occurrenceDate))) return null;
+  if (value.kind === "task" && taskAreas.get(value.itemId) === rule.areaId) return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "task", itemId: value.itemId };
+  if (value.kind === "routine" && routineAreas.get(value.itemId) === rule.areaId) return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "routine", itemId: value.itemId };
+  return null;
 }
 
-export function normalizePlanner(value, areaIds, projectAreas) {
-  if (!value || typeof value !== "object" || !Array.isArray(value.areaBlockRules) || !Array.isArray(value.areaBlockExceptions) || !Array.isArray(value.projectSessions)) return null;
+function plannerBlockItemDate(exceptionsByOccurrence, item) {
+  const exception = exceptionsByOccurrence.get(plannerOccurrenceId(item.ruleId, item.occurrenceDate));
+  return exception?.kind === "override" ? exception.date : item.occurrenceDate;
+}
+
+export function parsePlannerCandidate(value) {
+  if (typeof value !== "string") return null;
+  const separator = value.indexOf(":");
+  if (separator < 1 || separator === value.length - 1) return null;
+  const kind = value.slice(0, separator);
+  if (kind !== "task" && kind !== "routine") return null;
+  return { kind, itemId: value.slice(separator + 1) };
+}
+
+export function normalizePlanner(value, areaIds, taskAreas, routineAreas) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.areaBlockRules) || !Array.isArray(value.areaBlockExceptions) || !Array.isArray(value.blockItems)) return null;
   const rules = value.areaBlockRules.map((rule) => normalizeRule(rule, areaIds));
   if (rules.some((rule) => rule === null)) return null;
   const ruleIds = new Set(rules.map((rule) => rule.id));
@@ -159,34 +173,70 @@ export function normalizePlanner(value, areaIds, projectAreas) {
       if (plannerMinutes(group[index].startTime) < plannerMinutes(group[index - 1].endTime)) return null;
     }
   }
-  const sessions = value.projectSessions.map((session) => normalizeSession(session, projectAreas, rulesById));
-  if (sessions.some((session) => session === null)) return null;
-  if (new Set(sessions.map((session) => session.id)).size !== sessions.length) return null;
-  const sessionsByOccurrence = new Map();
-  for (const session of sessions) {
-    const rule = rulesById.get(session.ruleId);
-    const exception = exceptionsByOccurrence.get(plannerOccurrenceId(session.ruleId, session.occurrenceDate));
-    if (!rule || exception?.kind === "skip") return null;
-    const blockDuration = exception?.kind === "override"
-      ? plannerMinutes(exception.endTime) - plannerMinutes(exception.startTime)
-      : plannerMinutes(rule.endTime) - plannerMinutes(rule.startTime);
-    if (session.startOffsetMinutes + session.durationMinutes > blockDuration) return null;
-    const key = plannerOccurrenceId(session.ruleId, session.occurrenceDate);
-    const group = sessionsByOccurrence.get(key);
-    if (group) group.push(session);
-    else sessionsByOccurrence.set(key, [session]);
-  }
-  for (const group of sessionsByOccurrence.values()) {
-    group.sort((left, right) => left.startOffsetMinutes - right.startOffsetMinutes);
-    for (let index = 1; index < group.length; index += 1) {
-      if (group[index].startOffsetMinutes < group[index - 1].startOffsetMinutes + group[index - 1].durationMinutes) return null;
+  const blockItems = value.blockItems.map((item) => normalizeBlockItem(item, rulesById, taskAreas, routineAreas));
+  if (blockItems.some((item) => item === null) || new Set(blockItems.map((item) => item.id)).size !== blockItems.length) return null;
+  const blockItemsByOccurrence = new Map();
+  const routineItemsByDate = new Set();
+  for (const item of blockItems) {
+    const exception = exceptionsByOccurrence.get(plannerOccurrenceId(item.ruleId, item.occurrenceDate));
+    if (exception?.kind === "skip") return null;
+    const key = plannerOccurrenceId(item.ruleId, item.occurrenceDate);
+    const group = blockItemsByOccurrence.get(key) ?? [];
+    if (group.some((entry) => entry.kind === item.kind && entry.itemId === item.itemId) || group.length >= 3) return null;
+    group.push(item);
+    blockItemsByOccurrence.set(key, group);
+    if (item.kind === "routine") {
+      const routineDateKey = `${item.itemId}:${plannerBlockItemDate(exceptionsByOccurrence, item)}`;
+      if (routineItemsByDate.has(routineDateKey)) return null;
+      routineItemsByDate.add(routineDateKey);
     }
   }
-  return { areaBlockRules: rules, areaBlockExceptions: exceptions, projectSessions: sessions };
+  return { areaBlockRules: rules, areaBlockExceptions: exceptions, blockItems };
 }
 
-function plannerOccurrenceId(ruleId, occurrenceDate) {
+export function plannerOccurrenceId(ruleId, occurrenceDate) {
   return `${ruleId}:${occurrenceDate}`;
+}
+
+export function plannerBlockItems(planner, occurrence) {
+  return planner.blockItems.filter((item) => item.ruleId === occurrence.ruleId && item.occurrenceDate === occurrence.sourceDate);
+}
+
+export function isFinalRoutineSessionStatus(status) {
+  return status === "completed" || status === "skipped" || status === "missed";
+}
+
+export function plannerBlockTarget(planner, areaId, today, currentMinutes, horizonDays = 90) {
+  const dates = Array.from({ length: horizonDays }, (_, index) => shiftPlannerDate(today, index));
+  const occurrences = materializeAreaBlocks(planner, dates).filter((occurrence) => occurrence.areaId === areaId);
+  const active = occurrences.find((occurrence) => occurrence.date === today
+    && plannerMinutes(occurrence.startTime) <= currentMinutes
+    && plannerMinutes(occurrence.endTime) > currentMinutes);
+  if (active) return { occurrence: active, active: true };
+  const upcoming = occurrences.find((occurrence) => occurrence.date > today
+    || (occurrence.date === today && plannerMinutes(occurrence.startTime) > currentMinutes));
+  return upcoming ? { occurrence: upcoming, active: false } : null;
+}
+
+export function placePlannerBlockItem(planner, occurrence, kind, itemId, id) {
+  const current = plannerBlockItems(planner, occurrence);
+  if (current.some((item) => item.kind === kind && item.itemId === itemId)) return { planner, status: "exists" };
+  if (kind === "routine") {
+    const exceptionsByOccurrence = new Map(planner.areaBlockExceptions.map((exception) => [plannerOccurrenceId(exception.ruleId, exception.occurrenceDate), exception]));
+    if (planner.blockItems.some((item) => item.kind === "routine" && item.itemId === itemId && plannerBlockItemDate(exceptionsByOccurrence, item) === occurrence.date)) return { planner, status: "exists" };
+  }
+  if (current.length >= 3) return { planner, status: "full" };
+
+  const ordered = [...current, { id, ruleId: occurrence.ruleId, occurrenceDate: occurrence.sourceDate, kind, itemId }];
+
+  const occurrenceIds = new Set(current.map((item) => item.id));
+  const firstIndex = planner.blockItems.findIndex((item) => occurrenceIds.has(item.id));
+  const remaining = planner.blockItems.filter((item) => !occurrenceIds.has(item.id));
+  remaining.splice(firstIndex < 0 ? remaining.length : firstIndex, 0, ...ordered);
+  return {
+    planner: { ...planner, blockItems: remaining },
+    status: "added",
+  };
 }
 
 export function materializeAreaBlocks(planner, dateKeys) {

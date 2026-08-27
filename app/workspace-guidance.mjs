@@ -29,26 +29,3 @@ export function normalizeWeeklyReview(value) {
   if (completedSteps.some((step) => !Number.isInteger(step) || step < 0 || step >= REVIEW_STEP_COUNT)) return null;
   return { weekKey: value.weekKey, completedSteps, intention: value.intention };
 }
-
-export function normalizeFocusTaskIds(value, tasks, currentAreaId) {
-  if (!Array.isArray(value) || value.length > 3 || value.some((id) => typeof id !== "string")) return null;
-  const ids = [...new Set(value)];
-  if (ids.length !== value.length) return null;
-  const eligibleIds = new Set(tasks
-    .filter((task) => task.areaId === currentAreaId && task.status !== "done" && !task.someday && !task.waiting)
-    .map((task) => task.id));
-  return ids.every((id) => eligibleIds.has(id)) ? ids : null;
-}
-
-export function reconcileFocusTaskIdsAfterMove(focusTaskIds, movedTaskId, tasks, currentAreaId) {
-  if (!focusTaskIds.includes(movedTaskId)) return focusTaskIds;
-  return normalizeFocusTaskIds([movedTaskId], tasks, currentAreaId) ? focusTaskIds : focusTaskIds.filter((id) => id !== movedTaskId);
-}
-
-export function restoreFocusTaskAfterMove(focusTaskIds, movedTaskId, focusIndex, tasks, currentAreaId) {
-  if (focusIndex === undefined || focusTaskIds.includes(movedTaskId) || focusTaskIds.length >= 3) return focusTaskIds;
-  if (!normalizeFocusTaskIds([movedTaskId], tasks, currentAreaId)) return focusTaskIds;
-  const restored = [...focusTaskIds];
-  restored.splice(Math.min(focusIndex, restored.length), 0, movedTaskId);
-  return restored;
-}
