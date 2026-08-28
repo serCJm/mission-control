@@ -1,7 +1,7 @@
 "use client";
 
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { areaBlockConflict, formatPlannerTime, isFinalRoutineSessionStatus, isPlannerCalendarTime, isPlannerDate, materializeAreaBlocks, MIN_AREA_BLOCK_MINUTES, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, PLANNER_END_MINUTES, PLANNER_START_MINUTES, PLANNER_TIME_ZONE, plannerBlockItems, plannerBlockTarget, plannerDateKey, plannerMinutes, plannerTime, plannerWeekDates, plannerWeekday, recurringAreaBlockRulesConflict, shiftPlannerDate } from "./planner-schema.mjs";
 
 export type PlannerArea = { id: string; name: string; icon: string };
@@ -35,7 +35,6 @@ type PlannerProps = {
   onTaskChange: (taskId: string, patch: Partial<Pick<PlannerTask, "status" | "waiting" | "someday" | "dueDate" | "dueTime">>) => void;
   onRoutineSessionStatus: (routineId: string, date: string, status: "completed" | "skipped") => void;
   makeId: (prefix: string) => string;
-  renderAreaIcon: (icon: string) => ReactNode;
   onNotice: (message: string) => void;
   onEditorOpenChange: (open: boolean) => void;
   session: PlannerSessionState;
@@ -43,7 +42,12 @@ type PlannerProps = {
   onManage: (target: { kind: "area" | "project"; id: string }) => void;
   onCreateArea: (name: string) => void;
 };
-type PlannerDragData = { kind?: string; areaId?: string; taskId?: string; routineId?: string; occurrence?: AreaOccurrence };
+type PlannerDragData = { kind?: string; taskId?: string; routineId?: string; occurrence?: AreaOccurrence };
+type PlannerEditor =
+  | { kind: "series"; ruleId: string; areaId?: never; date?: never }
+  | { kind: "series"; ruleId?: never; areaId?: string; date: string }
+  | { kind: "occurrence"; occurrenceId: string }
+  | { kind: "deadline"; taskId: string };
 
 function subscribeCompactLayout(onChange: () => void) {
   const query = window.matchMedia("(max-width: 980px)");
@@ -96,14 +100,6 @@ function AddToQueueIcon() {
   return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8M3.5 10h6M3.5 14.5h5" /><path d="M14 10.5v5M11.5 13h5" /></svg>;
 }
 
-function AreaDragItem({ area, selected, renderAreaIcon, onSelect, onConfigure }: { area: PlannerArea; selected: boolean; renderAreaIcon: PlannerProps["renderAreaIcon"]; onSelect: () => void; onConfigure: () => void }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `area:${area.id}`, data: { kind: "area", areaId: area.id } });
-  return <div className={`planner-source ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`} ref={setNodeRef}>
-    <button type="button" className="planner-source-drag" {...listeners} {...attributes} aria-pressed={selected} aria-label={`Select ${area.name}, or drag it onto the week`} title={`Select ${area.name}, or drag it onto the week`} onClick={onSelect}><span className="planner-area-icon">{renderAreaIcon(area.icon)}</span><span><strong>{area.name}</strong><small>{selected ? "Showing this area" : "Select or drag"}</small></span><i aria-hidden="true"><b /><b /><b /></i></button>
-    <button type="button" className="planner-source-settings" onClick={onConfigure}>Set schedule</button>
-  </div>;
-}
-
 function TaskDragItem({ task, area, project, canSchedule, onQueue }: { task: PlannerTask; area?: PlannerArea; project?: PlannerProject; canSchedule: boolean; onQueue: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `task:${task.id}`, data: { kind: "task", taskId: task.id } });
   return <div className={`planner-compact-source ${isDragging ? "dragging" : ""}`} ref={setNodeRef}><button type="button" className="planner-compact-drag" {...listeners} {...attributes} aria-label={`Drag ${task.title} into an ${area?.name ?? "area"} block`}><span><strong>{task.title}</strong><small>{project?.name ?? taskPlanningLabel(task)}</small></span></button><span className="planner-source-actions"><button type="button" className="planner-queue-button" disabled={!canSchedule} onClick={onQueue} aria-label={`Add ${task.title} to the ${area?.name ?? "area"} block queue`} title="Add to queue"><AddToQueueIcon /></button></span></div>;
@@ -138,7 +134,7 @@ function AreaBlockCard({ occurrence, area, items, tasks, routines, active, onOpe
   const displayEndTime = isResizing ? plannerTime(previewEndMinutes) : occurrence.endTime;
   const transform = moveTransform ? `translate3d(${moveTransform.x}px,${moveTransform.y}px,0)` : undefined;
   const firstUnfinishedIndex = active ? items.findIndex((item) => !plannerBlockItemDone(item, occurrence.date, tasks, routines)) : -1;
-  return <article ref={setMoveNodeRef} className={`planner-area-block ${isMoving ? "moving" : ""} ${isResizing ? "resizing" : ""}`} style={{ top, height, transform }}>
+  return <article ref={setMoveNodeRef} className={`planner-area-block ${active ? "active" : ""} ${isMoving ? "moving" : ""} ${isResizing ? "resizing" : ""}`} style={{ top, height, transform }}>
     <button type="button" className="planner-block-move" {...moveListeners} {...moveAttributes} aria-label={`Move this ${area.name} occurrence`} title="Drag to move this occurrence"><i /><i /><i /></button>
     <button type="button" className="planner-block-main" onClick={onOpen} aria-label={`${area.name}, ${formatPlannerTime(occurrence.startTime)} to ${formatPlannerTime(displayEndTime)}. Open this occurrence.`}><span className="planner-block-copy"><span className="planner-block-title"><strong>{area.name}</strong></span><small>{formatBlockTime(occurrence.startTime)}–{formatBlockTime(displayEndTime)}</small></span></button>
     <div className="planner-block-contents">{items.map((item, index) => { const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined; const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined; const done = plannerBlockItemDone(item, occurrence.date, tasks, routines); return <button type="button" className={`planner-block-item ${done ? "done" : ""}`} onClick={onOpen} key={item.id}><span>{!done && index === firstUnfinishedIndex ? "Now" : done ? "Done" : `${index + 1}`}</span><strong>{task?.title ?? routine?.name ?? "Unavailable item"}</strong></button>; })}</div>
@@ -146,9 +142,9 @@ function AreaBlockCard({ occurrence, area, items, tasks, routines, active, onOpe
   </article>;
 }
 
-function ScheduleEditor({ rule, areas, initialAreaId, today, onSave, onDelete, onClose }: { rule?: AreaBlockRule; areas: PlannerArea[]; initialAreaId?: string; today: string; onSave: (rule: AreaBlockRule) => string | null; onDelete?: () => void; onClose: () => void }) {
+function ScheduleEditor({ rule, areas, initialAreaId, initialDate, onSave, onDelete, onClose }: { rule?: AreaBlockRule; areas: PlannerArea[]; initialAreaId?: string; initialDate: string; onSave: (rule: AreaBlockRule) => string | null; onDelete?: () => void; onClose: () => void }) {
   const [areaId, setAreaId] = useState(rule?.areaId ?? initialAreaId ?? areas[0]?.id ?? "");
-  const [weekdays, setWeekdays] = useState<number[]>(rule?.weekdays ?? [plannerWeekday(today)]);
+  const [weekdays, setWeekdays] = useState<number[]>(rule?.weekdays ?? [plannerWeekday(initialDate)]);
   const [startTime, setStartTime] = useState(rule?.startTime ?? "09:00");
   const [endTime, setEndTime] = useState(rule?.endTime ?? "10:00");
   const [error, setError] = useState("");
@@ -160,12 +156,12 @@ function ScheduleEditor({ rule, areas, initialAreaId, today, onSave, onDelete, o
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSave) return;
-    const issue = onSave({ id: rule?.id ?? "", areaId, weekdays: [...weekdays].sort((a, b) => a - b), effectiveOn: rule?.effectiveOn ?? today, startTime, endTime });
+    const issue = onSave({ id: rule?.id ?? "", areaId, weekdays: [...weekdays].sort((a, b) => a - b), effectiveOn: rule?.effectiveOn ?? initialDate, startTime, endTime });
     if (issue) setError(issue);
   }
 
   return <form className="planner-editor" onSubmit={submit}>
-    <div className="planner-editor-heading"><div><h2>{rule ? "Edit weekly block" : "Set an area schedule"}</h2><p>{rule ? "Changes apply to the recurring series." : "Protect a dependable place for this area."}</p></div><button type="button" onClick={onClose} aria-label="Close schedule settings">Close</button></div>
+    <div className="planner-editor-heading"><div><h2>{rule ? "Edit weekly block" : "Add a weekly block"}</h2><p>{rule ? "Changes apply to this recurring series." : "An area can have multiple blocks per day when their times do not overlap."}</p></div><button type="button" onClick={onClose} aria-label="Close schedule settings">Close</button></div>
     <div className="planner-schedule-fields">
       <label className="planner-field"><span>Area</span><select required value={areaId} onChange={(event) => setAreaId(event.target.value)}>{areas.map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></label>
       <fieldset className="planner-days"><legend>Repeats</legend><div>{[1, 2, 3, 4, 5, 6, 0].map((day) => <button type="button" aria-pressed={weekdays.includes(day)} aria-label={DAY_NAMES[day]} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])} key={day}>{SHORT_DAY_NAMES[day].slice(0, 1)}</button>)}</div></fieldset>
@@ -173,11 +169,31 @@ function ScheduleEditor({ rule, areas, initialAreaId, today, onSave, onDelete, o
     </div>
     {duration < MIN_AREA_BLOCK_MINUTES && <p className="planner-form-error" role="alert">Area blocks need at least 30 minutes.</p>}
     {error && <p className="planner-form-error" role="alert">{error}</p>}
-    <div className="planner-editor-actions">{onDelete && <button type="button" className="planner-delete" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete" : "Delete schedule"}</button>}<span /><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="planner-save" disabled={!canSave}>{rule ? "Save series" : "Create schedule"}</button></div>
+    <div className="planner-editor-actions">{onDelete && <button type="button" className="planner-delete" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete" : "Delete schedule"}</button>}<span /><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="planner-save" disabled={!canSave}>{rule ? "Save series" : "Add block"}</button></div>
   </form>;
 }
 
-function OccurrenceEditor({ occurrence, today, currentMinutes, area, projects, tasks, routines, planner, onSave, onSkip, onEditSeries, onPlannerChange, onTaskChange, onRoutineSessionStatus, onClose, makeId }: { occurrence: AreaOccurrence; today: string; currentMinutes: number; area: PlannerArea; projects: PlannerProject[]; tasks: PlannerTask[]; routines: PlannerRoutine[]; planner: PlannerData; onSave: (date: string, startTime: string, endTime: string) => string | null; onSkip: () => void; onEditSeries: () => void; onPlannerChange: (planner: PlannerData) => void; onTaskChange: PlannerProps["onTaskChange"]; onRoutineSessionStatus: PlannerProps["onRoutineSessionStatus"]; onClose: () => void; makeId: PlannerProps["makeId"] }) {
+function DeadlineEditor({ task, area, project, onSave, onComplete, onClear, onClose }: { task: PlannerTask; area?: PlannerArea; project?: PlannerProject; onSave: (dueDate: string, dueTime?: string) => void; onComplete: () => void; onClear: () => void; onClose: () => void }) {
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [dueTime, setDueTime] = useState(task.dueTime ?? "");
+  const canSave = isPlannerDate(dueDate) && (!dueTime || isPlannerCalendarTime(dueTime));
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (canSave) onSave(dueDate, dueTime || undefined);
+  }
+
+  return <form className="planner-editor deadline-editor" onSubmit={submit}>
+    <div className="planner-editor-heading"><div><h2>{task.title}</h2><p>{project?.name ?? area?.name ?? "Inbox"} · Task deadline</p></div><button type="button" onClick={onClose} aria-label="Close task deadline editor">Close</button></div>
+    <div className="planner-schedule-fields">
+      <label className="planner-field"><span>Due date</span><input required type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+      <label className="planner-field"><span>Due time</span><input type="time" step="900" min={CALENDAR_START} max="22:45" value={dueTime} onChange={(event) => setDueTime(event.target.value)} /></label>
+    </div>
+    <div className="planner-editor-actions"><button type="button" className="planner-delete" onClick={onClear}>Remove deadline</button><span /><button type="button" onClick={onComplete}>Complete task</button><button type="submit" className="planner-save" disabled={!canSave}>Save task</button></div>
+  </form>;
+}
+
+function OccurrenceEditor({ occurrence, today, currentMinutes, area, projects, tasks, routines, planner, onSave, onSkip, onAddAnother, onEditSeries, onPlannerChange, onTaskChange, onRoutineSessionStatus, onClose, makeId }: { occurrence: AreaOccurrence; today: string; currentMinutes: number; area: PlannerArea; projects: PlannerProject[]; tasks: PlannerTask[]; routines: PlannerRoutine[]; planner: PlannerData; onSave: (date: string, startTime: string, endTime: string) => string | null; onSkip: () => void; onAddAnother: () => void; onEditSeries: () => void; onPlannerChange: (planner: PlannerData) => void; onTaskChange: PlannerProps["onTaskChange"]; onRoutineSessionStatus: PlannerProps["onRoutineSessionStatus"]; onClose: () => void; makeId: PlannerProps["makeId"] }) {
   const [date, setDate] = useState(occurrence.date);
   const [startTime, setStartTime] = useState(occurrence.startTime);
   const [endTime, setEndTime] = useState(occurrence.endTime);
@@ -209,9 +225,10 @@ function OccurrenceEditor({ occurrence, today, currentMinutes, area, projects, t
     const parsed = parsePlannerCandidate(candidate) as { kind: "task" | "routine"; itemId: string } | null;
     if (!parsed) return;
     const { kind, itemId } = parsed;
+    const alreadyInThisBlock = blockItems.some((item) => item.kind === kind && item.itemId === itemId);
     const placement = placePlannerBlockItem(planner, occurrence, kind, itemId, makeId("block-item")) as { planner: PlannerData; status: "added" | "exists" | "full" };
     if (placement.status === "exists") {
-      setError("That item is already in this block.");
+      setError(kind === "routine" && !alreadyInThisBlock ? "That routine is already scheduled in another block on this date." : "That item is already in this block.");
       return;
     }
     if (placement.status === "full") {
@@ -257,18 +274,18 @@ function OccurrenceEditor({ occurrence, today, currentMinutes, area, projects, t
     </section>
     <form className="planner-occurrence-form" onSubmit={saveOccurrence}><label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div><button type="submit" className="planner-inline-save">Save this occurrence</button></form>
     {error && <p className="planner-form-error" role="alert">{error}</p>}
-    <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete" onClick={() => confirmSkip ? onSkip() : setConfirmSkip(true)}>{confirmSkip ? "Confirm skip" : "Skip this block"}</button><span /><button type="button" onClick={onEditSeries}>Edit weekly schedule</button></div>
+    <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete" onClick={() => confirmSkip ? onSkip() : setConfirmSkip(true)}>{confirmSkip ? "Confirm skip" : "Skip this block"}</button><span /><button type="button" onClick={onAddAnother}>Add another block</button><button type="button" onClick={onEditSeries}>Edit weekly schedule</button></div>
   </div>;
 }
 
-export function Planner({ areas, projects, tasks, routines, planner, onChange, onTaskChange, onRoutineSessionStatus, makeId, renderAreaIcon, onNotice, onEditorOpenChange, session, onSessionChange, onManage, onCreateArea }: PlannerProps) {
+export function Planner({ areas, projects, tasks, routines, planner, onChange, onTaskChange, onRoutineSessionStatus, makeId, onNotice, onEditorOpenChange, session, onSessionChange, onManage, onCreateArea }: PlannerProps) {
   const compactLayout = useSyncExternalStore(subscribeCompactLayout, compactLayoutSnapshot, () => false);
   const workbenchVisible = session.workbenchOpen && (!compactLayout || session.workbenchPinned);
   const today = plannerDateKey();
   const anchorDate = session.anchorDate;
   const dates = plannerWeekDates(anchorDate);
   const selectedDate = dates.includes(session.selectedDate) ? session.selectedDate : dates[0];
-  const [editor, setEditor] = useState<{ kind: "series"; ruleId?: string; areaId?: string } | { kind: "occurrence"; occurrenceId: string } | null>(null);
+  const [editor, setEditor] = useState<PlannerEditor | null>(null);
   const [activeLabel, setActiveLabel] = useState("");
   const [areaCreatorOpen, setAreaCreatorOpen] = useState(false);
   const [areaName, setAreaName] = useState("");
@@ -330,6 +347,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   const occurrences = materializeAreaBlocks(planner, dates) as AreaOccurrence[];
   const editingRule = editor?.kind === "series" && editor.ruleId ? planner.areaBlockRules.find((rule) => rule.id === editor.ruleId) : undefined;
   const editingOccurrence = editor?.kind === "occurrence" ? occurrences.find((occurrence) => occurrence.id === editor.occurrenceId) : undefined;
+  const editingDeadlineTask = editor?.kind === "deadline" ? tasks.find((task) => task.id === editor.taskId) : undefined;
   const selectedArea = areas.find((area) => area.id === selectedAreaId) ?? areas[0];
   const selectedAreaProjects = projects.filter((project) => project.areaId === selectedArea?.id);
   const selectedAreaTasks = tasks.filter((task) => task.areaId === selectedArea?.id && task.status !== "done" && !task.waiting);
@@ -354,6 +372,10 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
     if (pendingScrollTopRef.current !== null) onSessionChangeRef.current({ calendarScrollTop: pendingScrollTopRef.current });
   }, []);
   const blockTarget = useMemo(() => selectedArea ? plannerBlockTarget(planner, selectedArea.id, today, currentMinutes) as { occurrence: AreaOccurrence; active: boolean } | null : null, [currentMinutes, planner, selectedArea, today]);
+
+  function openNewSeries(areaId: string | undefined, date: string) {
+    setEditor({ kind: "series", areaId, date });
+  }
 
   function publishCalendarScroll(scrollTop: number) {
     pendingScrollTopRef.current = scrollTop;
@@ -408,7 +430,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
       areaBlockRules: editingRule ? planner.areaBlockRules.map((item) => item.id === rule.id ? rule : item) : [...planner.areaBlockRules, rule],
       areaBlockExceptions: planner.areaBlockExceptions.filter((item) => item.ruleId !== rule.id || (item.occurrenceDate >= rule.effectiveOn && rule.weekdays.includes(plannerWeekday(item.occurrenceDate)))),
     };
-    if (next.areaBlockRules.some((item) => item.id !== rule.id && recurringAreaBlockRulesConflict(rule, item))) return "That time overlaps another area block. Leave the space open or choose a different time.";
+    if (next.areaBlockRules.some((item) => item.id !== rule.id && recurringAreaBlockRulesConflict(rule, item))) return "That time overlaps another block. The same area can have multiple blocks per day, but their times cannot overlap.";
     if (!commitPlanner(next)) return "Choose a valid block between 6 AM and 11 PM on the 15-minute grid.";
     setEditor(null);
     onNotice(editingRule ? "Weekly area schedule updated" : "Weekly area schedule created");
@@ -449,6 +471,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   }
 
   function addToOccurrence(occurrence: AreaOccurrence, kind: "task" | "routine", itemId: string) {
+    const alreadyInThisBlock = (plannerBlockItems(planner, occurrence) as BlockItem[]).some((item) => item.kind === kind && item.itemId === itemId);
     const placement = placePlannerBlockItem(planner, occurrence, kind, itemId, makeId("block-item")) as { planner: PlannerData; status: "added" | "exists" | "full" };
     if (placement.status === "full") {
       onSessionChange({ workbenchOpen: true, workbenchPinned: true, selectedAreaId: occurrence.areaId, selectedDate: occurrence.date, anchorDate: occurrence.date });
@@ -457,7 +480,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
       return false;
     }
     if (placement.status === "exists") {
-      onNotice("That item is already in this block");
+      onNotice(kind === "routine" && !alreadyInThisBlock ? "That routine is already scheduled in another block on this date" : "That item is already in this block");
       return false;
     }
     if (!commitPlanner(placement.planner)) return false;
@@ -511,25 +534,6 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
       addToOccurrence(occurrence, "routine", routine.id);
       return;
     }
-    const areaId = active.areaId;
-    if (active.kind !== "area" || !areaId) return;
-    if (over.minutes + 60 > END_HOUR * 60) {
-      onNotice("Drop the area earlier so its 60-minute block ends by 11 PM");
-      return;
-    }
-    const startTime = plannerTime(over.minutes);
-    const endTime = plannerTime(over.minutes + 60);
-    const rule: AreaBlockRule = { id: makeId("area-block"), areaId, weekdays: [plannerWeekday(over.date)], effectiveOn: over.date, startTime, endTime };
-    const next = { ...planner, areaBlockRules: [...planner.areaBlockRules, rule] };
-    const nextOccurrences = materializeAreaBlocks(next, dates);
-    const candidate = nextOccurrences.find((item) => item.ruleId === rule.id);
-    if (candidate && areaBlockConflict(candidate, nextOccurrences, candidate.id)) {
-      onNotice("That time is already protected by another area");
-      return;
-    }
-    if (!commitPlanner(next)) return;
-    setEditor({ kind: "series", ruleId: rule.id });
-    onNotice("Weekly block added — adjust the series if needed");
   }
 
   function openTargetForArea(areaId?: string, item?: { kind: "task" | "routine"; itemId: string }) {
@@ -544,6 +548,32 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
     else setEditor({ kind: "occurrence", occurrenceId: target.occurrence.id });
   }
 
+  function openDeadlineTask(task: PlannerTask, date: string) {
+    onSessionChange({ selectedAreaId: task.areaId ?? selectedAreaId, selectedProjectId: task.projectId ?? "", selectedDate: date, workbenchOpen: true, workbenchPinned: true });
+    setEditor({ kind: "deadline", taskId: task.id });
+  }
+
+  function saveDeadline(dueDate: string, dueTime?: string) {
+    if (!editingDeadlineTask) return;
+    onTaskChange(editingDeadlineTask.id, { dueDate, dueTime });
+    setEditor(null);
+    onNotice("Task deadline updated");
+  }
+
+  function completeDeadline() {
+    if (!editingDeadlineTask) return;
+    onTaskChange(editingDeadlineTask.id, { status: "done" });
+    setEditor(null);
+    onNotice("Task completed");
+  }
+
+  function clearDeadline() {
+    if (!editingDeadlineTask) return;
+    onTaskChange(editingDeadlineTask.id, { dueDate: undefined, dueTime: undefined });
+    setEditor(null);
+    onNotice("Task deadline removed");
+  }
+
   function createArea(event: FormEvent) {
     event.preventDefault();
     const name = areaName.trim();
@@ -555,8 +585,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
 
   function handleDragStart(event: DragStartEvent) {
     const data = event.active.data.current as PlannerDragData | undefined;
-    if (data?.kind === "area") setActiveLabel(areas.find((area) => area.id === data.areaId)?.name ?? "Area block");
-    else if (data?.kind === "task") setActiveLabel(tasks.find((task) => task.id === data.taskId)?.title ?? "Task deadline");
+    if (data?.kind === "task") setActiveLabel(tasks.find((task) => task.id === data.taskId)?.title ?? "Task deadline");
     else if (data?.kind === "routine") setActiveLabel(routines.find((routine) => routine.id === data.routineId)?.name ?? "Routine");
     else if (data?.occurrence) setActiveLabel(areas.find((area) => area.id === data.occurrence?.areaId)?.name ?? "Area block");
   }
@@ -566,41 +595,45 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
       <header className="planner-toolbar">
         <div className="planner-toolbar-title"><button ref={workbenchToggleRef} type="button" className="planner-workbench-toggle" aria-label={workbenchVisible ? "Hide workbench" : "Show workbench"} aria-controls="planner-workbench" aria-expanded={workbenchVisible} onClick={() => onSessionChange({ workbenchOpen: !workbenchVisible, workbenchPinned: true })}><span aria-hidden="true" /><span>{workbenchVisible ? "Hide workbench" : "Show workbench"}</span></button><div><strong>Today</strong><small>{formatWeekRange(dates)}</small></div></div>
         <div className="planner-week-controls"><button type="button" onClick={() => changeWeek(-1)} aria-label="Previous week"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 5-5 5 5 5" /></svg></button><button type="button" className="planner-range" onClick={returnToToday}>{dates.includes(today) ? "This week" : formatWeekRange(dates)}</button><button type="button" onClick={() => changeWeek(1)} aria-label="Next week"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 5 5 5-5 5" /></svg></button></div>
-        <div className="planner-toolbar-actions"><button type="button" onClick={returnToToday}>Return to today</button><button type="button" className="primary" onClick={() => { onSessionChange({ workbenchOpen: true, workbenchPinned: true }); setEditor({ kind: "series", areaId: selectedArea?.id }); }}>New block</button></div>
+        <div className="planner-toolbar-actions"><button type="button" onClick={returnToToday}>Return to today</button><button type="button" className="primary" onClick={() => { onSessionChange({ workbenchOpen: true, workbenchPinned: true }); openNewSeries(selectedArea?.id, selectedDate); }}>Add block</button></div>
       </header>
       <div className="planner-mobile-days" role="tablist" aria-label="Days in this week">{dates.map((date) => <button type="button" role="tab" aria-selected={selectedDate === date} className={selectedDate === date ? "active" : ""} onClick={() => onSessionChange({ selectedDate: date })} key={date}><span>{SHORT_DAY_NAMES[plannerWeekday(date)]}</span><strong>{formatDateNumber(date)}</strong></button>)}</div>
       <div className="planner-layout">
         <aside ref={workbenchRef} id="planner-workbench" className="planner-workbench" role="dialog" tabIndex={-1} aria-modal={compactLayout || undefined} aria-label="Calendar workbench" aria-hidden={!workbenchVisible}>
-          <div className="planner-workbench-head"><div><h2>{editor?.kind === "occurrence" ? "This block" : editor?.kind === "series" ? "Area schedule" : "Choose the work"}</h2><p>{editor ? "Adjust the calendar without leaving Today." : "Keep the calendar clear while work stays close at hand."}</p></div><button type="button" onClick={() => { setEditor(null); onSessionChange({ workbenchOpen: false }); }} aria-label="Close workbench">Close</button></div>
-          {editor?.kind === "series" && <ScheduleEditor key={editingRule?.id ?? editor.areaId ?? "new"} rule={editingRule} areas={areas} initialAreaId={editor.areaId} today={today} onSave={saveRule} onDelete={editingRule ? deleteRule : undefined} onClose={() => setEditor(null)} />}
-          {editor?.kind === "occurrence" && editingOccurrence && <OccurrenceEditor key={`${editingOccurrence.id}:${editingOccurrence.date}:${editingOccurrence.startTime}:${editingOccurrence.endTime}`} occurrence={editingOccurrence} today={today} currentMinutes={currentMinutes} area={areas.find((area) => area.id === editingOccurrence.areaId)!} projects={projects} tasks={tasks} routines={routines} planner={planner} onSave={(date, startTime, endTime) => upsertOccurrenceException(editingOccurrence, date, startTime, endTime)} onSkip={() => skipOccurrence(editingOccurrence)} onEditSeries={() => setEditor({ kind: "series", ruleId: editingOccurrence.ruleId })} onPlannerChange={(next) => { commitPlanner(next); }} onTaskChange={onTaskChange} onRoutineSessionStatus={onRoutineSessionStatus} onClose={() => setEditor(null)} makeId={makeId} />}
+          {editor?.kind === "deadline" && editingDeadlineTask && <DeadlineEditor key={editingDeadlineTask.id} task={editingDeadlineTask} area={areas.find((area) => area.id === editingDeadlineTask.areaId)} project={projects.find((project) => project.id === editingDeadlineTask.projectId)} onSave={saveDeadline} onComplete={completeDeadline} onClear={clearDeadline} onClose={() => setEditor(null)} />}
+          {editor?.kind === "series" && <ScheduleEditor key={editingRule?.id ?? `${editor.areaId ?? "new"}:${editor.date}`} rule={editingRule} areas={areas} initialAreaId={editor.areaId} initialDate={editor.date ?? editingRule?.effectiveOn ?? selectedDate} onSave={saveRule} onDelete={editingRule ? deleteRule : undefined} onClose={() => setEditor(null)} />}
+          {editor?.kind === "occurrence" && editingOccurrence && <OccurrenceEditor key={`${editingOccurrence.id}:${editingOccurrence.date}:${editingOccurrence.startTime}:${editingOccurrence.endTime}`} occurrence={editingOccurrence} today={today} currentMinutes={currentMinutes} area={areas.find((area) => area.id === editingOccurrence.areaId)!} projects={projects} tasks={tasks} routines={routines} planner={planner} onSave={(date, startTime, endTime) => upsertOccurrenceException(editingOccurrence, date, startTime, endTime)} onSkip={() => skipOccurrence(editingOccurrence)} onAddAnother={() => openNewSeries(editingOccurrence.areaId, editingOccurrence.date)} onEditSeries={() => setEditor({ kind: "series", ruleId: editingOccurrence.ruleId })} onPlannerChange={(next) => { commitPlanner(next); }} onTaskChange={onTaskChange} onRoutineSessionStatus={onRoutineSessionStatus} onClose={() => setEditor(null)} makeId={makeId} />}
           {!editor && selectedArea && <div className="planner-workbench-context">
-            <div className="planner-context-controls"><label><span>Area</span><select value={selectedArea.id} onChange={(event) => onSessionChange({ selectedAreaId: event.target.value, selectedProjectId: "" })}>{areas.map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></label><label><span>Project</span><select value={selectedProjectId} onChange={(event) => onSessionChange({ selectedProjectId: event.target.value, queue: "work" })}><option value="">All projects</option>{selectedAreaProjects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div>
-            <div className="planner-manage-row"><span>{blockTarget ? blockTarget.active ? "This area owns the current block." : `Next block · ${blockTarget.occurrence.date}` : "No upcoming block for this area."}</span><div className="planner-manage-actions"><button type="button" onClick={() => onManage(selectedProjectId ? { kind: "project", id: selectedProjectId } : { kind: "area", id: selectedArea.id })}>Manage {selectedProjectId ? "project" : "area"}</button><button type="button" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen}>{areaCreatorOpen ? "Cancel" : "New area"}</button></div></div>
+            <section className="planner-context-card" aria-label="Current planning context">
+              <div className="planner-context-controls"><label><span>Area</span><select value={selectedArea.id} onChange={(event) => onSessionChange({ selectedAreaId: event.target.value, selectedProjectId: "" })}>{areas.map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></label><label><span>Project</span><select value={selectedProjectId} onChange={(event) => onSessionChange({ selectedProjectId: event.target.value, queue: "work" })}><option value="">All projects</option>{selectedAreaProjects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div>
+              <div className="planner-manage-row"><span>{blockTarget ? blockTarget.active ? "This area owns the current block." : `Next block · ${blockTarget.occurrence.date}` : "No upcoming block for this area."}</span><div className="planner-manage-actions"><button type="button" onClick={() => onManage(selectedProjectId ? { kind: "project", id: selectedProjectId } : { kind: "area", id: selectedArea.id })}>Manage {selectedProjectId ? "project" : "area"}</button><button type="button" className="planner-schedule-action" onClick={() => openNewSeries(selectedArea.id, selectedDate)}>Add block</button><button type="button" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen}>{areaCreatorOpen ? "Cancel" : "New area"}</button></div></div>
+            </section>
             {areaCreatorOpen && <form className="planner-area-create" onSubmit={createArea}><input value={areaName} onChange={(event) => setAreaName(event.target.value)} placeholder="Area name" aria-label="New area name" /><button type="submit" disabled={!areaName.trim()}>Create</button></form>}
-            <div className="planner-area-source"><AreaDragItem area={selectedArea} selected renderAreaIcon={renderAreaIcon} onSelect={() => {}} onConfigure={() => setEditor({ kind: "series", areaId: selectedArea.id })} /></div>
-            <nav className="planner-queue-tabs" aria-label="Workbench queues">{([['work', 'Work', projectTasks.length], ['backlog', 'Backlog', backlogTasks.length], ['waiting', 'Waiting', waitingTasks.length], ['routines', 'Routines', selectedAreaRoutines.length]] as Array<[PlannerQueue, string, number]>).map(([queue, label, count]) => <button type="button" aria-current={session.queue === queue ? "page" : undefined} className={session.queue === queue ? "active" : ""} onClick={() => onSessionChange({ queue })} key={queue}><span>{label}</span><small>{count}</small></button>)}</nav>
+            <nav className="planner-queue-tabs" aria-label="Workbench queues">{([['work', 'Tasks', projectTasks.length], ['backlog', 'Backlog', backlogTasks.length], ['waiting', 'Waiting', waitingTasks.length], ['routines', 'Routines', selectedAreaRoutines.length]] as Array<[PlannerQueue, string, number]>).map(([queue, label, count]) => <button type="button" aria-current={session.queue === queue ? "page" : undefined} className={session.queue === queue ? "active" : ""} onClick={() => onSessionChange({ queue })} key={queue}><span>{label}</span><small>{count}</small></button>)}</nav>
             <div className="planner-queue-content">
               {session.queue === "work" && (projectTasks.length ? projectTasks.map((task) => <TaskDragItem task={task} area={selectedArea} project={projects.find((project) => project.id === task.projectId)} canSchedule={Boolean(blockTarget)} onQueue={() => openTargetForArea(selectedArea.id, { kind: "task", itemId: task.id })} key={task.id} />) : <div className="planner-queue-empty"><strong>No actionable project work.</strong><p>Manage the area or choose another project when the queue needs attention.</p></div>)}
               {session.queue === "backlog" && (backlogTasks.length ? backlogTasks.map((task) => <TaskDragItem task={task} area={selectedArea} canSchedule={Boolean(blockTarget)} onQueue={() => openTargetForArea(selectedArea.id, { kind: "task", itemId: task.id })} key={task.id} />) : <div className="planner-queue-empty"><strong>The area backlog is clear.</strong><p>Capture new ideas in Inbox and give them a home during review.</p></div>)}
               {session.queue === "waiting" && (waitingTasks.length ? waitingTasks.map((task) => <div className="planner-waiting-source" key={task.id}><span><strong>{task.title}</strong><small>{task.projectId ? projects.find((project) => project.id === task.projectId)?.name : "Area waiting"}</small></span><button type="button" onClick={() => onTaskChange(task.id, { waiting: undefined })}>Resume</button></div>) : <div className="planner-queue-empty"><strong>Nothing is waiting.</strong><p>Blocked work stays out of scheduling until it is ready again.</p></div>)}
               {session.queue === "routines" && (selectedAreaRoutines.length ? selectedAreaRoutines.map((routine) => <RoutineDragItem routine={routine} canSchedule={Boolean(blockTarget)} onQueue={() => openTargetForArea(selectedArea.id, { kind: "routine", itemId: routine.id })} key={routine.id} />) : <div className="planner-queue-empty"><strong>No routines in this area.</strong><p>Add durable practices from the area management view.</p></div>)}
             </div>
-            {!blockTarget && <button type="button" className="planner-create-first-block" onClick={() => setEditor({ kind: "series", areaId: selectedArea.id })}>Create a block for {selectedArea.name}</button>}
+            {!blockTarget && <button type="button" className="planner-create-first-block" onClick={() => openNewSeries(selectedArea.id, selectedDate)}>Create a block for {selectedArea.name}</button>}
           </div>}
           {!editor && !selectedArea && <div className="planner-workbench-context planner-empty-workbench"><div className="planner-queue-empty"><strong>Create your first area.</strong><p>Areas give calendar blocks and work queues a durable home.</p></div><button type="button" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen}>{areaCreatorOpen ? "Cancel" : "New area"}</button>{areaCreatorOpen && <form className="planner-area-create" onSubmit={createArea}><input value={areaName} onChange={(event) => setAreaName(event.target.value)} placeholder="Area name" aria-label="New area name" /><button type="submit" disabled={!areaName.trim()}>Create</button></form>}</div>}
         </aside>
         {workbenchVisible && <button type="button" className="planner-workbench-scrim" aria-label="Close workbench" onClick={() => onSessionChange({ workbenchOpen: false, workbenchPinned: true })} />}
         <section className="planner-calendar" aria-label={`Week of ${dates[0]}`}>
           <div className="planner-calendar-head"><div className="planner-time-head">Time</div>{dates.map((date) => <div className={`planner-day-head ${date === today ? "today" : ""} ${date === selectedDate ? "selected" : ""}`} key={date}><span>{SHORT_DAY_NAMES[plannerWeekday(date)]}</span><strong>{formatDateNumber(date)}</strong></div>)}</div>
-          <div className="planner-deadline-row"><div className="planner-all-day-label">Due</div>{dates.map((date) => <div className={`planner-all-day-cell ${date === selectedDate ? "selected" : ""}`} key={date}>{tasks.filter((task) => task.status !== "done" && task.dueDate === date && !task.dueTime).slice(0, 2).map((task) => <span title={task.title} key={task.id}>{task.title}</span>)}{tasks.filter((task) => task.status !== "done" && task.dueDate === date && !task.dueTime).length > 2 && <small>+{tasks.filter((task) => task.status !== "done" && task.dueDate === date && !task.dueTime).length - 2} more</small>}</div>)}</div>
+          <div className="planner-deadline-row"><div className="planner-all-day-label">Due</div>{dates.map((date) => {
+            const allDayTasks = tasks.filter((task) => task.status !== "done" && task.dueDate === date && !task.dueTime);
+            return <div className={`planner-all-day-cell ${date === selectedDate ? "selected" : ""}`} key={date}>{allDayTasks.slice(0, 2).map((task) => <button type="button" onClick={() => openDeadlineTask(task, date)} title={`Edit deadline for ${task.title}`} key={task.id}>{task.title}</button>)}{allDayTasks.length > 2 && <small>+{allDayTasks.length - 2} more</small>}</div>;
+          })}</div>
           <div className="planner-calendar-body" ref={calendarBodyRef} onScroll={(event) => publishCalendarScroll(event.currentTarget.scrollTop)}><div className="planner-time-rail">{hours.map((hour) => <span style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MINUTE }} key={hour}>{formatPlannerTime(`${String(hour).padStart(2, "0")}:00`)}</span>)}</div>
             <div className="planner-days-grid">{dates.map((date) => <div className={`planner-day ${date === today ? "today" : ""} ${date === selectedDate ? "selected" : ""}`} data-date={date} key={date}>{hours.slice(0, -1).map((hour) => <div className="planner-hour-line" style={{ top: (hour - START_HOUR) * 60 * PIXELS_PER_MINUTE }} key={hour} />)}{slots.map((minutes) => <DropSlot date={date} minutes={minutes} key={minutes} />)}{date === today && currentMinutes >= START_HOUR * 60 && currentMinutes <= END_HOUR * 60 && <div className="planner-now-line" style={{ top: (currentMinutes - START_HOUR * 60) * PIXELS_PER_MINUTE }}><span /></div>}{occurrences.filter((item) => item.date === date).map((occurrence) => {
               const area = areas.find((item) => item.id === occurrence.areaId);
               if (!area) return null;
               const active = occurrence.date === today && plannerMinutes(occurrence.startTime) <= currentMinutes && plannerMinutes(occurrence.endTime) > currentMinutes;
-              return <AreaBlockCard occurrence={occurrence} area={area} items={plannerBlockItems(planner, occurrence) as BlockItem[]} tasks={tasks} routines={routines} active={active} onOpen={() => { onSessionChange({ selectedAreaId: occurrence.areaId, selectedProjectId: "", workbenchOpen: true, workbenchPinned: true }); setEditor({ kind: "occurrence", occurrenceId: occurrence.id }); }} key={occurrence.id} />;
-            })}{tasks.filter((task) => task.status !== "done" && task.dueDate === date && task.dueTime).map((task) => { const inAreaBlock = occurrences.some((occurrence) => occurrence.date === date && occurrence.areaId === task.areaId && task.dueTime! >= occurrence.startTime && task.dueTime! < occurrence.endTime); return <button type="button" className={`planner-orphan-deadline ${inAreaBlock ? "in-block" : ""}`} style={{ top: (plannerMinutes(task.dueTime!) - START_HOUR * 60) * PIXELS_PER_MINUTE }} onClick={() => openTargetForArea(task.areaId)} title={inAreaBlock ? "Deadline inside this area block" : "This deadline falls outside an area block"} key={task.id}><time>{formatPlannerTime(task.dueTime!)}</time><span>{task.title}</span></button>; })}</div>)}</div>
+              return <AreaBlockCard occurrence={occurrence} area={area} items={plannerBlockItems(planner, occurrence) as BlockItem[]} tasks={tasks} routines={routines} active={active} onOpen={() => { onSessionChange({ selectedAreaId: occurrence.areaId, selectedProjectId: "", selectedDate: occurrence.date, workbenchOpen: true, workbenchPinned: true }); setEditor({ kind: "occurrence", occurrenceId: occurrence.id }); }} key={occurrence.id} />;
+            })}{tasks.filter((task) => task.status !== "done" && task.dueDate === date && task.dueTime).map((task) => { const inAreaBlock = occurrences.some((occurrence) => occurrence.date === date && occurrence.areaId === task.areaId && task.dueTime! >= occurrence.startTime && task.dueTime! < occurrence.endTime); return <button type="button" className={`planner-orphan-deadline ${inAreaBlock ? "in-block" : ""}`} style={{ top: (plannerMinutes(task.dueTime!) - START_HOUR * 60) * PIXELS_PER_MINUTE }} onClick={() => openDeadlineTask(task, date)} aria-label={`${task.title}, due ${formatPlannerTime(task.dueTime!)}. Edit task deadline.`} title={inAreaBlock ? "Edit task deadline inside this area block" : "Edit task deadline outside an area block"} key={task.id}><time>{formatPlannerTime(task.dueTime!)}</time><span>{task.title}</span></button>; })}</div>)}</div>
           </div>
         </section>
       </div>

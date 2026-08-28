@@ -157,19 +157,35 @@ test("parses planner candidate IDs at only the first colon", () => {
   assert.equal(parsePlannerCandidate("task:"), null);
 });
 
-test("rejects overlapping planner rules and overrides while allowing adjacency", () => {
+test("rejects overlapping same-area planner rules and overrides while allowing adjacency", () => {
   const recurringOverlap = plannerFixture();
-  recurringOverlap.areaBlockRules.push({ id: "family-overlap", areaId: "family", weekdays: [3], effectiveOn: "2026-08-24", startTime: "11:45", endTime: "13:00" });
+  recurringOverlap.areaBlockRules.push({ id: "trading-overlap", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "11:45", endTime: "13:00" });
   assert.equal(normalizePlanner(recurringOverlap, ...plannerMaps), null);
 
+  const crossAreaOverlap = plannerFixture();
+  crossAreaOverlap.areaBlockRules.push({ id: "family-overlap", areaId: "family", weekdays: [3], effectiveOn: "2026-08-24", startTime: "11:45", endTime: "13:00" });
+  assert.equal(normalizePlanner(crossAreaOverlap, ...plannerMaps), null);
+
   const adjacent = plannerFixture();
-  adjacent.areaBlockRules.push({ id: "family-adjacent", areaId: "family", weekdays: [3], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "13:00" });
+  adjacent.areaBlockRules.push({ id: "trading-adjacent", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "12:00", endTime: "13:00" });
   assert.ok(normalizePlanner(adjacent, ...plannerMaps));
 
   const overrideOverlap = plannerFixture();
   overrideOverlap.areaBlockRules.push({ id: "family-thursday", areaId: "family", weekdays: [4], effectiveOn: "2026-08-24", startTime: "15:00", endTime: "17:00" });
   overrideOverlap.areaBlockExceptions = [{ id: "move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "14:00", endTime: "16:00" }];
   assert.equal(normalizePlanner(overrideOverlap, ...plannerMaps), null);
+});
+
+test("allows the same area to have multiple non-overlapping blocks on one day", () => {
+  const source = plannerFixture();
+  source.areaBlockRules[0] = { ...source.areaBlockRules[0], weekdays: [3], startTime: "07:00", endTime: "10:00" };
+  source.areaBlockRules.push({ id: "trading-afternoon", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "16:00", endTime: "18:00" });
+  const normalized = normalizePlanner(source, ...plannerMaps);
+  assert.ok(normalized);
+  assert.deepEqual(materializeAreaBlocks(normalized, ["2026-08-26"]).map(({ areaId, startTime, endTime }) => ({ areaId, startTime, endTime })), [
+    { areaId: "trading", startTime: "07:00", endTime: "10:00" },
+    { areaId: "trading", startTime: "16:00", endTime: "18:00" },
+  ]);
 });
 
 test("rejects duplicate, cross-area, skipped, or overfull block work", () => {
@@ -256,6 +272,26 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /TouchSensor/);
   assert.match(plannerView, /KeyboardSensor/);
   assert.match(plannerView, /Add to block/);
+  assert.match(plannerView, /active \? "active" : ""/);
+  assert.match(plannerView, /planner-context-card/);
+  assert.match(plannerView, /\['work', 'Tasks', projectTasks\.length\]/);
+  assert.match(plannerView, /Add another block/);
+  assert.match(plannerView, /multiple blocks per day/);
+  assert.match(plannerView, /onOpen=\{\(\) => \{ onSessionChange\(\{ selectedAreaId: occurrence\.areaId, selectedProjectId: "", selectedDate: occurrence\.date, workbenchOpen: true, workbenchPinned: true \}\); setEditor\(\{ kind: "occurrence", occurrenceId: occurrence\.id \}\); \}\}/);
+  assert.match(plannerView, /planner-create-first-block" onClick=\{\(\) => openNewSeries\(selectedArea\.id, selectedDate\)\}/);
+  assert.doesNotMatch(plannerView, /setEditor\(\{ kind: "series", areaId: selectedArea\.id \}\)/);
+  assert.match(plannerView, /That routine is already scheduled in another block on this date/);
+  assert.match(plannerView, /That item is already in this block/);
+  assert.match(plannerView, /function DeadlineEditor/);
+  assert.match(plannerView, /onClick=\{\(\) => openDeadlineTask\(task, date\)\}/);
+  assert.doesNotMatch(plannerView, /onClick=\{\(\) => openTargetForArea\(task\.areaId\)\}/);
+  assert.doesNotMatch(plannerView, />New block<\/button>/);
+  assert.doesNotMatch(plannerView, /planner-context-area-icon|renderAreaIcon/);
+  assert.match(plannerStyles, /\.planner-area-block\.active\{/);
+  assert.match(plannerStyles, /\.planner-context-card\{display:grid;/);
+  assert.match(plannerStyles, /\.planner-queue-content\{display:grid;align-content:start;min-height:170px\}/);
+  assert.match(plannerStyles, /grid-template-rows:44px minmax\(38px,auto\)/);
+  assert.match(plannerStyles, /\.planner-day-head\{display:flex;/);
   assert.match(plannerStyles, /prefers-reduced-motion:reduce/);
 });
 
@@ -276,7 +312,9 @@ test("server-renders the application shell", async () => {
   const html = await response.text();
   assert.match(html, /Mission Control/);
   assert.match(html, /Today/);
-  assert.match(html, /Choose the work/);
+  assert.match(html, /Workbench queues/);
+  assert.match(html, /All projects/);
+  assert.doesNotMatch(html, /Choose the work|Keep the calendar clear while work stays close at hand/);
   assert.doesNotMatch(html, /Areas and projects/);
   assert.doesNotMatch(html, />Planner</);
 });
