@@ -3,6 +3,8 @@ export const PLANNER_SNAP_MINUTES = 15;
 export const MIN_AREA_BLOCK_MINUTES = 30;
 export const PLANNER_START_MINUTES = 6 * 60;
 export const PLANNER_END_MINUTES = 23 * 60;
+export const AREA_BLOCK_FILLS = ["sage", "sky", "sand", "rose", "lilac", "slate"];
+export const DEFAULT_AREA_BLOCK_FILL = "sage";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -33,6 +35,10 @@ export function isPlannerCalendarTime(value, allowEnd = false) {
 
 export function isPlannerDeadline(dueDate, dueTime) {
   return dueTime === undefined || (isPlannerDate(dueDate) && isPlannerCalendarTime(dueTime));
+}
+
+export function isAreaBlockFill(value) {
+  return AREA_BLOCK_FILLS.includes(value);
 }
 
 export function plannerMinutes(value) {
@@ -102,8 +108,9 @@ function normalizeRule(value, areaIds) {
   const weekdays = normalizeWeekdays(value.weekdays);
   if (!weekdays || !isPlannerDate(value.effectiveOn) || !isPlannerCalendarTime(value.startTime) || !isPlannerCalendarTime(value.endTime, true)) return null;
   if (value.endsOn !== undefined && (!isPlannerDate(value.endsOn) || value.endsOn < value.effectiveOn)) return null;
+  if (value.fill !== undefined && !isAreaBlockFill(value.fill)) return null;
   if (plannerMinutes(value.endTime) - plannerMinutes(value.startTime) < MIN_AREA_BLOCK_MINUTES) return null;
-  return { id: value.id, areaId: value.areaId, weekdays, effectiveOn: value.effectiveOn, ...(value.endsOn ? { endsOn: value.endsOn } : {}), startTime: value.startTime, endTime: value.endTime };
+  return { id: value.id, areaId: value.areaId, weekdays, effectiveOn: value.effectiveOn, ...(value.endsOn ? { endsOn: value.endsOn } : {}), startTime: value.startTime, endTime: value.endTime, fill: value.fill ?? DEFAULT_AREA_BLOCK_FILL };
 }
 
 export function recurringAreaBlockRulesConflict(left, right) {
@@ -210,6 +217,53 @@ export function plannerBlockItems(planner, occurrence) {
   return planner.blockItems.filter((item) => item.ruleId === occurrence.ruleId && item.occurrenceDate === occurrence.sourceDate);
 }
 
+function isOccurrenceException(exception, occurrence) {
+  return exception.ruleId === occurrence.ruleId && exception.occurrenceDate === occurrence.sourceDate;
+}
+
+export function plannerAfterRuleDelete(planner, ruleId) {
+  return {
+    areaBlockRules: planner.areaBlockRules.filter((rule) => rule.id !== ruleId),
+    areaBlockExceptions: planner.areaBlockExceptions.filter((exception) => exception.ruleId !== ruleId),
+    blockItems: planner.blockItems.filter((item) => item.ruleId !== ruleId),
+  };
+}
+
+export function plannerAfterOccurrenceUpdate(planner, occurrence, date, startTime, endTime, fill, exceptionId) {
+  const rule = planner.areaBlockRules.find((item) => item.id === occurrence.ruleId);
+  if (!rule) return planner;
+  const remainingExceptions = planner.areaBlockExceptions.filter((item) => !isOccurrenceException(item, occurrence));
+  const followsRule = date === occurrence.sourceDate && startTime === rule.startTime && endTime === rule.endTime;
+  const existingException = planner.areaBlockExceptions.find((item) => isOccurrenceException(item, occurrence));
+  const areaBlockExceptions = followsRule ? remainingExceptions : [...remainingExceptions, {
+    id: existingException?.id ?? exceptionId,
+    ruleId: occurrence.ruleId,
+    occurrenceDate: occurrence.sourceDate,
+    kind: "override",
+    date,
+    startTime,
+    endTime,
+  }];
+  return {
+    ...planner,
+    areaBlockRules: planner.areaBlockRules.map((item) => item.id === occurrence.ruleId ? { ...item, fill } : item),
+    areaBlockExceptions,
+  };
+}
+
+export function plannerAfterOccurrenceDelete(planner, occurrence, exceptionId) {
+  const rule = planner.areaBlockRules.find((item) => item.id === occurrence.ruleId);
+  if (!rule) return planner;
+  if (rule.endsOn === rule.effectiveOn) return plannerAfterRuleDelete(planner, rule.id);
+  const existingException = planner.areaBlockExceptions.find((item) => isOccurrenceException(item, occurrence));
+  const skip = { id: existingException?.id ?? exceptionId, ruleId: occurrence.ruleId, occurrenceDate: occurrence.sourceDate, kind: "skip" };
+  return {
+    ...planner,
+    areaBlockExceptions: [...planner.areaBlockExceptions.filter((item) => !isOccurrenceException(item, occurrence)), skip],
+    blockItems: planner.blockItems.filter((item) => !(item.ruleId === occurrence.ruleId && item.occurrenceDate === occurrence.sourceDate)),
+  };
+}
+
 export function isFinalRoutineSessionStatus(status) {
   return status === "completed" || status === "skipped" || status === "missed";
 }
@@ -254,11 +308,11 @@ export function materializeAreaBlocks(planner, dateKeys) {
   for (const rule of planner.areaBlockRules) {
     for (const sourceDate of dateKeys) {
       if (!plannerRuleOccursOn(rule, sourceDate)) continue;
-      const exception = exceptions.get(`${rule.id}:${sourceDate}`);
+      const exception = exceptions.get(plannerOccurrenceId(rule.id, sourceDate));
       if (exception?.kind === "skip") continue;
       const occurrence = exception?.kind === "override"
-        ? { id: plannerOccurrenceId(rule.id, sourceDate), ruleId: rule.id, sourceDate, areaId: rule.areaId, date: exception.date, startTime: exception.startTime, endTime: exception.endTime, exception: true }
-        : { id: plannerOccurrenceId(rule.id, sourceDate), ruleId: rule.id, sourceDate, areaId: rule.areaId, date: sourceDate, startTime: rule.startTime, endTime: rule.endTime, exception: false };
+        ? { id: plannerOccurrenceId(rule.id, sourceDate), ruleId: rule.id, sourceDate, areaId: rule.areaId, date: exception.date, startTime: exception.startTime, endTime: exception.endTime, fill: rule.fill ?? DEFAULT_AREA_BLOCK_FILL, exception: true }
+        : { id: plannerOccurrenceId(rule.id, sourceDate), ruleId: rule.id, sourceDate, areaId: rule.areaId, date: sourceDate, startTime: rule.startTime, endTime: rule.endTime, fill: rule.fill ?? DEFAULT_AREA_BLOCK_FILL, exception: false };
       if (visibleDates.has(occurrence.date)) occurrences.push(occurrence);
     }
   }
@@ -266,7 +320,7 @@ export function materializeAreaBlocks(planner, dateKeys) {
     if (exception.kind !== "override" || !visibleDates.has(exception.date) || visibleDates.has(exception.occurrenceDate)) continue;
     const rule = planner.areaBlockRules.find((item) => item.id === exception.ruleId);
     if (!rule || !plannerRuleOccursOn(rule, exception.occurrenceDate)) continue;
-    occurrences.push({ id: plannerOccurrenceId(rule.id, exception.occurrenceDate), ruleId: rule.id, sourceDate: exception.occurrenceDate, areaId: rule.areaId, date: exception.date, startTime: exception.startTime, endTime: exception.endTime, exception: true });
+    occurrences.push({ id: plannerOccurrenceId(rule.id, exception.occurrenceDate), ruleId: rule.id, sourceDate: exception.occurrenceDate, areaId: rule.areaId, date: exception.date, startTime: exception.startTime, endTime: exception.endTime, fill: rule.fill ?? DEFAULT_AREA_BLOCK_FILL, exception: true });
   }
   return occurrences.sort((left, right) => left.date.localeCompare(right.date) || left.startTime.localeCompare(right.startTime));
 }

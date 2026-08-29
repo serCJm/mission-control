@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
-import { isFinalRoutineSessionStatus, materializeAreaBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerBlockItems, plannerBlockTarget } from "../app/planner-schema.mjs";
+import { AREA_BLOCK_FILLS, DEFAULT_AREA_BLOCK_FILL, isFinalRoutineSessionStatus, materializeAreaBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerAfterOccurrenceDelete, plannerAfterOccurrenceUpdate, plannerAfterRuleDelete, plannerBlockItems, plannerBlockTarget } from "../app/planner-schema.mjs";
 import { normalizeRoutine, reconcileRoutine, routineDateKey } from "../app/routine-schema.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "../app/task-schema.mjs";
@@ -73,6 +73,80 @@ test("stores an ordered This block list against the original occurrence", () => 
   assert.ok(normalized);
   const occurrence = materializeAreaBlocks(normalized, ["2026-08-26"])[0];
   assert.deepEqual(plannerBlockItems(normalized, occurrence).map((item) => item.id), ["one", "two"]);
+});
+
+test("normalizes schedule fills and applies them to every occurrence", () => {
+  assert.deepEqual(AREA_BLOCK_FILLS, ["sage", "sky", "sand", "rose", "lilac", "slate"]);
+  assert.equal(DEFAULT_AREA_BLOCK_FILL, "sage");
+
+  const legacy = normalizePlanner(plannerFixture(), ...plannerMaps);
+  assert.ok(legacy);
+  assert.equal(legacy.areaBlockRules[0].fill, "sage");
+
+  const source = plannerFixture();
+  source.areaBlockRules[0].fill = "rose";
+  const normalized = normalizePlanner(source, ...plannerMaps);
+  assert.ok(normalized);
+  assert.deepEqual(materializeAreaBlocks(normalized, ["2026-08-26", "2026-08-28"]).map((occurrence) => occurrence.fill), ["rose", "rose"]);
+
+  source.areaBlockExceptions = [
+    { id: "visible-source", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "13:00", endTime: "15:00" },
+    { id: "off-week", ruleId: "trading-mwf", occurrenceDate: "2026-08-28", kind: "override", date: "2026-09-03", startTime: "13:00", endTime: "15:00" },
+  ];
+  const moved = normalizePlanner(source, ...plannerMaps);
+  assert.ok(moved);
+  assert.equal(materializeAreaBlocks(moved, ["2026-08-26", "2026-08-27"])[0].fill, "rose");
+  assert.equal(materializeAreaBlocks(moved, ["2026-09-03"])[0].fill, "rose");
+
+  source.areaBlockRules[0].fill = "neon";
+  assert.equal(normalizePlanner(source, ...plannerMaps), null);
+});
+
+test("fill-only occurrence edits continue following the recurring rule", () => {
+  const source = plannerFixture();
+  const occurrence = materializeAreaBlocks(source, ["2026-08-26"])[0];
+  const fillOnly = plannerAfterOccurrenceUpdate(source, occurrence, occurrence.sourceDate, "10:00", "12:00", "sky", "area-block-exception-1770000000000-abc12");
+  assert.equal(fillOnly.areaBlockRules[0].fill, "sky");
+  assert.deepEqual(fillOnly.areaBlockExceptions, []);
+
+  const moved = structuredClone(source);
+  moved.areaBlockExceptions = [{ id: "existing-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "13:00", endTime: "15:00" }];
+  const movedOccurrence = materializeAreaBlocks(moved, ["2026-08-27"])[0];
+  const restored = plannerAfterOccurrenceUpdate(moved, movedOccurrence, movedOccurrence.sourceDate, "10:00", "12:00", "rose", "unused");
+  assert.equal(restored.areaBlockRules[0].fill, "rose");
+  assert.deepEqual(restored.areaBlockExceptions, []);
+});
+
+test("occurrence edits materialize changed times and preserve independent exceptions", () => {
+  const source = plannerFixture([
+    { id: "target-queue", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-1" },
+    { id: "later-queue", ruleId: "trading-mwf", occurrenceDate: "2026-08-28", kind: "task", itemId: "task-2" },
+    { id: "unrelated-queue", ruleId: "family-thursday", occurrenceDate: "2026-08-27", kind: "task", itemId: "task-family" },
+  ]);
+  source.areaBlockRules.push({ id: "family-thursday", areaId: "family", weekdays: [4], effectiveOn: "2026-08-24", startTime: "15:00", endTime: "17:00" });
+  source.areaBlockExceptions = [{ id: "later-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-28", kind: "override", date: "2026-08-29", startTime: "14:00", endTime: "16:00" }];
+  const occurrence = materializeAreaBlocks(source, ["2026-08-26"])[0];
+  const updated = plannerAfterOccurrenceUpdate(source, occurrence, "2026-08-26", "13:00", "15:00", "sky", "changed-time");
+
+  assert.deepEqual(updated.areaBlockExceptions, [
+    source.areaBlockExceptions[0],
+    { id: "changed-time", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-26", startTime: "13:00", endTime: "15:00" },
+  ]);
+  assert.deepEqual(updated.blockItems, source.blockItems);
+  assert.deepEqual(materializeAreaBlocks(updated, ["2026-08-26"])[0], {
+    id: "trading-mwf:2026-08-26", ruleId: "trading-mwf", sourceDate: "2026-08-26", areaId: "trading", date: "2026-08-26", startTime: "13:00", endTime: "15:00", fill: "sky", exception: true,
+  });
+});
+
+test("fill-only edits preserve an already moved occurrence", () => {
+  const source = plannerFixture();
+  const existingMove = { id: "existing-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "13:00", endTime: "15:00" };
+  source.areaBlockExceptions = [existingMove];
+  const occurrence = materializeAreaBlocks(source, ["2026-08-27"])[0];
+  const updated = plannerAfterOccurrenceUpdate(source, occurrence, occurrence.date, occurrence.startTime, occurrence.endTime, "rose", "unused");
+
+  assert.equal(updated.areaBlockRules[0].fill, "rose");
+  assert.deepEqual(updated.areaBlockExceptions, [existingMove]);
 });
 
 test("targets the active area block before the next matching block", () => {
@@ -249,6 +323,50 @@ test("keeps override block work attached to its recurring source date", () => {
   assert.deepEqual(plannerBlockItems(placed.planner, occurrence).map((item) => item.id), ["placed"]);
 });
 
+test("deletes only the requested occurrence or the complete requested rule", () => {
+  const recurring = plannerFixture([
+    { id: "target", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-1" },
+    { id: "later", ruleId: "trading-mwf", occurrenceDate: "2026-08-28", kind: "task", itemId: "task-2" },
+  ]);
+  recurring.areaBlockExceptions = [
+    { id: "target-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "10:00", endTime: "12:00" },
+    { id: "later-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-28", kind: "override", date: "2026-08-29", startTime: "10:00", endTime: "12:00" },
+  ];
+  const unrelatedRule = { id: "family-thursday", areaId: "family", weekdays: [4], effectiveOn: "2026-08-24", startTime: "15:00", endTime: "17:00" };
+  const unrelatedException = { id: "family-move", ruleId: "family-thursday", occurrenceDate: "2026-08-27", kind: "override", date: "2026-08-28", startTime: "15:00", endTime: "17:00" };
+  const unrelatedItem = { id: "family-item", ruleId: "family-thursday", occurrenceDate: "2026-08-27", kind: "task", itemId: "task-family" };
+  recurring.areaBlockRules.push(unrelatedRule);
+  recurring.areaBlockExceptions.push(unrelatedException);
+  recurring.blockItems.push(unrelatedItem);
+  const occurrence = materializeAreaBlocks(recurring, ["2026-08-27"])[0];
+  const oneOccurrenceDeleted = plannerAfterOccurrenceDelete(recurring, occurrence, "new-skip");
+  assert.deepEqual(oneOccurrenceDeleted.areaBlockRules, recurring.areaBlockRules);
+  assert.deepEqual(oneOccurrenceDeleted.areaBlockExceptions, [
+    recurring.areaBlockExceptions[1],
+    unrelatedException,
+    { id: "target-move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "skip" },
+  ]);
+  assert.deepEqual(oneOccurrenceDeleted.blockItems, [recurring.blockItems[1], unrelatedItem]);
+
+  const normalOccurrence = materializeAreaBlocks(recurring, ["2026-09-02"])[0];
+  const generatedSkipId = "area-block-exception-1770000000000-abc12";
+  const normalOccurrenceDeleted = plannerAfterOccurrenceDelete(recurring, normalOccurrence, generatedSkipId);
+  assert.deepEqual(normalOccurrenceDeleted.areaBlockRules, recurring.areaBlockRules);
+  assert.deepEqual(normalOccurrenceDeleted.areaBlockExceptions, [
+    ...recurring.areaBlockExceptions,
+    { id: generatedSkipId, ruleId: "trading-mwf", occurrenceDate: "2026-09-02", kind: "skip" },
+  ]);
+  assert.deepEqual(normalOccurrenceDeleted.blockItems, recurring.blockItems);
+
+  const oneTime = structuredClone(recurring);
+  oneTime.areaBlockRules[0] = { ...oneTime.areaBlockRules[0], weekdays: [3], effectiveOn: "2026-08-26", endsOn: "2026-08-26" };
+  oneTime.areaBlockExceptions = [{ id: "move", ruleId: "trading-mwf", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-27", startTime: "10:00", endTime: "12:00" }, unrelatedException];
+  oneTime.blockItems = [oneTime.blockItems[0], unrelatedItem];
+  const oneTimeOccurrence = materializeAreaBlocks(oneTime, ["2026-08-27"])[0];
+  assert.deepEqual(plannerAfterOccurrenceDelete(oneTime, oneTimeOccurrence, "unused"), { areaBlockRules: [unrelatedRule], areaBlockExceptions: [unrelatedException], blockItems: [unrelatedItem] });
+  assert.deepEqual(plannerAfterRuleDelete(recurring, "trading-mwf"), { areaBlockRules: [unrelatedRule], areaBlockExceptions: [unrelatedException], blockItems: [unrelatedItem] });
+});
+
 test("only finalized routine sessions complete planner work", () => {
   assert.equal(isFinalRoutineSessionStatus("pending"), false);
   for (const status of ["completed", "skipped", "missed"]) assert.equal(isFinalRoutineSessionStatus(status), true);
@@ -305,31 +423,107 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, />One time<\/button>/);
   assert.match(plannerView, />Repeats weekly<\/button>/);
   assert.match(plannerView, /frequency === "once" \? \{ endsOn: date \} : \{\}/);
-  assert.match(plannerView, />Edit block settings<\/button>/);
+  assert.match(plannerView, /function ScheduleOverview/);
+  assert.match(plannerView, /function BlockFillPicker/);
+  assert.match(plannerView, /All blocks in schedule/);
+  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\} time block<\/h2><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
+  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{rule \? existingOneTimeBlock/);
+  assert.doesNotMatch(plannerView, /className="planner-fill-picker"|<strong>Block fill<\/strong>/);
+  assert.match(plannerView, /className=\{`planner-fill-menu fill-\$\{value\}`\}/);
+  assert.match(plannerView, /<summary aria-label=\{`Choose block fill\. \$\{AREA_BLOCK_FILL_LABELS\[value\]\} selected\. \$\{scope\}`\}/);
+  assert.match(plannerView, /className=\{`planner-fill-option fill-\$\{option\.value\}`\}/);
+  assert.match(plannerView, /pickerRef\.current\?\.removeAttribute\("open"\)/);
+  assert.doesNotMatch(plannerView, /<select value=\{value\} aria-label=\{`Block fill/);
+  assert.match(plannerView, /planner-area-block fill-\$\{occurrence\.fill\}/);
+  assert.match(plannerView, /plannerAfterOccurrenceUpdate\(planner, occurrence, date, startTime, endTime, fill/);
+  assert.match(plannerView, /planner-schedule-row-icon fill-\$\{rule\.fill\}/);
+  assert.match(plannerView, /const exceptionsByOccurrence = useMemo\(\(\) => new Map\(exceptions\.map/);
+  assert.match(plannerView, /const orderedRules = useMemo\(\(\) => \[\.\.\.rules\]\.sort/);
+  assert.match(plannerView, /const scheduleRules = useMemo\(\(\) => scheduleArea \? planner\.areaBlockRules\.filter/);
+  assert.match(plannerView, /const WORKBENCH_DATE_FORMATTER = new Intl\.DateTimeFormat/);
+  assert.match(plannerView, /return WORKBENCH_DATE_FORMATTER\.format/);
+  assert.doesNotMatch(plannerView, /exceptions\.find\(\(item\) => item\.ruleId === rule\.id/);
+  assert.match(plannerView, /const skipped = exception\?\.kind === "skip"/);
+  assert.match(plannerView, /Skipped · edit to restore/);
+  assert.match(plannerView, /oneTime && !skipped \? onEditOccurrence\(plannerOccurrenceId\(rule\.id, rule\.effectiveOn\), date\) : onEditSeries\(rule\.id\)/);
+  assert.match(plannerView, /restoringSkippedOneTime/);
+  assert.match(plannerView, /item\.kind === "skip" && item\.occurrenceDate === editingRule\?\.effectiveOn/);
+  assert.match(plannerView, /kind: "schedule"; areaId: string/);
+  assert.match(plannerView, /aria-label="Open area workspace"/);
+  assert.match(plannerView, /aria-label="Open project workspace"/);
+  assert.match(plannerView, /aria-label=\{areaCreatorOpen \? "Close new area form" : "New area"\}/);
+  assert.match(plannerView, /<WorkspaceIcon \/><\/button>/);
+  assert.doesNotMatch(plannerView, /SettingsIcon|Area settings|Project settings|areaCreatorOpen \? "Cancel" : "New"/);
+  assert.match(plannerView, /<CalendarIcon \/>View schedule/);
+  assert.match(plannerView, /<PlusIcon \/>New block/);
+  assert.match(plannerView, /Delete this block only/);
+  assert.match(plannerView, /Delete repeating schedule/);
+  assert.match(plannerView, /Confirm delete repeating schedule/);
+  assert.match(plannerView, /Confirm this block only/);
+  assert.match(plannerView, /function deleteOccurrence/);
+  assert.match(plannerView, /plannerAfterOccurrenceDelete/);
+  assert.match(plannerView, /focusAfterDelete/);
+  assert.match(plannerView, /\.planner-schedule-empty \.planner-schedule-new/);
+  assert.match(plannerView, /className="planner-schedule-new planner-button-with-icon" onClick=\{onAdd\}><PlusIcon \/>New block<\/button><\/div>/);
+  assert.doesNotMatch(plannerView, />Manage(?:\s|<)/);
+  assert.doesNotMatch(plannerView, /Edit block settings|Skip this block|<EditIcon \/>Edit block|View \{selectedArea\.name\} schedule/);
+  assert.doesNotMatch(plannerView, /area management view/);
+  assert.doesNotMatch(plannerView, /into an \$\{area\?\.name \?\? "area"\} block|area block queue/);
+  assert.match(plannerView, /previousEditorOpen/);
+  assert.match(plannerView, /const FOCUSABLE_SELECTOR = 'button:not\(:disabled\), summary, select:not\(:disabled\), input:not\(:disabled\):not\(\[type="hidden"\]\), \[tabindex\]:not\(\[tabindex="-1"\]\):not\(:disabled\)'/);
+  assert.match(plannerView, /function focusableElements\(container: ParentNode \| null\)/);
+  assert.match(plannerView, /ancestor\.tagName === "DETAILS" && !ancestor\.hasAttribute\("open"\) && !\(element\.tagName === "SUMMARY" && element\.parentElement === ancestor\)/);
+  assert.match(plannerView, /target = focusableElements\(workbench\?\.querySelector<HTMLElement>\('\.planner-editor'\) \?\? null\)\[0\]/);
+  assert.match(plannerView, /const focusable = focusableElements\(workbench\)/);
+  assert.match(plannerView, /const areaSelect = workbench\?\.querySelector<HTMLElement>\('#planner-area-select'\)/);
+  assert.match(plannerView, /target = areaSelect && focusable\.includes\(areaSelect\) \? areaSelect : focusable\[0\]/);
+  assert.doesNotMatch(plannerView, /#planner-area-select, button:not\(:disabled\)/);
   assert.match(plannerView, /planner-context-card/);
   assert.match(plannerView, /\['work', 'Tasks', projectTasks\.length\]/);
-  assert.match(plannerView, /Add another block/);
+  assert.match(plannerView, /function QueueIcon/);
+  assert.match(plannerView, /aria-label=\{`\$\{label\}: \$\{count\} \$\{count === 1 \? "item" : "items"\}`\}/);
+  assert.doesNotMatch(plannerView, /planner-queue-label/);
   assert.match(plannerView, /multiple blocks per day/);
   assert.match(plannerView, /onOpen=\{\(\) => \{ onSessionChange\(\{ selectedAreaId: occurrence\.areaId, selectedProjectId: "", selectedDate: occurrence\.date, workbenchOpen: true, workbenchPinned: true \}\); setEditor\(\{ kind: "occurrence", occurrenceId: occurrence\.id \}\); \}\}/);
-  assert.match(plannerView, /planner-create-first-block" onClick=\{\(\) => openNewSeries\(selectedArea\.id, selectedDate\)\}/);
+  assert.doesNotMatch(plannerView, /planner-create-first-block/);
   assert.doesNotMatch(plannerView, /setEditor\(\{ kind: "series", areaId: selectedArea\.id \}\)/);
   assert.match(plannerView, /That routine is already scheduled in another block on this date/);
   assert.match(plannerView, /That item is already in this block/);
   assert.match(plannerView, /function DeadlineEditor/);
   assert.match(plannerView, /onClick=\{\(\) => openDeadlineTask\(task, date\)\}/);
   assert.doesNotMatch(plannerView, /onClick=\{\(\) => openTargetForArea\(task\.areaId\)\}/);
-  assert.doesNotMatch(plannerView, />New block<\/button>/);
+  assert.match(plannerView, /planner-schedule-overview/);
   assert.doesNotMatch(plannerView, /planner-context-area-icon|renderAreaIcon/);
   assert.match(plannerStyles, /\.planner-area-block\.active\{/);
+  assert.match(plannerStyles, /\.planner-editor-title-row\{[^}]*align-items:center/);
+  assert.doesNotMatch(plannerStyles, /\.planner-fill-picker\{/);
+  assert.match(plannerStyles, /\.fill-rose\{/);
+  assert.match(plannerStyles, /\.fill-lilac\{/);
+  assert.match(plannerStyles, /\.planner-fill-menu>summary:focus-visible\{/);
+  assert.match(plannerStyles, /\.planner-fill-palette\{/);
+  assert.match(plannerStyles, /\.planner-fill-option\[aria-pressed="true"\]\{/);
+  assert.doesNotMatch(plannerStyles, /planner-fill-control/);
+  assert.doesNotMatch(plannerStyles, /planner-fill-choice/);
   assert.match(plannerStyles, /\.planner-area-block\.compact \.planner-block-copy\{display:flex;/);
   assert.match(plannerStyles, /\.planner-block-overflow\{/);
   assert.match(plannerStyles, /\.planner-frequency button\[aria-pressed="true"\]/);
   assert.match(plannerStyles, /\.planner-context-card\{display:grid;/);
+  assert.match(plannerStyles, /\.planner-queue-tabs\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:6px\}/);
+  assert.match(plannerStyles, /\.planner-queue-icon svg\{width:19px;height:19px/);
+  assert.match(plannerStyles, /\.planner-schedule-row\{/);
+  assert.doesNotMatch(plannerStyles, /planner-schedule-overview-link/);
+  assert.match(plannerStyles, /\.planner-context-label \.planner-label-action\{min-width:44px;min-height:44px/);
   assert.match(plannerStyles, /\.planner-queue-content\{display:grid;align-content:start;min-height:170px\}/);
-  assert.match(plannerStyles, /grid-template-rows:44px minmax\(38px,auto\)/);
+  assert.match(plannerView, /planner-toolbar-actions"><button type="button" onClick=\{returnToToday\}>Return to today<\/button><\/div>/);
+  assert.doesNotMatch(plannerView, /planner-toolbar-actions"[^\n]*>Add block<\/button>/);
+  assert.match(plannerView, /className="planner-calendar-top"/);
+  assert.match(plannerStyles, /grid-template-rows:minmax\(82px,auto\) minmax\(0,1fr\)/);
+  assert.match(plannerStyles, /\.planner-calendar-top\{[^}]*overflow-y:scroll;[^}]*scrollbar-gutter:stable/);
+  assert.match(plannerStyles, /\.planner-calendar-body\{[^}]*scrollbar-gutter:stable/);
   assert.match(plannerStyles, /\.planner-day-head\{display:flex;/);
   assert.match(plannerStyles, /prefers-reduced-motion:reduce/);
   assert.match(route, /effectiveOn: string; endsOn\?: string;/);
+  assert.match(route, /fill: "sage" \| "sky" \| "sand" \| "rose" \| "lilac" \| "slate"/);
 });
 
 test("area, project, Today, and Review speak one execution language", () => {
