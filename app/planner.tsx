@@ -2,13 +2,13 @@
 
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, KeyboardSensor, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { areaBlockConflict, formatPlannerTime, isFinalRoutineSessionStatus, isPlannerCalendarTime, isPlannerDate, materializeAreaBlocks, MIN_AREA_BLOCK_MINUTES, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, PLANNER_END_MINUTES, PLANNER_START_MINUTES, PLANNER_TIME_ZONE, plannerBlockItems, plannerBlockTarget, plannerDateKey, plannerMinutes, plannerTime, plannerWeekDates, plannerWeekday, recurringAreaBlockRulesConflict, shiftPlannerDate } from "./planner-schema.mjs";
+import { areaBlockConflict, formatPlannerTime, isFinalRoutineSessionStatus, isPlannerCalendarTime, isPlannerDate, materializeAreaBlocks, MIN_AREA_BLOCK_MINUTES, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, PLANNER_END_MINUTES, PLANNER_START_MINUTES, PLANNER_TIME_ZONE, plannerBlockItems, plannerBlockTarget, plannerDateKey, plannerMinutes, plannerRuleOccursOn, plannerTime, plannerWeekDates, plannerWeekday, recurringAreaBlockRulesConflict, shiftPlannerDate } from "./planner-schema.mjs";
 
 export type PlannerArea = { id: string; name: string; icon: string };
 export type PlannerProject = { id: string; areaId: string; name: string; outcome: string };
 export type PlannerTask = { id: string; title: string; areaId?: string; projectId?: string; status: "todo" | "doing" | "done"; dueDate?: string; dueTime?: string; priority?: "low" | "medium" | "high"; someday?: boolean; waiting?: boolean };
 export type PlannerRoutine = { id: string; areaId: string; name: string; expectedMinutes: number; sessions: Array<{ date: string; status: "pending" | "completed" | "skipped" | "missed" }> };
-export type AreaBlockRule = { id: string; areaId: string; weekdays: number[]; effectiveOn: string; startTime: string; endTime: string };
+export type AreaBlockRule = { id: string; areaId: string; weekdays: number[]; effectiveOn: string; endsOn?: string; startTime: string; endTime: string };
 export type AreaBlockException = { id: string; ruleId: string; occurrenceDate: string; kind: "skip" | "override"; date?: string; startTime?: string; endTime?: string };
 export type BlockItem = { id: string; ruleId: string; occurrenceDate: string; kind: "task" | "routine"; itemId: string };
 export type PlannerData = { areaBlockRules: AreaBlockRule[]; areaBlockExceptions: AreaBlockException[]; blockItems: BlockItem[] };
@@ -155,33 +155,39 @@ function AreaBlockCard({ occurrence, area, items, tasks, routines, active, onOpe
 }
 
 function ScheduleEditor({ rule, areas, initialAreaId, initialDate, onSave, onDelete, onClose }: { rule?: AreaBlockRule; areas: PlannerArea[]; initialAreaId?: string; initialDate: string; onSave: (rule: AreaBlockRule) => string | null; onDelete?: () => void; onClose: () => void }) {
+  const existingOneTimeBlock = Boolean(rule?.endsOn && rule.endsOn === rule.effectiveOn);
+  const [frequency, setFrequency] = useState<"once" | "weekly">(existingOneTimeBlock ? "once" : "weekly");
   const [areaId, setAreaId] = useState(rule?.areaId ?? initialAreaId ?? areas[0]?.id ?? "");
   const [weekdays, setWeekdays] = useState<number[]>(rule?.weekdays ?? [plannerWeekday(initialDate)]);
+  const [date, setDate] = useState(rule?.effectiveOn ?? initialDate);
   const [startTime, setStartTime] = useState(rule?.startTime ?? "09:00");
   const [endTime, setEndTime] = useState(rule?.endTime ?? "10:00");
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const validTimes = isPlannerCalendarTime(startTime) && isPlannerCalendarTime(endTime, true);
   const duration = validTimes ? plannerMinutes(endTime) - plannerMinutes(startTime) : 0;
-  const canSave = Boolean(areaId && weekdays.length && validTimes && duration >= MIN_AREA_BLOCK_MINUTES);
+  const validSchedule = frequency === "once" ? isPlannerDate(date) : weekdays.length > 0;
+  const canSave = Boolean(areaId && validSchedule && validTimes && duration >= MIN_AREA_BLOCK_MINUTES);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!canSave) return;
-    const issue = onSave({ id: rule?.id ?? "", areaId, weekdays: [...weekdays].sort((a, b) => a - b), effectiveOn: rule?.effectiveOn ?? initialDate, startTime, endTime });
+    const effectiveOn = frequency === "once" ? date : rule?.effectiveOn ?? initialDate;
+    const issue = onSave({ id: rule?.id ?? "", areaId, weekdays: frequency === "once" ? [plannerWeekday(date)] : [...weekdays].sort((a, b) => a - b), effectiveOn, ...(frequency === "once" ? { endsOn: date } : {}), startTime, endTime });
     if (issue) setError(issue);
   }
 
   return <form className="planner-editor" onSubmit={submit}>
-    <div className="planner-editor-heading"><div><h2>{rule ? "Edit weekly block" : "Add a weekly block"}</h2><p>{rule ? "Changes apply to this recurring series." : "An area can have multiple blocks per day when their times do not overlap."}</p></div><button type="button" onClick={onClose} aria-label="Close schedule settings">Close</button></div>
+    <div className="planner-editor-heading"><div><h2>{rule ? existingOneTimeBlock ? "Edit one-time block" : "Edit weekly block" : "Add a block"}</h2><p>{rule ? existingOneTimeBlock ? "Changes apply only to this block." : "Changes apply to this recurring series." : "Choose one date or a weekly rhythm."}</p></div><button type="button" onClick={onClose} aria-label="Close schedule settings">Close</button></div>
     <div className="planner-schedule-fields">
       <label className="planner-field"><span>Area</span><select required value={areaId} onChange={(event) => setAreaId(event.target.value)}>{areas.map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></label>
-      <fieldset className="planner-days"><legend>Repeats</legend><div>{[1, 2, 3, 4, 5, 6, 0].map((day) => <button type="button" aria-pressed={weekdays.includes(day)} aria-label={DAY_NAMES[day]} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])} key={day}>{SHORT_DAY_NAMES[day].slice(0, 1)}</button>)}</div></fieldset>
+      {!rule && <fieldset className="planner-frequency"><legend>Schedule</legend><div><button type="button" aria-pressed={frequency === "once"} onClick={() => setFrequency("once")}>One time</button><button type="button" aria-pressed={frequency === "weekly"} onClick={() => setFrequency("weekly")}>Repeats weekly</button></div></fieldset>}
+      {frequency === "once" ? <label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label> : <fieldset className="planner-days"><legend>Repeats</legend><div>{[1, 2, 3, 4, 5, 6, 0].map((day) => <button type="button" aria-pressed={weekdays.includes(day)} aria-label={DAY_NAMES[day]} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])} key={day}>{SHORT_DAY_NAMES[day].slice(0, 1)}</button>)}</div></fieldset>}
       <div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div>
     </div>
     {duration < MIN_AREA_BLOCK_MINUTES && <p className="planner-form-error" role="alert">Area blocks need at least 30 minutes.</p>}
     {error && <p className="planner-form-error" role="alert">{error}</p>}
-    <div className="planner-editor-actions">{onDelete && <button type="button" className="planner-delete" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete" : "Delete schedule"}</button>}<span /><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="planner-save" disabled={!canSave}>{rule ? "Save series" : "Add block"}</button></div>
+    <div className="planner-editor-actions">{onDelete && <button type="button" className="planner-delete" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}>{confirmDelete ? "Confirm delete" : existingOneTimeBlock ? "Delete block" : "Delete schedule"}</button>}<span /><button type="button" onClick={onClose}>Cancel</button><button type="submit" className="planner-save" disabled={!canSave}>{rule ? existingOneTimeBlock ? "Save block" : "Save series" : frequency === "once" ? "Add once" : "Add weekly"}</button></div>
   </form>;
 }
 
@@ -286,7 +292,7 @@ function OccurrenceEditor({ occurrence, today, currentMinutes, area, projects, t
     </section>
     <form className="planner-occurrence-form" onSubmit={saveOccurrence}><label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div><button type="submit" className="planner-inline-save">Save this occurrence</button></form>
     {error && <p className="planner-form-error" role="alert">{error}</p>}
-    <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete" onClick={() => confirmSkip ? onSkip() : setConfirmSkip(true)}>{confirmSkip ? "Confirm skip" : "Skip this block"}</button><span /><button type="button" onClick={onAddAnother}>Add another block</button><button type="button" onClick={onEditSeries}>Edit weekly schedule</button></div>
+    <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete" onClick={() => confirmSkip ? onSkip() : setConfirmSkip(true)}>{confirmSkip ? "Confirm skip" : "Skip this block"}</button><span /><button type="button" onClick={onAddAnother}>Add another block</button><button type="button" onClick={onEditSeries}>Edit block settings</button></div>
   </div>;
 }
 
@@ -436,16 +442,17 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
     const rule = { ...draft, id: draft.id || makeId("area-block") };
     const items = planner.blockItems.filter((item) => item.ruleId === rule.id);
     if (editingRule && rule.areaId !== editingRule.areaId && items.length) return "Clear scheduled work before assigning this series to another area.";
-    if (items.some((item) => item.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(item.occurrenceDate)))) return "Clear This block on days you are taking out of this schedule first.";
+    if (items.some((item) => !plannerRuleOccursOn(rule, item.occurrenceDate))) return "Clear This block on days you are taking out of this schedule first.";
     const next = {
       ...planner,
       areaBlockRules: editingRule ? planner.areaBlockRules.map((item) => item.id === rule.id ? rule : item) : [...planner.areaBlockRules, rule],
-      areaBlockExceptions: planner.areaBlockExceptions.filter((item) => item.ruleId !== rule.id || (item.occurrenceDate >= rule.effectiveOn && rule.weekdays.includes(plannerWeekday(item.occurrenceDate)))),
+      areaBlockExceptions: planner.areaBlockExceptions.filter((item) => item.ruleId !== rule.id || plannerRuleOccursOn(rule, item.occurrenceDate)),
     };
     if (next.areaBlockRules.some((item) => item.id !== rule.id && recurringAreaBlockRulesConflict(rule, item))) return "That time overlaps another block. The same area can have multiple blocks per day, but their times cannot overlap.";
     if (!commitPlanner(next)) return "Choose a valid block between 6 AM and 11 PM on the 15-minute grid.";
     setEditor(null);
-    onNotice(editingRule ? "Weekly area schedule updated" : "Weekly area schedule created");
+    const oneTime = rule.endsOn === rule.effectiveOn;
+    onNotice(editingRule ? oneTime ? "One-time area block updated" : "Weekly area schedule updated" : oneTime ? "One-time area block created" : "Weekly area schedule created");
     return null;
   }
 

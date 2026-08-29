@@ -89,6 +89,32 @@ test("targets the active area block before the next matching block", () => {
   assert.equal(areaMismatch?.occurrence.date, "2026-08-27");
 });
 
+test("materializes one-time blocks only on their selected date", () => {
+  const source = plannerFixture();
+  source.areaBlockRules = [{ ...source.areaBlockRules[0], weekdays: [3], effectiveOn: "2026-08-26", endsOn: "2026-08-26" }];
+  const normalized = normalizePlanner(source, ...plannerMaps);
+  assert.ok(normalized);
+  assert.equal(normalized.areaBlockRules[0].endsOn, "2026-08-26");
+  assert.deepEqual(materializeAreaBlocks(normalized, ["2026-08-26", "2026-09-02"]).map((item) => item.date), ["2026-08-26"]);
+
+  const invalidWork = plannerFixture([{ id: "later", ruleId: "trading-mwf", occurrenceDate: "2026-09-02", kind: "task", itemId: "task-1" }]);
+  invalidWork.areaBlockRules = source.areaBlockRules;
+  assert.equal(normalizePlanner(invalidWork, ...plannerMaps), null);
+});
+
+test("allows matching one-time slots on different dates without hiding real conflicts", () => {
+  const separateDates = plannerFixture();
+  separateDates.areaBlockRules = [
+    { id: "first", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-26", endsOn: "2026-08-26", startTime: "10:00", endTime: "12:00" },
+    { id: "second", areaId: "trading", weekdays: [3], effectiveOn: "2026-09-02", endsOn: "2026-09-02", startTime: "10:00", endTime: "12:00" },
+  ];
+  assert.ok(normalizePlanner(separateDates, ...plannerMaps));
+
+  const sameDate = structuredClone(separateDates);
+  sameDate.areaBlockRules[1] = { ...sameDate.areaBlockRules[1], effectiveOn: "2026-08-26", endsOn: "2026-08-26" };
+  assert.equal(normalizePlanner(sameDate, ...plannerMaps), null);
+});
+
 test("adds and caps ordered block queue work without duplicates", () => {
   const occurrence = materializeAreaBlocks(plannerFixture(), ["2026-08-26"])[0];
   const first = placePlannerBlockItem(plannerFixture(), occurrence, "task", "task-1", "one");
@@ -276,6 +302,10 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /function visiblePlannerBlockItemCount/);
   assert.match(plannerView, /const compact = height < 90/);
   assert.match(plannerView, /className="planner-block-overflow" aria-label=\{`\$\{overflow\} more queued`\}/);
+  assert.match(plannerView, />One time<\/button>/);
+  assert.match(plannerView, />Repeats weekly<\/button>/);
+  assert.match(plannerView, /frequency === "once" \? \{ endsOn: date \} : \{\}/);
+  assert.match(plannerView, />Edit block settings<\/button>/);
   assert.match(plannerView, /planner-context-card/);
   assert.match(plannerView, /\['work', 'Tasks', projectTasks\.length\]/);
   assert.match(plannerView, /Add another block/);
@@ -293,11 +323,13 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerStyles, /\.planner-area-block\.active\{/);
   assert.match(plannerStyles, /\.planner-area-block\.compact \.planner-block-copy\{display:flex;/);
   assert.match(plannerStyles, /\.planner-block-overflow\{/);
+  assert.match(plannerStyles, /\.planner-frequency button\[aria-pressed="true"\]/);
   assert.match(plannerStyles, /\.planner-context-card\{display:grid;/);
   assert.match(plannerStyles, /\.planner-queue-content\{display:grid;align-content:start;min-height:170px\}/);
   assert.match(plannerStyles, /grid-template-rows:44px minmax\(38px,auto\)/);
   assert.match(plannerStyles, /\.planner-day-head\{display:flex;/);
   assert.match(plannerStyles, /prefers-reduced-motion:reduce/);
+  assert.match(route, /effectiveOn: string; endsOn\?: string;/);
 });
 
 test("area, project, Today, and Review speak one execution language", () => {

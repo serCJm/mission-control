@@ -72,6 +72,24 @@ export function plannerWeekDates(anchorDate) {
   return Array.from({ length: 7 }, (_, index) => shiftPlannerDate(start, index));
 }
 
+export function plannerRuleOccursOn(rule, dateKey) {
+  return dateKey >= rule.effectiveOn
+    && (!rule.endsOn || dateKey <= rule.endsOn)
+    && rule.weekdays.includes(plannerWeekday(dateKey));
+}
+
+function areaBlockRulesShareDate(left, right) {
+  const overlapStartsOn = left.effectiveOn > right.effectiveOn ? left.effectiveOn : right.effectiveOn;
+  const finiteEnds = [left.endsOn, right.endsOn].filter(Boolean).sort();
+  const overlapEndsOn = finiteEnds[0];
+  if (overlapEndsOn && overlapStartsOn > overlapEndsOn) return false;
+  return left.weekdays.some((weekday) => {
+    if (!right.weekdays.includes(weekday)) return false;
+    const firstMatchingDate = shiftPlannerDate(overlapStartsOn, (weekday - plannerWeekday(overlapStartsOn) + 7) % 7);
+    return !overlapEndsOn || firstMatchingDate <= overlapEndsOn;
+  });
+}
+
 function normalizeWeekdays(value) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 7) return null;
   if (value.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return null;
@@ -83,12 +101,13 @@ function normalizeRule(value, areaIds) {
   if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.areaId) || !areaIds.has(value.areaId)) return null;
   const weekdays = normalizeWeekdays(value.weekdays);
   if (!weekdays || !isPlannerDate(value.effectiveOn) || !isPlannerCalendarTime(value.startTime) || !isPlannerCalendarTime(value.endTime, true)) return null;
+  if (value.endsOn !== undefined && (!isPlannerDate(value.endsOn) || value.endsOn < value.effectiveOn)) return null;
   if (plannerMinutes(value.endTime) - plannerMinutes(value.startTime) < MIN_AREA_BLOCK_MINUTES) return null;
-  return { id: value.id, areaId: value.areaId, weekdays, effectiveOn: value.effectiveOn, startTime: value.startTime, endTime: value.endTime };
+  return { id: value.id, areaId: value.areaId, weekdays, effectiveOn: value.effectiveOn, ...(value.endsOn ? { endsOn: value.endsOn } : {}), startTime: value.startTime, endTime: value.endTime };
 }
 
 export function recurringAreaBlockRulesConflict(left, right) {
-  return left.weekdays.some((weekday) => right.weekdays.includes(weekday))
+  return areaBlockRulesShareDate(left, right)
     && plannerMinutes(left.startTime) < plannerMinutes(right.endTime)
     && plannerMinutes(right.startTime) < plannerMinutes(left.endTime);
 }
@@ -96,7 +115,7 @@ export function recurringAreaBlockRulesConflict(left, right) {
 function normalizeException(value, rulesById) {
   if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.ruleId) || !isPlannerDate(value.occurrenceDate)) return null;
   const rule = rulesById.get(value.ruleId);
-  if (!rule || value.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(value.occurrenceDate))) return null;
+  if (!rule || !plannerRuleOccursOn(rule, value.occurrenceDate)) return null;
   if (value.kind === "skip") return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "skip" };
   if (value.kind !== "override" || !isPlannerDate(value.date) || !isPlannerCalendarTime(value.startTime) || !isPlannerCalendarTime(value.endTime, true)) return null;
   if (plannerMinutes(value.endTime) - plannerMinutes(value.startTime) < MIN_AREA_BLOCK_MINUTES) return null;
@@ -106,7 +125,7 @@ function normalizeException(value, rulesById) {
 function normalizeBlockItem(value, rulesById, taskAreas, routineAreas) {
   if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.ruleId) || !isPlannerDate(value.occurrenceDate) || !isText(value.itemId)) return null;
   const rule = rulesById.get(value.ruleId);
-  if (!rule || value.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(value.occurrenceDate))) return null;
+  if (!rule || !plannerRuleOccursOn(rule, value.occurrenceDate)) return null;
   if (value.kind === "task" && taskAreas.get(value.itemId) === rule.areaId) return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "task", itemId: value.itemId };
   if (value.kind === "routine" && routineAreas.get(value.itemId) === rule.areaId) return { id: value.id, ruleId: value.ruleId, occurrenceDate: value.occurrenceDate, kind: "routine", itemId: value.itemId };
   return null;
@@ -144,28 +163,17 @@ export function normalizePlanner(value, areaIds, taskAreas, routineAreas) {
   const occurrenceKeys = new Set(exceptions.map((exception) => plannerOccurrenceId(exception.ruleId, exception.occurrenceDate)));
   if (exceptionIds.size !== exceptions.length || occurrenceKeys.size !== exceptions.length) return null;
   const exceptionsByOccurrence = new Map(exceptions.map((exception) => [plannerOccurrenceId(exception.ruleId, exception.occurrenceDate), exception]));
-  const recurringRuleBySlot = Array.from({ length: 7 }, () => []);
-  for (const rule of rules) {
-    const start = plannerMinutes(rule.startTime);
-    const end = plannerMinutes(rule.endTime);
-    for (const weekday of rule.weekdays) {
-      for (let minutes = start; minutes < end; minutes += PLANNER_SNAP_MINUTES) {
-        recurringRuleBySlot[weekday][(minutes - PLANNER_START_MINUTES) / PLANNER_SNAP_MINUTES] = rule;
-      }
-    }
-  }
   const overridesByDate = new Map();
   for (const exception of exceptions) {
     if (exception.kind !== "override") continue;
     const group = overridesByDate.get(exception.date);
     if (group) group.push(exception);
     else overridesByDate.set(exception.date, [exception]);
-    const start = plannerMinutes(exception.startTime);
-    const end = plannerMinutes(exception.endTime);
-    for (let minutes = start; minutes < end; minutes += PLANNER_SNAP_MINUTES) {
-      const rule = recurringRuleBySlot[plannerWeekday(exception.date)][(minutes - PLANNER_START_MINUTES) / PLANNER_SNAP_MINUTES];
-      if (rule && exception.date >= rule.effectiveOn && !exceptionsByOccurrence.has(plannerOccurrenceId(rule.id, exception.date))) return null;
-    }
+    const conflictsWithRule = rules.some((rule) => plannerRuleOccursOn(rule, exception.date)
+      && plannerMinutes(rule.startTime) < plannerMinutes(exception.endTime)
+      && plannerMinutes(exception.startTime) < plannerMinutes(rule.endTime)
+      && !exceptionsByOccurrence.has(plannerOccurrenceId(rule.id, exception.date)));
+    if (conflictsWithRule) return null;
   }
   for (const group of overridesByDate.values()) {
     group.sort((left, right) => left.startTime.localeCompare(right.startTime));
@@ -245,7 +253,7 @@ export function materializeAreaBlocks(planner, dateKeys) {
   const occurrences = [];
   for (const rule of planner.areaBlockRules) {
     for (const sourceDate of dateKeys) {
-      if (sourceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(sourceDate))) continue;
+      if (!plannerRuleOccursOn(rule, sourceDate)) continue;
       const exception = exceptions.get(`${rule.id}:${sourceDate}`);
       if (exception?.kind === "skip") continue;
       const occurrence = exception?.kind === "override"
@@ -257,7 +265,7 @@ export function materializeAreaBlocks(planner, dateKeys) {
   for (const exception of planner.areaBlockExceptions) {
     if (exception.kind !== "override" || !visibleDates.has(exception.date) || visibleDates.has(exception.occurrenceDate)) continue;
     const rule = planner.areaBlockRules.find((item) => item.id === exception.ruleId);
-    if (!rule || exception.occurrenceDate < rule.effectiveOn || !rule.weekdays.includes(plannerWeekday(exception.occurrenceDate))) continue;
+    if (!rule || !plannerRuleOccursOn(rule, exception.occurrenceDate)) continue;
     occurrences.push({ id: plannerOccurrenceId(rule.id, exception.occurrenceDate), ruleId: rule.id, sourceDate: exception.occurrenceDate, areaId: rule.areaId, date: exception.date, startTime: exception.startTime, endTime: exception.endTime, exception: true });
   }
   return occurrences.sort((left, right) => left.date.localeCompare(right.date) || left.startTime.localeCompare(right.startTime));

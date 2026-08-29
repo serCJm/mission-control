@@ -31,7 +31,7 @@ The product treats time as broad area ownership first, then places projects and 
 ## Capabilities and Constraints
 
 - Persistent workspace data syncs through the existing authenticated D1-backed workspace API.
-- Calendar planning uses recurring weekly area blocks with per-occurrence exceptions.
+- Calendar planning uses one-time or recurring weekly area blocks with per-occurrence exceptions.
 - Calendar block selections reference existing task and routine records; completing or waiting an item advances the block without creating duplicates.
 - Tasks may still keep deadline dates and exact times when a real external constraint exists.
 - The interface must remain usable with pointer, touch, and keyboard input.
