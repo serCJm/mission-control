@@ -122,6 +122,12 @@ function plannerBlockItemDone(item: BlockItem, occurrenceDate: string, tasks: Pl
   return Boolean(session && isFinalRoutineSessionStatus(session.status));
 }
 
+function visiblePlannerBlockItemCount(height: number, itemCount: number) {
+  if (!itemCount) return 0;
+  if (height < 90) return 1;
+  return Math.min(itemCount, Math.max(1, Math.floor((height - 56) / 26)));
+}
+
 function AreaBlockCard({ occurrence, area, items, tasks, routines, active, onOpen }: { occurrence: AreaOccurrence; area: PlannerArea; items: BlockItem[]; tasks: PlannerTask[]; routines: PlannerRoutine[]; active: boolean; onOpen: () => void }) {
   const { attributes: moveAttributes, isDragging: isMoving, listeners: moveListeners, setNodeRef: setMoveNodeRef, transform: moveTransform } = useDraggable({ id: `block:${occurrence.id}`, data: { kind: "block", occurrence } });
   const { attributes: resizeAttributes, isDragging: isResizing, listeners: resizeListeners, setNodeRef: setResizeNodeRef, transform: resizeTransform } = useDraggable({ id: `resize:${occurrence.id}`, data: { kind: "resize", occurrence } });
@@ -134,10 +140,16 @@ function AreaBlockCard({ occurrence, area, items, tasks, routines, active, onOpe
   const displayEndTime = isResizing ? plannerTime(previewEndMinutes) : occurrence.endTime;
   const transform = moveTransform ? `translate3d(${moveTransform.x}px,${moveTransform.y}px,0)` : undefined;
   const firstUnfinishedIndex = active ? items.findIndex((item) => !plannerBlockItemDone(item, occurrence.date, tasks, routines)) : -1;
-  return <article ref={setMoveNodeRef} className={`planner-area-block ${active ? "active" : ""} ${isMoving ? "moving" : ""} ${isResizing ? "resizing" : ""}`} style={{ top, height, transform }}>
+  const compact = height < 90;
+  const visibleItemCount = visiblePlannerBlockItemCount(height, items.length);
+  const visibleStartIndex = active && firstUnfinishedIndex > 0 && visibleItemCount < items.length ? Math.min(firstUnfinishedIndex, items.length - visibleItemCount) : 0;
+  const visibleItems = items.slice(visibleStartIndex, visibleStartIndex + visibleItemCount);
+  const hiddenItemCount = items.length - visibleItems.length;
+  const queueSummary = items.length ? `${items.length} queued item${items.length === 1 ? "" : "s"}.` : "No queued items.";
+  return <article ref={setMoveNodeRef} className={`planner-area-block ${compact ? "compact" : ""} ${active ? "active" : ""} ${isMoving ? "moving" : ""} ${isResizing ? "resizing" : ""}`} style={{ top, height, transform }}>
     <button type="button" className="planner-block-move" {...moveListeners} {...moveAttributes} aria-label={`Move this ${area.name} occurrence`} title="Drag to move this occurrence"><i /><i /><i /></button>
-    <button type="button" className="planner-block-main" onClick={onOpen} aria-label={`${area.name}, ${formatPlannerTime(occurrence.startTime)} to ${formatPlannerTime(displayEndTime)}. Open this occurrence.`}><span className="planner-block-copy"><span className="planner-block-title"><strong>{area.name}</strong></span><small>{formatBlockTime(occurrence.startTime)}–{formatBlockTime(displayEndTime)}</small></span></button>
-    <div className="planner-block-contents">{items.map((item, index) => { const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined; const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined; const done = plannerBlockItemDone(item, occurrence.date, tasks, routines); return <button type="button" className={`planner-block-item ${done ? "done" : ""}`} onClick={onOpen} key={item.id}><span>{!done && index === firstUnfinishedIndex ? "Now" : done ? "Done" : `${index + 1}`}</span><strong>{task?.title ?? routine?.name ?? "Unavailable item"}</strong></button>; })}</div>
+    <button type="button" className="planner-block-main" onClick={onOpen} aria-label={`${area.name}, ${formatPlannerTime(occurrence.startTime)} to ${formatPlannerTime(displayEndTime)}. ${queueSummary} Open this occurrence.`}><span className="planner-block-copy"><span className="planner-block-title"><strong>{area.name}</strong></span><small>{formatBlockTime(occurrence.startTime)}–{formatBlockTime(displayEndTime)}</small></span></button>
+    <div className="planner-block-contents">{visibleItems.map((item, visibleIndex) => { const index = visibleStartIndex + visibleIndex; const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined; const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined; const title = task?.title ?? routine?.name ?? "Unavailable item"; const done = plannerBlockItemDone(item, occurrence.date, tasks, routines); const label = !done && index === firstUnfinishedIndex ? "Now" : done ? "Done" : `${index + 1}`; const overflow = visibleIndex === visibleItems.length - 1 ? hiddenItemCount : 0; return <button type="button" className={`planner-block-item ${done ? "done" : ""}`} onClick={onOpen} aria-label={`${label}: ${title}.${overflow ? ` ${overflow} more queued.` : ""}`} key={item.id}><span>{label}</span><strong>{title}</strong>{overflow > 0 && <small className="planner-block-overflow" aria-label={`${overflow} more queued`}>+{overflow}</small>}</button>; })}</div>
     <button type="button" ref={setResizeNodeRef} className="planner-block-resize" {...resizeListeners} {...resizeAttributes} aria-label={`Resize this ${area.name} occurrence`} title="Drag to resize this occurrence"><span /></button>
   </article>;
 }

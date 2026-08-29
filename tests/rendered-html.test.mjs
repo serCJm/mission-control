@@ -273,6 +273,9 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /KeyboardSensor/);
   assert.match(plannerView, /Add to block/);
   assert.match(plannerView, /active \? "active" : ""/);
+  assert.match(plannerView, /function visiblePlannerBlockItemCount/);
+  assert.match(plannerView, /const compact = height < 90/);
+  assert.match(plannerView, /className="planner-block-overflow" aria-label=\{`\$\{overflow\} more queued`\}/);
   assert.match(plannerView, /planner-context-card/);
   assert.match(plannerView, /\['work', 'Tasks', projectTasks\.length\]/);
   assert.match(plannerView, /Add another block/);
@@ -288,6 +291,8 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.doesNotMatch(plannerView, />New block<\/button>/);
   assert.doesNotMatch(plannerView, /planner-context-area-icon|renderAreaIcon/);
   assert.match(plannerStyles, /\.planner-area-block\.active\{/);
+  assert.match(plannerStyles, /\.planner-area-block\.compact \.planner-block-copy\{display:flex;/);
+  assert.match(plannerStyles, /\.planner-block-overflow\{/);
   assert.match(plannerStyles, /\.planner-context-card\{display:grid;/);
   assert.match(plannerStyles, /\.planner-queue-content\{display:grid;align-content:start;min-height:170px\}/);
   assert.match(plannerStyles, /grid-template-rows:44px minmax\(38px,auto\)/);
