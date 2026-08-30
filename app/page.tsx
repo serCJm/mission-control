@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
@@ -59,76 +59,6 @@ type ReorderProps = {
   onDrop: (event: DragEvent<HTMLElement>, item: DragItem) => void;
 };
 
-const seed: Workspace = {
-  areas: [
-    { id: "trading", name: "Trading", icon: "trend" },
-    { id: "growth", name: "Personal growth", icon: "sprout" },
-    { id: "family", name: "Family", icon: "people" },
-    { id: "life", name: "Business & life", icon: "briefcase" },
-  ],
-  projects: [
-    { id: "execution", areaId: "trading", name: "A-Setup Execution", outcome: "Execute and review 20 valid trades while following defined risk rules.", notes: [
-      { id: "execution-observation", title: "Observation", body: "Entries after the second impulse are consistently late.", pinned: true, createdAt: 2, updatedAt: 2 },
-      { id: "execution-review", title: "Next review", body: "Add MFE / MAE and compare first-hour results.", pinned: false, createdAt: 1, updatedAt: 1 },
-    ] },
-    { id: "replay", areaId: "trading", name: "Market Replay Lab", outcome: "Complete 12 focused replay sessions and extract one rule refinement from each.", notes: [{ id: "replay-next", title: "Next session", body: "Replay Tuesday’s failed breakout. Capture the earliest invalidation signal.", pinned: false, createdAt: 1, updatedAt: 1 }] },
-    { id: "practice", areaId: "growth", name: "Deliberate Practice", outcome: "Finish eight lessons and apply each idea in a focused practice session.", notes: [{ id: "practice-loop", title: "Practice loop", body: "Short feedback loops beat longer passive study. Define success before the next session.", pinned: false, createdAt: 1, updatedAt: 1 }] },
-    { id: "weekends", areaId: "family", name: "Present Weekends", outcome: "Plan and protect four device-light family blocks this month.", notes: [{ id: "weekends-plan", title: "Weekend shape", body: "One anchor activity leaves enough room for spontaneity. Choose between the beach and a museum.", pinned: false, createdAt: 1, updatedAt: 1 }] },
-    { id: "loops", areaId: "life", name: "Close the Loops", outcome: "Complete nagging administrative tasks in two weekly batches.", notes: [{ id: "loops-boundary", title: "Boundary", body: "Keep the batch under 45 minutes. Stop when the timer ends.", pinned: true, createdAt: 1, updatedAt: 1 }] },
-  ],
-  tasks: [
-    { id: "t1", title: "Mark pre-market levels and invalidation", areaId: "trading", projectId: "execution", status: "todo", createdAt: 1, dueDate: "2026-08-07", priority: "high" },
-    { id: "t2", title: "Review yesterday’s AAPL trade", areaId: "trading", projectId: "execution", status: "doing", createdAt: 2, dueDate: "2026-08-08", priority: "medium" },
-    { id: "t3", title: "Replay one failed-breakout setup", areaId: "trading", projectId: "replay", status: "todo", createdAt: 3, dueDate: "2026-08-10", priority: "high" },
-    { id: "t4", title: "Complete deliberate-practice lesson", areaId: "growth", projectId: "practice", status: "todo", createdAt: 4, priority: "medium" },
-    { id: "t5", title: "Plan a device-light Saturday", areaId: "family", projectId: "weekends", status: "todo", createdAt: 5, dueDate: "2026-08-09", priority: "low" },
-    { id: "t6", title: "Send Q3 invoice", areaId: "life", projectId: "loops", status: "todo", createdAt: 6, dueDate: "2026-08-07", priority: "high" },
-    { id: "i1", title: "Compare new broker fee schedule", status: "todo", createdAt: 7 },
-    { id: "i2", title: "Book annual dental appointments", status: "todo", createdAt: 8, dueDate: "2026-08-15", priority: "low" },
-  ],
-  routines: [
-    {
-      id: "pre-market-routine",
-      areaId: "trading",
-      name: "Pre-market preparation",
-      expectedMinutes: 20,
-      weekdays: [1, 2, 3, 4, 5],
-      allDay: true,
-      scheduleEffectiveOn: routineDateKey(),
-      checklist: [
-        { id: "pre-market-levels", text: "Mark overnight levels" },
-        { id: "pre-market-risk", text: "Define invalidation and maximum loss" },
-        { id: "pre-market-scenarios", text: "Write the two highest-quality scenarios" },
-      ],
-      suspensions: [],
-      sessions: [],
-    },
-    {
-      id: "reading-routine",
-      areaId: "growth",
-      name: "Focused reading",
-      expectedMinutes: 25,
-      weekdays: [0, 1, 2, 3, 4, 5, 6],
-      allDay: true,
-      scheduleEffectiveOn: routineDateKey(),
-      checklist: [{ id: "reading-note", text: "Capture one useful idea" }],
-      suspensions: [],
-      sessions: [],
-    },
-  ],
-  planner: {
-    areaBlockRules: [
-      { id: "trading-mornings", areaId: "trading", weekdays: [1, 2, 3, 4, 5], effectiveOn: plannerDateKey(), startTime: "06:30", endTime: "09:30", fill: "sage" },
-      { id: "growth-evenings", areaId: "growth", weekdays: [2, 4], effectiveOn: plannerDateKey(), startTime: "18:00", endTime: "19:00", fill: "sky" },
-      { id: "family-weekend", areaId: "family", weekdays: [6], effectiveOn: plannerDateKey(), startTime: "10:00", endTime: "13:00", fill: "sand" },
-      { id: "life-friday", areaId: "life", weekdays: [5], effectiveOn: plannerDateKey(), startTime: "14:00", endTime: "15:00", fill: "rose" },
-    ],
-    areaBlockExceptions: [],
-    blockItems: [],
-  },
-  weeklyReview: emptyWeeklyReview(currentWeekKey()),
-};
-
 const WORKSPACE_STORAGE_KEY = "mission-control-workspace-v1";
 const TASK_SORT_STORAGE_KEY = "mission-control-task-sorts-v2";
 const PROJECT_VIEW_STORAGE_KEY = "mission-control-project-view-v1";
@@ -146,6 +76,22 @@ const PROJECT_STATUSES: Array<{ value: TaskStatus; label: string; empty: string 
   { value: "doing", label: "In progress", empty: "Move a task here when work is actively underway." },
   { value: "done", label: "Done", empty: "Completed work will collect here." },
 ];
+
+function emptyWorkspace(): Workspace {
+  return {
+    areas: [],
+    projects: [],
+    tasks: [],
+    routines: [],
+    planner: { areaBlockRules: [], areaBlockExceptions: [], blockItems: [] },
+    weeklyReview: emptyWeeklyReview(currentWeekKey()),
+  };
+}
+
+async function loadStarterWorkspace() {
+  const { createStarterWorkspace } = await import("./starter-workspace.mjs");
+  return createStarterWorkspace() as Workspace;
+}
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -281,14 +227,13 @@ function mergePendingChecklist(session: RoutineSession, checklist: RoutineCheckl
 }
 
 export default function Home() {
-  const [workspace, setWorkspace] = useState<Workspace>(() => ({ ...seed, routines: reconcileRoutines(seed.routines, new Date()) }));
+  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [selection, setSelection] = useState<Selection>({ kind: "today" });
   const [plannerSession, setPlannerSession] = useState<PlannerSessionState>(() => {
     const today = plannerDateKey();
-    return { anchorDate: today, selectedDate: today, selectedAreaId: seed.areas[0]?.id ?? "", selectedProjectId: "", queue: "work", workbenchOpen: true };
+    return { anchorDate: today, selectedDate: today, selectedAreaId: "", selectedProjectId: "", queue: "work", workbenchOpen: true };
   });
 
-  const [capture, setCapture] = useState("");
   const [newProject, setNewProject] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -358,7 +303,7 @@ export default function Home() {
     let active = true;
 
     async function loadWorkspace() {
-      let localWorkspace = seed;
+      let localWorkspace: Workspace | null = null;
       try {
         const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem("bearing-workspace-v2");
         const parsed = saved ? normalizeClientWorkspace(JSON.parse(saved) as unknown) : null;
@@ -384,13 +329,15 @@ export default function Home() {
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; user: Account };
         if (!active) return;
 
-        const loadedWorkspace = normalizeClientWorkspace(payload.workspace) ?? localWorkspace;
+        const loadedWorkspace = normalizeClientWorkspace(payload.workspace) ?? localWorkspace ?? await loadStarterWorkspace();
+        if (!active) return;
         const nextWorkspace = { ...loadedWorkspace, routines: reconcileRoutines(loadedWorkspace.routines, new Date()) };
+        const serialized = JSON.stringify(nextWorkspace);
         if (!payload.workspace) {
           const createResponse = await fetch("/api/workspace", {
             method: "PUT",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ workspace: nextWorkspace }),
+            body: `{"workspace":${serialized}}`,
           });
           if (!createResponse.ok) throw new Error("Unable to create the synced workspace.");
           const created = await createResponse.json() as { updatedAt: number };
@@ -398,7 +345,6 @@ export default function Home() {
         }
         if (!active) return;
 
-        const serialized = JSON.stringify(nextWorkspace);
         lastSyncedWorkspace.current = serialized;
         lastServerUpdatedAt.current = payload.updatedAt;
         setWorkspace(nextWorkspace);
@@ -409,7 +355,7 @@ export default function Home() {
         localStorage.removeItem("bearing-workspace-v2");
       } catch {
         if (!active) return;
-        setWorkspace(localWorkspace);
+        if (localWorkspace) setWorkspace(localWorkspace);
         setSyncState("error");
       }
     }
@@ -420,16 +366,18 @@ export default function Home() {
 
   useEffect(() => {
     if (!cloudReady) return;
-    const serialized = JSON.stringify(workspace);
-    if (serialized === lastSyncedWorkspace.current) return;
-
-    setSyncState("saving");
     const timeout = window.setTimeout(() => {
+      const serialized = JSON.stringify(workspace);
+      if (serialized === lastSyncedWorkspace.current) {
+        setSyncState("saved");
+        return;
+      }
+      setSyncState("saving");
       saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
         const response = await fetch("/api/workspace", {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ workspace }),
+          body: `{"workspace":${serialized}}`,
         });
         if (response.status === 401) {
           window.location.assign("/signin-with-chatgpt?return_to=%2F");
@@ -454,7 +402,11 @@ export default function Home() {
     async function refreshFromCloud() {
       if (document.visibilityState !== "visible" || hasOpenEditor() || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
       try {
-        const response = await fetch("/api/workspace", { cache: "no-store" });
+        const response = await fetch("/api/workspace", {
+          cache: "no-store",
+          headers: lastServerUpdatedAt.current ? { "if-none-match": `"${lastServerUpdatedAt.current}"` } : undefined,
+        });
+        if (response.status === 304) return;
         if (!response.ok) return;
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number };
         const normalized = normalizeClientWorkspace(payload.workspace);
@@ -519,14 +471,18 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [toast, taskUndo, moveTaskUndo]);
 
+  if (!cloudReady) {
+    return <div className="app-shell"><div className="sync-gate" role="status"><LogoMark /><h1>{syncState === "loading" ? "Loading your workspace…" : "Your workspace could not sync."}</h1><p>{syncState === "loading" ? "Connecting to your saved Mission Control data." : "Your device data is still untouched. Try the connection again."}</p>{syncState === "error" && <button onClick={retrySync}>Try again</button>}</div></div>;
+  }
+
   const activeArea = selection.kind === "area"
     ? workspace.areas.find((area) => area.id === selection.id)
     : selection.kind === "project"
       ? workspace.areas.find((area) => area.id === workspace.projects.find((project) => project.id === selection.id)?.areaId)
       : undefined;
   const activeProject = selection.kind === "project" ? workspace.projects.find((project) => project.id === selection.id) : undefined;
-  const inboxTasks = useMemo(() => workspace.tasks.filter((task) => !task.areaId && !task.projectId), [workspace.tasks]);
-  const openTasks = useMemo(() => workspace.tasks.filter((task) => task.status !== "done"), [workspace.tasks]);
+  const inboxTasks = workspace.tasks.filter((task) => !task.areaId && !task.projectId);
+  const openTasks = workspace.tasks.filter((task) => task.status !== "done");
   const reviewWeekKey = currentWeekKey(new Date(), PROJECT_TIME_ZONE);
   const currentReview = workspace.weeklyReview.weekKey === reviewWeekKey ? workspace.weeklyReview : emptyWeeklyReview(reviewWeekKey);
   const captureDestination = activeProject?.name ?? (selection.kind === "area" && activeArea ? `${activeArea.name} Backlog` : "Inbox");
@@ -570,10 +526,7 @@ export default function Home() {
     setToast(message);
   }
 
-  function addTask(event: FormEvent) {
-    event.preventDefault();
-    const title = capture.trim();
-    if (!title) return;
+  function addTask(title: string) {
     const task: Task = {
       id: makeId("task"), title, status: "todo", createdAt: Date.now(),
       ...(activeArea ? { areaId: activeArea.id } : {}),
@@ -581,7 +534,6 @@ export default function Home() {
       ...(selection.kind === "area" ? { someday: true } : {}),
     };
     prependTask(task, `Added to ${captureDestination}`);
-    setCapture("");
   }
 
   function addAreaTask(areaId: string, title: string) {
@@ -1047,7 +999,6 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      {!cloudReady && <div className="sync-gate" role="status"><LogoMark /><h1>{syncState === "loading" ? "Loading your workspace…" : "Your workspace could not sync."}</h1><p>{syncState === "loading" ? "Connecting to your saved Mission Control data." : "Your device data is still untouched. Try the connection again."}</p>{syncState === "error" && <button onClick={retrySync}>Try again</button>}</div>}
       <main>
         <header className="topbar">
           <div className="topbar-identity">
@@ -1059,11 +1010,7 @@ export default function Home() {
             </nav>
           </div>
           <button className="topbar-menu-button" onClick={() => setWorkspaceMenuOpen((open) => !open)} aria-label="Workspace menu" aria-expanded={workspaceMenuOpen} aria-controls="workspace-menu"><MenuIcon /></button>
-          <form className="quick-add" onSubmit={addTask} autoComplete="off">
-            <label htmlFor="quick-task" className="sr-only">Add a task to {captureDestination}</label>
-            <input id="quick-task" name="quick-task-new" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder={`Add a task to ${captureDestination}…`} autoComplete="off" autoCorrect="off" spellCheck={false} />
-            <button disabled={!capture.trim()} aria-label={`Add task to ${captureDestination}`} title={`Add task to ${captureDestination}`}><PlusIcon /></button>
-          </form>
+          <QuickAdd destination={captureDestination} onAdd={addTask} />
           <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
           {workspaceMenuOpen && <nav id="workspace-menu" className="workspace-menu-popover" aria-label="Workspace menu"><button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length} open</small></button><button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button><button className={selection.kind === "review" ? "active" : ""} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{currentReview.completedSteps.length}/5</small></button></nav>}
         </header>
@@ -1093,6 +1040,20 @@ function ClockIcon() {
 
 function PlusIcon() {
   return <svg className="quick-add-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>;
+}
+
+function QuickAdd({ destination, onAdd }: { destination: string; onAdd: (title: string) => void }) {
+  const [value, setValue] = useState("");
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const title = value.trim();
+    if (!title) return;
+    onAdd(title);
+    setValue("");
+  }
+
+  return <form className="quick-add" onSubmit={submit} autoComplete="off"><label htmlFor="quick-task" className="sr-only">Add a task to {destination}</label><input id="quick-task" name="quick-task-new" value={value} onChange={(event) => setValue(event.target.value)} placeholder={`Add a task to ${destination}…`} autoComplete="off" autoCorrect="off" spellCheck={false} /><button disabled={!value.trim()} aria-label={`Add task to ${destination}`} title={`Add task to ${destination}`}><PlusIcon /></button></form>;
 }
 
 function PinIcon() {

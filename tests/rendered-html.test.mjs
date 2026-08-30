@@ -537,15 +537,13 @@ test("area, project, Today, and Review speak one execution language", () => {
   assert.doesNotMatch(page, /kind: "planner"|Today’s focus|Choose focus|className=\{`sidebar|Areas and projects|sidebar-foot/);
 });
 
-test("server-renders the application shell", async () => {
+test("server-renders a lightweight sync gate", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Mission Control/);
-  assert.match(html, /Today/);
-  assert.match(html, /Workbench queues/);
-  assert.match(html, /All projects/);
-  assert.doesNotMatch(html, /Choose the work|Keep the calendar clear while work stays close at hand/);
-  assert.doesNotMatch(html, /Areas and projects/);
-  assert.doesNotMatch(html, />Planner</);
+  assert.match(html, /Loading your workspace/);
+  assert.match(html, /Connecting to your saved Mission Control data/);
+  assert.ok(Buffer.byteLength(html) < 20_000, "the loading response should not contain the hidden workspace UI");
+  assert.doesNotMatch(html, /Workbench queues|All projects|as="font"|\/Users\//);
 });

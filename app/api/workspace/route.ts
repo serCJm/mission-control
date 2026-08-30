@@ -112,7 +112,7 @@ async function workspaceDatabase() {
   return database;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return unauthorized();
 
@@ -126,13 +126,21 @@ export async function GET() {
     return Response.json({ workspace: null, updatedAt: 0, user: { displayName: user.displayName, email: user.email } });
   }
 
+  const etag = `"${row.updatedAt}"`;
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers: { etag, "cache-control": "private, no-cache" } });
+  }
+
   let workspace: Workspace | null = null;
   try {
     workspace = normalizeWorkspace(JSON.parse(row.data) as unknown);
   } catch { /* Invalid JSON is reported without modifying the saved row. */ }
 
   if (workspace) {
-    return Response.json({ workspace, updatedAt: row.updatedAt, user: { displayName: user.displayName, email: user.email } });
+    return Response.json(
+      { workspace, updatedAt: row.updatedAt, user: { displayName: user.displayName, email: user.email } },
+      { headers: { etag, "cache-control": "private, no-cache" } },
+    );
   }
 
   return Response.json({ error: "The saved workspace uses an incompatible data format and must be recovered before it can be loaded." }, { status: 409 });
