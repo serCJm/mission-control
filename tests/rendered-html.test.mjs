@@ -413,13 +413,14 @@ test("unbounded task lists avoid block-size collapse motion", () => {
   assert.doesNotMatch(page, /<Presence show=\{showCompleted\} className="motion-collapse">\{\(\) => <div className="completed-archive-tasks"/);
 });
 
-test("navigation discards stale view-transition callbacks", () => {
-  assert.match(page, /const navigationGeneration = useRef\(0\)/);
-  assert.match(page, /const generation = \+\+navigationGeneration\.current/);
-  assert.match(page, /if \(generation !== navigationGeneration\.current\) return/);
-  assert.match(page, /if \(selectionKey\(selection\) === selectionKey\(next\)\) \{[\s\S]*?update\(\);[\s\S]*?return;/);
-  assert.match(page, /typeof document\.startViewTransition !== "function" \|\| window\.matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
-  assert.match(page, /document\.startViewTransition\(\(\) => flushSync\(update\)\)/);
+test("navigation wires native view transitions through the guarded coordinator", () => {
+  assert.match(page, /import \{ createNavigationTransition \} from "\.\/navigation-transition\.mjs"/);
+  assert.match(page, /const navigationTransition = useRef\(createNavigationTransition\(\)\)\.current/);
+  assert.match(page, /unchanged: selectionKey\(selection\) === selectionKey\(next\)/);
+  assert.match(page, /reducedMotion: window\.matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
+  assert.match(page, /const transition = document\.startViewTransition\(\(\) => flushSync\(update\)\)/);
+  assert.match(page, /transition\.ready\.catch\(\(error: unknown\) => \{[\s\S]*?error instanceof DOMException && error\.name === "AbortError"/);
+  assert.match(page, /typeof document\.startViewTransition === "function"[\s\S]*?\? startNavigationViewTransition/);
   assert.doesNotMatch(page, /ViewTransitionDocument|transitionDocument/);
 });
 

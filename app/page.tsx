@@ -3,6 +3,7 @@
 import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, type Ref, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
+import { createNavigationTransition } from "./navigation-transition.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
 import { formatPlannerTime, isPlannerDeadline, normalizePlanner, plannerDateKey } from "./planner-schema.mjs";
@@ -68,6 +69,14 @@ const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric
 
 function selectionKey(selection: Selection) {
   return "id" in selection ? `${selection.kind}:${selection.id}` : selection.kind;
+}
+
+function startNavigationViewTransition(update: () => void) {
+  const transition = document.startViewTransition(() => flushSync(update));
+  void transition.ready.catch((error: unknown) => {
+    if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+  });
+  return transition;
 }
 
 const reviewSteps = [
@@ -258,7 +267,7 @@ export default function Home() {
   const [plannerRefreshRequest, setPlannerRefreshRequest] = useState(0);
   const workspaceMenuButton = useRef<HTMLButtonElement>(null);
   const workspaceMenu = useRef<HTMLElement>(null);
-  const navigationGeneration = useRef(0);
+  const navigationTransition = useRef(createNavigationTransition()).current;
   const lastSyncedWorkspace = useRef("");
   const lastServerUpdatedAt = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -542,22 +551,18 @@ export default function Home() {
   }
 
   function navigate(next: Selection) {
-    const generation = ++navigationGeneration.current;
-    const update = () => {
-      if (generation !== navigationGeneration.current) return;
-      setSelection(next);
-      setWorkspaceMenuOpen(false);
-      setShowProjectForm(false);
-    };
-    if (selectionKey(selection) === selectionKey(next)) {
-      update();
-      return;
-    }
-    if (typeof document.startViewTransition !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      update();
-      return;
-    }
-    document.startViewTransition(() => flushSync(update));
+    navigationTransition({
+      unchanged: selectionKey(selection) === selectionKey(next),
+      reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      startTransition: typeof document.startViewTransition === "function"
+        ? startNavigationViewTransition
+        : undefined,
+      update: () => {
+        setSelection(next);
+        setWorkspaceMenuOpen(false);
+        setShowProjectForm(false);
+      },
+    });
   }
 
   function prependTask(task: Task, message: string) {
