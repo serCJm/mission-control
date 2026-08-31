@@ -74,8 +74,8 @@ input,textarea{caret-color:var(--forest)}
 .topbar-nav button,.workspace-menu-popover button,.planner-queue-tabs button,.planner-mobile-days button,.view-toggle button,.review-progress button,.project-add-button,.task-group-add-button{transition:color 140ms ease-out,background-color 160ms ease-out,border-color 160ms ease-out,transform 160ms var(--motion-settle)}
 :where(.topbar-nav button,.workspace-menu-popover button,.planner-queue-tabs button,.view-toggle button,.review-progress button,.project-add-button,.task-group-add-button):active{transform:scale(.97)}
 .planner-compact-source:focus-within,.planner-waiting-source:focus-within,.task-row:focus-within,.inbox-row:focus-within,.kanban-card:focus-within{background:#f4f6f0}
-.planner-area-block:not(.moving):not(.resizing):hover{transform:translateY(-1px);box-shadow:0 7px 16px rgba(28,54,45,.1)}
-.planner-area-block.active:not(.moving):not(.resizing){box-shadow:0 8px 20px rgba(52,79,39,.15)}
+.planner-calendar-block:not(.moving):not(.resizing):hover{transform:translateY(-1px);box-shadow:0 7px 16px rgba(28,54,45,.1)}
+.planner-calendar-block.active:not(.moving):not(.resizing){box-shadow:0 8px 20px rgba(52,79,39,.15)}
 .sync-state.saving i{animation:sync-acknowledge 700ms var(--motion-settle) both}
 @keyframes sync-acknowledge{0%{transform:scale(.78)}45%{transform:scale(1.2)}100%{transform:scale(1)}}
 
@@ -94,7 +94,7 @@ input,textarea{caret-color:var(--forest)}
 @media(prefers-reduced-motion:reduce){
   .motion-popover[data-motion-state],.motion-collapse[data-motion-state],.motion-panel[data-motion-state],.motion-toast[data-motion-state],.motion-scrim[data-motion-state],.planner-editor,.planner-workbench-context,.planner-queue-view,.planner-mode-field,.planner-schedule-row-actions.confirming,.review-stage-content,.project-task-groups,.kanban-board,.name-editor.editing,.area-editor-form,.project-note-editor,.project-note-open,.sync-state.saving i{animation-duration:1ms!important;animation-name:motion-reduced-in!important;filter:none!important;transform:none!important}
   .motion-popover[data-motion-state="closed"],.motion-collapse[data-motion-state="closed"],.motion-panel[data-motion-state="closed"],.motion-toast[data-motion-state="closed"],.motion-scrim[data-motion-state="closed"]{animation-name:motion-reduced-out!important}
-  .planner-area-block:not(.moving):not(.resizing):hover{transform:none;box-shadow:none}
+  .planner-calendar-block:not(.moving):not(.resizing):hover{transform:none;box-shadow:none}
   ::view-transition-old(workspace-view),::view-transition-new(workspace-view){animation-duration:1ms!important;animation-name:motion-reduced-out!important}
   ::view-transition-new(workspace-view){animation-name:motion-reduced-in!important}
 }

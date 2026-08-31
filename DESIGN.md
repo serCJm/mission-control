@@ -214,6 +214,14 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. Area and project navigation lives in the adjacent contextual workbench through selectors and explicit management links, avoiding a second persistent rail. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
+### Calendar Blocks
+
+Today has one forest “New block” action in the calendar toolbar. Creation uses a shared workbench editor whose first decision is “Connect to”: Area or No area. Area blocks inherit the existing area-work behavior and can hold up to three tasks or routines. No-area blocks require a concise title, offer Driving, Break, Meal, Appointment, and Buffer as optional shortcuts, default to the neutral slate fill, and never expose task queues, “Now,” notes, or completion state.
+
+Both block kinds use the same one-time or weekly schedule, date, time, fill, drag, resize, occurrence-edit, and delete behaviors. A no-area calendar card shows only its title and time. Conversion remains available in the shared editor, but an area block with queued work must be emptied before it can become a no-area block. Time blocks may touch but never overlap, regardless of kind.
+
+**The Protected Time Rule.** A standalone block represents a real calendar constraint, not a project, task list, or area substitute. Keep its card and editor materially quieter than an area work block.
+
 ### Hierarchy Lists
 
 Rows are the core operating pattern. Entity rows prioritize the name and expose Edit, Open, and drag handles in the main workspace. Task rows pair the title with optional due date and priority controls, plus saved Manual, A–Z, Due date, and Priority views in a compact dropdown. Drag handles appear only in Manual task order. Dividers provide rhythm without fragmenting the list into a wall of cards. On touch layouts, editable controls become at least 44px tall and secondary metadata yields before actions do.
@@ -234,6 +242,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.
 - **Do** keep project notes compact, project-owned, pin-first, and readable as a responsive board rather than one undifferentiated document.
 - **Do** keep one side surface: the 320px contextual workbench beside the calendar, becoming a drawer below 980px.
+- **Do** use the shared New block editor for both area work and protected no-area time.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
 - **Do** preserve the concentric-orbit mark and compact two-line Mission Control wordmark as the core identity lockup.
@@ -246,3 +255,4 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Don't** use Georgia for operational copy, task names, or navigation.
 - **Don't** let responsive layouts remove Open, Edit, task sorting, due-date, priority, or Manual-order drag handles.
 - **Don't** use signal lime as a large decorative background when forest or a neutral surface can carry the structure.
+- **Don't** put task queues, “Now,” notes, or completion controls inside no-area blocks.

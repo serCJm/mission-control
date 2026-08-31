@@ -61,13 +61,13 @@ export function createStarterWorkspace() {
       },
     ],
     planner: {
-      areaBlockRules: [
-        { id: "trading-mornings", areaId: "trading", weekdays: [1, 2, 3, 4, 5], effectiveOn: plannerDateKey(), startTime: "06:30", endTime: "09:30", fill: "sage" },
-        { id: "growth-evenings", areaId: "growth", weekdays: [2, 4], effectiveOn: plannerDateKey(), startTime: "18:00", endTime: "19:00", fill: "sky" },
-        { id: "family-weekend", areaId: "family", weekdays: [6], effectiveOn: plannerDateKey(), startTime: "10:00", endTime: "13:00", fill: "sand" },
-        { id: "life-friday", areaId: "life", weekdays: [5], effectiveOn: plannerDateKey(), startTime: "14:00", endTime: "15:00", fill: "rose" },
+      blockRules: [
+        { id: "trading-mornings", kind: "area", areaId: "trading", weekdays: [1, 2, 3, 4, 5], effectiveOn: plannerDateKey(), startTime: "06:30", endTime: "09:30", fill: "sage" },
+        { id: "growth-evenings", kind: "area", areaId: "growth", weekdays: [2, 4], effectiveOn: plannerDateKey(), startTime: "18:00", endTime: "19:00", fill: "sky" },
+        { id: "family-weekend", kind: "area", areaId: "family", weekdays: [6], effectiveOn: plannerDateKey(), startTime: "10:00", endTime: "13:00", fill: "sand" },
+        { id: "life-friday", kind: "area", areaId: "life", weekdays: [5], effectiveOn: plannerDateKey(), startTime: "14:00", endTime: "15:00", fill: "rose" },
       ],
-      areaBlockExceptions: [],
+      blockExceptions: [],
       blockItems: [],
     },
     weeklyReview: emptyWeeklyReview(currentWeekKey()),

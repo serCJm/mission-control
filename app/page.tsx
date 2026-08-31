@@ -98,7 +98,7 @@ function emptyWorkspace(): Workspace {
     projects: [],
     tasks: [],
     routines: [],
-    planner: { areaBlockRules: [], areaBlockExceptions: [], blockItems: [] },
+    planner: { blockRules: [], blockExceptions: [], blockItems: [] },
     weeklyReview: emptyWeeklyReview(currentWeekKey()),
   };
 }
@@ -322,10 +322,21 @@ export default function Home() {
 
     async function loadWorkspace() {
       let localWorkspace: Workspace | null = null;
+      let unreadableLocalWorkspace = false;
       try {
-        const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? localStorage.getItem("bearing-workspace-v2");
-        const parsed = saved ? normalizeClientWorkspace(JSON.parse(saved) as unknown) : null;
-        if (parsed) localWorkspace = parsed;
+        const savedWorkspaces = [
+          localStorage.getItem(WORKSPACE_STORAGE_KEY),
+          localStorage.getItem("bearing-workspace-v2"),
+        ].filter((saved): saved is string => saved !== null);
+        for (const saved of savedWorkspaces) {
+          try {
+            const parsed = normalizeClientWorkspace(JSON.parse(saved) as unknown);
+            if (!parsed) continue;
+            localWorkspace = parsed;
+            break;
+          } catch { /* Try the other local workspace candidate. */ }
+        }
+        unreadableLocalWorkspace = savedWorkspaces.length > 0 && !localWorkspace;
         const savedSorts = localStorage.getItem(TASK_SORT_STORAGE_KEY);
         if (savedSorts) {
           const parsed = JSON.parse(savedSorts) as Record<string, unknown>;
@@ -334,7 +345,7 @@ export default function Home() {
         }
         const savedProjectView = localStorage.getItem(PROJECT_VIEW_STORAGE_KEY);
         if (savedProjectView === "list" || savedProjectView === "board") setProjectView(savedProjectView);
-      } catch { /* Fall back to the starter workspace. */ }
+      } catch { /* Ignore invalid view preferences. */ }
       setHydrated(true);
 
       try {
@@ -347,6 +358,7 @@ export default function Home() {
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; user: Account };
         if (!active) return;
 
+        if (!payload.workspace && unreadableLocalWorkspace) throw new Error("The local workspace needs recovery.");
         const loadedWorkspace = normalizeClientWorkspace(payload.workspace) ?? localWorkspace ?? await loadStarterWorkspace();
         if (!active) return;
         const nextWorkspace = { ...loadedWorkspace, routines: reconcileRoutines(loadedWorkspace.routines, new Date()) };
@@ -778,9 +790,9 @@ export default function Home() {
       tasks: current.tasks.filter((task) => task.areaId !== areaId && !projectIds.includes(task.projectId ?? "")),
       routines: current.routines.filter((routine) => routine.areaId !== areaId),
       planner: {
-        areaBlockRules: current.planner.areaBlockRules.filter((rule) => rule.areaId !== areaId),
-        areaBlockExceptions: current.planner.areaBlockExceptions.filter((item) => current.planner.areaBlockRules.some((rule) => rule.id === item.ruleId && rule.areaId !== areaId)),
-        blockItems: current.planner.blockItems.filter((item) => current.planner.areaBlockRules.some((rule) => rule.id === item.ruleId && rule.areaId !== areaId)),
+        blockRules: current.planner.blockRules.filter((rule) => rule.kind !== "area" || rule.areaId !== areaId),
+        blockExceptions: current.planner.blockExceptions.filter((item) => current.planner.blockRules.some((rule) => rule.id === item.ruleId && (rule.kind !== "area" || rule.areaId !== areaId))),
+        blockItems: current.planner.blockItems.filter((item) => current.planner.blockRules.some((rule) => rule.id === item.ruleId && (rule.kind !== "area" || rule.areaId !== areaId))),
       },
     }));
     navigate({ kind: "today" });
@@ -1778,7 +1790,7 @@ function Review({ workspace, review, completeStep, navigate }: { workspace: Work
   const [activeStep, setActiveStep] = useState(firstIncomplete < 0 ? 4 : firstIncomplete);
   const [intention, setIntention] = useState(review.intention);
   const firstArea = workspace.areas[0];
-  const scheduledBlocks = workspace.planner.areaBlockRules.length;
+  const scheduledBlocks = workspace.planner.blockRules.filter((rule) => rule.kind === "area").length;
   const inboxCount = workspace.tasks.filter((task) => !task.areaId && !task.projectId && task.status !== "done").length;
   const completedCount = workspace.tasks.filter((task) => task.status === "done").length;
   const openCount = workspace.tasks.filter((task) => task.status !== "done").length;

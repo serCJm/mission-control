@@ -22,7 +22,7 @@ The product treats time as broad area ownership first, then places projects and 
 
 - Areas are the durable overview for projects, an area backlog, waiting work, and routines.
 - Projects are outcome-oriented subareas for work that needs multiple tasks, with their own backlog, in-progress work, and waiting state.
-- Calendar protects broad area time. Each occurrence has one ordered block queue containing up to three existing tasks or routines; source lists use a single “Add to queue” action.
+- Calendar protects broad area time and standalone named time such as driving, breaks, meals, appointments, or buffer. Area occurrences can hold one ordered queue of up to three existing tasks or routines; no-area blocks protect time without becoming another work container.
 - “Now” is derived automatically as the first unfinished item in the active block queue; it is never another queue to maintain.
 - Today is the unified calendar and execution surface: the week stays visible while a contextual workbench selects the current or next block's work.
 - Weekly review prunes area queues and protects enough recurring area time without pre-planning every block.
@@ -31,8 +31,8 @@ The product treats time as broad area ownership first, then places projects and 
 ## Capabilities and Constraints
 
 - Persistent workspace data syncs through the existing authenticated D1-backed workspace API.
-- Calendar planning uses one-time or recurring weekly area blocks with per-occurrence exceptions.
-- Calendar block selections reference existing task and routine records; completing or waiting an item advances the block without creating duplicates.
+- Calendar planning uses one-time or recurring weekly blocks with per-occurrence exceptions. Every block is explicitly connected to an area or given a standalone title.
+- Area block selections reference existing task and routine records; completing or waiting an item advances the block without creating duplicates. Standalone blocks never accept tasks or routines.
 - Tasks may still keep deadline dates and exact times when a real external constraint exists.
 - The interface must remain usable with pointer, touch, and keyboard input.
 - Development and validation run locally through Docker with development data enabled.
@@ -48,7 +48,7 @@ The repository contains a working authenticated app, persistent example workspac
 
 ## Product Principles
 
-- Protect broad area blocks instead of over-scheduling every minute.
+- Protect broad area blocks, driving, breaks, and other real constraints instead of over-scheduling every minute.
 - Keep projects directional and tasks concrete.
 - Choose only one to three consequential items for the block closest to execution.
 - Preserve buffer and make replanning inexpensive.

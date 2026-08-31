@@ -32,8 +32,8 @@ type RoutineSuspension = { id: string; kind: "pause" | "vacation"; startsOn: str
 type RoutineSchedule = { weekdays: number[]; allDay: boolean; windowStart?: string; windowEnd?: string; effectiveOn?: string };
 type Routine = RoutineSchedule & { id: string; areaId: string; name: string; expectedMinutes: number; scheduleEffectiveOn: string; checklist: RoutineChecklistItem[]; suspensions: RoutineSuspension[]; sessions: RoutineSession[]; pendingSchedule?: RoutineSchedule };
 type Planner = {
-  areaBlockRules: Array<{ id: string; areaId: string; weekdays: number[]; effectiveOn: string; endsOn?: string; startTime: string; endTime: string; fill: "sage" | "sky" | "sand" | "rose" | "lilac" | "slate" }>;
-  areaBlockExceptions: Array<{ id: string; ruleId: string; occurrenceDate: string; kind: "skip" | "override"; date?: string; startTime?: string; endTime?: string }>;
+  blockRules: Array<({ id: string; kind: "area"; areaId: string } | { id: string; kind: "standalone"; title: string }) & { weekdays: number[]; effectiveOn: string; endsOn?: string; startTime: string; endTime: string; fill: "sage" | "sky" | "sand" | "rose" | "lilac" | "slate" }>;
+  blockExceptions: Array<{ id: string; ruleId: string; occurrenceDate: string; kind: "skip" | "override"; date?: string; startTime?: string; endTime?: string }>;
   blockItems: Array<{ id: string; ruleId: string; occurrenceDate: string; kind: "task" | "routine"; itemId: string }>;
 };
 type Workspace = { areas: Area[]; projects: Project[]; tasks: Task[]; routines: Routine[]; planner: Planner; weeklyReview: WeeklyReview };
