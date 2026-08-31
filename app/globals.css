@@ -1,5 +1,6 @@
 @import "./routines.css";
 @import "./planner.css";
+@import "./motion.css";
 
 :root{--ink:#18211e;--muted:#65706b;--paper:#f3f3ed;--panel:#fbfbf7;--line:#d9dcd4;--forest:#173d33;--forest-2:#245548;--lime:#d8e99e;--lime-soft:#edf4d3;--danger:#8b3f36;--sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace}
 *{box-sizing:border-box}html{background:var(--paper)}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 var(--sans)}button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid #6f8c48;outline-offset:1px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

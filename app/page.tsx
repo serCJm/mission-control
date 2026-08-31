@@ -1,11 +1,13 @@
 "use client";
 
-import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, type Ref, useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "./project-note-schema.mjs";
 import { formatPlannerTime, isPlannerDeadline, normalizePlanner, plannerDateKey } from "./planner-schema.mjs";
 import { Planner, type PlannerData, type PlannerSessionState } from "./planner";
+import { Presence } from "./presence";
 import { currentRoutineSession, isRoutineSuspended, normalizeRoutines, reconcileRoutines, routineConsistency, routineDateKey, routineScheduleLabel, routineScheduleStartsOn, shiftRoutineDate } from "./routine-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
@@ -63,6 +65,10 @@ const WORKSPACE_STORAGE_KEY = "mission-control-workspace-v1";
 const TASK_SORT_STORAGE_KEY = "mission-control-task-sorts-v2";
 const PROJECT_VIEW_STORAGE_KEY = "mission-control-project-view-v1";
 const nameCollator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
+function selectionKey(selection: Selection) {
+  return "id" in selection ? `${selection.kind}:${selection.id}` : selection.kind;
+}
 
 const reviewSteps = [
   ["Notice what moved", "Look for evidence of practice, not just outcomes."],
@@ -250,6 +256,9 @@ export default function Home() {
   const [account, setAccount] = useState<Account | null>(null);
   const [routineNow, setRoutineNow] = useState(() => new Date());
   const [plannerRefreshRequest, setPlannerRefreshRequest] = useState(0);
+  const workspaceMenuButton = useRef<HTMLButtonElement>(null);
+  const workspaceMenu = useRef<HTMLElement>(null);
+  const navigationGeneration = useRef(0);
   const lastSyncedWorkspace = useRef("");
   const lastServerUpdatedAt = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -466,6 +475,24 @@ export default function Home() {
   }, [hydrated, projectView]);
 
   useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    function dismissWorkspaceMenu(event: MouseEvent) {
+      if (!workspaceMenu.current?.contains(event.target as Node) && !workspaceMenuButton.current?.contains(event.target as Node)) setWorkspaceMenuOpen(false);
+    }
+    function closeWorkspaceMenuOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setWorkspaceMenuOpen(false);
+      workspaceMenuButton.current?.focus();
+    }
+    document.addEventListener("mousedown", dismissWorkspaceMenu);
+    document.addEventListener("keydown", closeWorkspaceMenuOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", dismissWorkspaceMenu);
+      document.removeEventListener("keydown", closeWorkspaceMenuOnEscape);
+    };
+  }, [workspaceMenuOpen]);
+
+  useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => { setToast(""); setUndoWorkspace(null); setTaskUndo(null); setMoveTaskUndo(null); }, 8000);
     return () => window.clearTimeout(timeout);
@@ -515,9 +542,22 @@ export default function Home() {
   }
 
   function navigate(next: Selection) {
-    setSelection(next);
-    setWorkspaceMenuOpen(false);
-    setShowProjectForm(false);
+    const generation = ++navigationGeneration.current;
+    const update = () => {
+      if (generation !== navigationGeneration.current) return;
+      setSelection(next);
+      setWorkspaceMenuOpen(false);
+      setShowProjectForm(false);
+    };
+    if (selectionKey(selection) === selectionKey(next)) {
+      update();
+      return;
+    }
+    if (typeof document.startViewTransition !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      update();
+      return;
+    }
+    document.startViewTransition(() => flushSync(update));
   }
 
   function prependTask(task: Task, message: string) {
@@ -1009,10 +1049,10 @@ export default function Home() {
               <button className={selection.kind === "review" ? "active" : ""} onClick={() => navigate({ kind: "review" })}>Review <small>{currentReview.completedSteps.length}/5</small></button>
             </nav>
           </div>
-          <button className="topbar-menu-button" onClick={() => setWorkspaceMenuOpen((open) => !open)} aria-label="Workspace menu" aria-expanded={workspaceMenuOpen} aria-controls="workspace-menu"><MenuIcon /></button>
+          <button ref={workspaceMenuButton} className="topbar-menu-button" onClick={() => setWorkspaceMenuOpen((open) => !open)} aria-label="Workspace menu" aria-expanded={workspaceMenuOpen} aria-controls="workspace-menu"><MenuIcon /></button>
           <QuickAdd destination={captureDestination} onAdd={addTask} />
           <div className="sync-tools" title={account?.email}>{syncState === "error" ? <button className="sync-state error" onClick={retrySync}><i />Retry sync</button> : <span className={`sync-state ${syncState}`}><i />{syncState === "saving" ? "Saving" : "Synced"}</span>}<a href="/signout-with-chatgpt?return_to=%2F">{account?.displayName ?? "Account"}</a></div>
-          {workspaceMenuOpen && <nav id="workspace-menu" className="workspace-menu-popover" aria-label="Workspace menu"><button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length} open</small></button><button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button><button className={selection.kind === "review" ? "active" : ""} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{currentReview.completedSteps.length}/5</small></button></nav>}
+          <Presence show={workspaceMenuOpen} className="motion-popover">{() => <nav ref={workspaceMenu} id="workspace-menu" className="workspace-menu-popover" aria-label="Workspace menu"><button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length} open</small></button><button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button><button className={selection.kind === "review" ? "active" : ""} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{currentReview.completedSteps.length}/5</small></button></nav>}</Presence>
         </header>
 
         {selection.kind === "today" && <Planner areas={workspace.areas} projects={workspace.projects} tasks={workspace.tasks} routines={workspace.routines} planner={workspace.planner} onChange={(planner) => setWorkspace((current) => ({ ...current, planner }))} onTaskChange={(taskId, patch) => updateTask(taskId, patch)} onRoutineSessionStatus={(routineId, date, status) => setRoutineSessionStatus(routineId, status, date)} makeId={makeId} onNotice={setToast} onEditorOpenChange={handlePlannerEditorChange} session={plannerSession} onSessionChange={(patch) => setPlannerSession((current) => ({ ...current, ...patch }))} onManage={navigate} onCreateArea={createArea} />}
@@ -1021,7 +1061,7 @@ export default function Home() {
         {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} moveTask={moveTask} setDragged={setDragged} navigate={navigate} />}
         {selection.kind === "review" && <Review key={currentReview.weekKey} workspace={workspace} review={currentReview} completeStep={completeReviewStep} navigate={navigate} />}
       </main>
-      {toast && <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || (moveTaskUndo && toast === moveTaskUndo.toast) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}
+      <Presence show={Boolean(toast)} className="motion-toast">{() => <div className="toast" role="status"><span>{toast}</span>{((toast === "Task deleted" && taskUndo) || (moveTaskUndo && toast === moveTaskUndo.toast) || undoWorkspace) && <button onClick={undoRemoval}>Undo</button>}</div>}</Presence>
     </div>
   );
 }
@@ -1115,10 +1155,10 @@ function AreaIconPicker({ value, onChange }: { value: AreaIconName; onChange: (i
     <button type="button" className="area-icon-trigger" aria-label="Choose area icon" title="Choose area icon" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
       <span className="area-icon-trigger-preview"><AreaIcon icon={value} /></span>
     </button>
-    {open && <div className="area-icon-popover" role="dialog" aria-label="Choose an area icon">
+    <Presence show={open} className="motion-popover">{() => <div className="area-icon-popover" role="dialog" aria-label="Choose an area icon">
       <div className="area-icon-popover-heading">Choose an icon</div>
       <div className="area-icon-grid">{AREA_ICON_OPTIONS.map(([icon, label]) => <button type="button" key={icon} className={value === icon ? "active" : ""} aria-label={label} aria-pressed={value === icon} title={label} onClick={() => { onChange(icon as AreaIconName); setOpen(false); }}><AreaIcon icon={icon as AreaIconName} /></button>)}</div>
-    </div>}
+    </div>}</Presence>
   </div>;
 }
 
@@ -1136,7 +1176,7 @@ function ConfirmIcon() {
   return <svg className="editor-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>;
 }
 
-function NameEditor({ value, onSave, label, large = false, iconOnly = false, onDelete, onEditingChange }: { value: string; onSave: (value: string) => void; label: string; large?: boolean; iconOnly?: boolean; onDelete?: () => void; onEditingChange?: (editing: boolean) => void }) {
+function NameEditor({ value, onSave, label, large = false, iconOnly = false, onDelete, onEditingChange, editButtonRef }: { value: string; onSave: (value: string) => void; label: string; large?: boolean; iconOnly?: boolean; onDelete?: () => void; onEditingChange?: (editing: boolean) => void; editButtonRef?: Ref<HTMLButtonElement> }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -1160,7 +1200,7 @@ function NameEditor({ value, onSave, label, large = false, iconOnly = false, onD
     <button disabled={!draft.trim()} aria-label="Save" title="Save"><ConfirmIcon /></button>
   </form>;
 
-  return <div className={`name-editor ${large ? "large" : ""} ${iconOnly ? "icon-only" : ""}`}><span>{value}</span><button type="button" onClick={() => { setDraft(value); setEditing(true); onEditingChange?.(true); }} aria-label={`Edit ${value}`} title={`Edit ${value}`}><span className="edit-label">Edit</span><EditIcon /></button>{onDelete && <button type="button" className="name-delete-button" onClick={onDelete} aria-label={`Delete ${value}`} title={`Delete ${value}`}><DeleteIcon /></button>}</div>;
+  return <div className={`name-editor ${large ? "large" : ""} ${iconOnly ? "icon-only" : ""}`}><span>{value}</span><button ref={editButtonRef} type="button" onClick={() => { setDraft(value); setEditing(true); onEditingChange?.(true); }} aria-label={`Edit ${value}`} title={`Edit ${value}`}><span className="edit-label">Edit</span><EditIcon /></button>{onDelete && <button type="button" className="name-delete-button" onClick={onDelete} aria-label={`Delete ${value}`} title={`Delete ${value}`}><DeleteIcon /></button>}</div>;
 }
 
 function AreaEditor({ area, onSave }: { area: Area; onSave: (patch: Partial<Pick<Area, "name" | "icon">>) => void }) {
@@ -1227,9 +1267,30 @@ function ProjectSortControl({ value, onChange }: { value: ProjectSort; onChange:
 
 function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "dueTime" | "priority">>) => void }) {
   const dateInput = useRef<HTMLInputElement>(null);
+  const priorityPicker = useRef<HTMLDivElement>(null);
+  const priorityTrigger = useRef<HTMLButtonElement>(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const dueDateLabel = task.dueDate ? dueLabel(task.dueDate) : "";
   const priorityLabel = task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : "";
+  const priorityMenuId = `task-priority-${task.id}`;
+
+  useEffect(() => {
+    if (!priorityOpen) return;
+    function dismissPriority(event: MouseEvent) {
+      if (!priorityPicker.current?.contains(event.target as Node)) setPriorityOpen(false);
+    }
+    function closePriorityOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setPriorityOpen(false);
+      priorityTrigger.current?.focus();
+    }
+    document.addEventListener("mousedown", dismissPriority);
+    document.addEventListener("keydown", closePriorityOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", dismissPriority);
+      document.removeEventListener("keydown", closePriorityOnEscape);
+    };
+  }, [priorityOpen]);
 
   function openDatePicker() {
     const input = dateInput.current;
@@ -1245,13 +1306,13 @@ function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string
       </button>
       <input ref={dateInput} className="task-date-input" type="date" tabIndex={-1} value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined })} aria-label={`Due date for ${task.title}`} />
     </div>
-    {task.dueDate && <label className={`task-time-direct ${task.dueTime ? "active" : ""}`} title={task.dueTime ? `Deadline at ${task.dueTime}` : "Add deadline time"}><span className="sr-only">Deadline time for {task.title}</span><ClockIcon /><input type="time" step="900" min="06:00" max="22:45" value={task.dueTime ?? ""} onChange={(event) => updateTask(task.id, { dueTime: event.target.value || undefined })} aria-label={`Deadline time for ${task.title}`} /></label>}
-    <div className={`task-direct-control priority priority-picker ${task.priority ? `active priority-${task.priority}` : "priority-none"}`}>
-      <button type="button" className="priority-trigger" onClick={() => setPriorityOpen((open) => !open)} aria-expanded={priorityOpen} aria-haspopup="menu" aria-label={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`} title={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`}><PriorityFlag priority={task.priority} /></button>
-      {priorityOpen && <div className="priority-menu" role="menu" aria-label={`Choose priority for ${task.title}`}>{([undefined, "low", "medium", "high"] as Array<TaskPriority | undefined>).map((priority) => {
+    <Presence show={Boolean(task.dueDate)} className="motion-panel" exitMs={140}>{() => <label className={`task-time-direct ${task.dueTime ? "active" : ""}`} title={task.dueTime ? `Deadline at ${task.dueTime}` : "Add deadline time"}><span className="sr-only">Deadline time for {task.title}</span><ClockIcon /><input type="time" step="900" min="06:00" max="22:45" value={task.dueTime ?? ""} onChange={(event) => updateTask(task.id, { dueTime: event.target.value || undefined })} aria-label={`Deadline time for ${task.title}`} /></label>}</Presence>
+    <div ref={priorityPicker} className={`task-direct-control priority priority-picker ${task.priority ? `active priority-${task.priority}` : "priority-none"}`}>
+      <button ref={priorityTrigger} type="button" className="priority-trigger" onClick={() => setPriorityOpen((open) => !open)} aria-expanded={priorityOpen} aria-controls={priorityMenuId} aria-haspopup="menu" aria-label={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`} title={`${task.priority ? `${priorityLabel} priority` : "No priority"} for ${task.title}`}><PriorityFlag priority={task.priority} /></button>
+      <Presence show={priorityOpen} className="motion-popover">{() => <div id={priorityMenuId} className="priority-menu" role="menu" aria-label={`Choose priority for ${task.title}`}>{([undefined, "low", "medium", "high"] as Array<TaskPriority | undefined>).map((priority) => {
         const label = priority ? `${priority.charAt(0).toUpperCase()}${priority.slice(1)} priority` : "No priority";
         return <button type="button" role="menuitemradio" aria-checked={task.priority === priority} aria-label={label} title={label} className={`priority-option priority-${priority ?? "none"}`} key={priority ?? "none"} onClick={() => { updateTask(task.id, { priority }); setPriorityOpen(false); }}><PriorityFlag priority={priority} /></button>;
-      })}</div>}
+      })}</div>}</Presence>
     </div>
   </>;
 }
@@ -1269,8 +1330,8 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
   const noteButton = useRef<HTMLButtonElement>(null);
+  const taskEditButton = useRef<HTMLButtonElement>(null);
   const noteEditor = useRef<HTMLTextAreaElement>(null);
-  const returnFocus = useRef(false);
   const notesDraftRef = useRef(notesDraft);
   const savedNotesRef = useRef(task.notes ?? "");
   const hasNotes = Boolean(task.notes?.trim());
@@ -1279,10 +1340,6 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
 
   useEffect(() => {
     if (notesOpen) noteEditor.current?.focus();
-    else if (returnFocus.current) {
-      noteButton.current?.focus();
-      returnFocus.current = false;
-    }
   }, [notesOpen]);
 
   useEffect(() => {
@@ -1308,23 +1365,24 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
 
   function closeNotes() {
     commitNotes();
-    returnFocus.current = true;
+    const returnTarget = taskEditing ? noteButton.current : taskEditButton.current;
+    returnTarget?.focus();
     setNotesOpen(false);
   }
 
   return <div className="task-copy">
-    <NameEditor iconOnly value={task.title} onSave={(value) => renameTask(task.id, value)} onDelete={() => removeTask(task.id)} label={`Task name for ${task.title}`} onEditingChange={setTaskEditing} />
-    {(taskEditing || notesOpen) && <div className="task-planning" aria-label={`Timing, priority, and notes for ${task.title}`}>
+    <NameEditor iconOnly value={task.title} onSave={(value) => renameTask(task.id, value)} onDelete={() => removeTask(task.id)} label={`Task name for ${task.title}`} onEditingChange={setTaskEditing} editButtonRef={taskEditButton} />
+    <Presence show={taskEditing || notesOpen} className="motion-panel">{() => <div className="task-planning" aria-label={`Timing, priority, and notes for ${task.title}`}>
       <TaskDetails task={task} updateTask={updateTask} />
       <button ref={noteButton} type="button" className={`task-direct-control task-note-trigger ${hasNotes ? "has-notes" : ""}`} onClick={() => notesOpen ? closeNotes() : openNotes()} aria-expanded={notesOpen} aria-controls={noteEditorId} aria-label={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`} title={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`}><NoteIcon /></button>
-    </div>}
+    </div>}</Presence>
     {task.dueDate && <p className="task-due-date">{dueDateLabel === "Overdue" ? dueDateLabel : `Due ${dueDateLabel}`}{task.dueTime ? ` · ${formatPlannerTime(task.dueTime)}` : ""}</p>}
-    {hasNotes && !notesOpen && <p className="task-note-preview">{task.notes?.replace(/\s+/g, " ").trim()}</p>}
-    {notesOpen && <div className="task-note-editor" id={noteEditorId}>
+    <Presence show={hasNotes && !notesOpen} className="motion-panel" exitMs={140}>{() => <p className="task-note-preview">{task.notes?.replace(/\s+/g, " ").trim()}</p>}</Presence>
+    <Presence show={notesOpen} className="motion-collapse">{() => <div className="task-note-editor" id={noteEditorId}>
       <div className="task-note-editor-heading"><span>Task notes</span><button type="button" onClick={closeNotes}>Close</button></div>
       <textarea ref={noteEditor} value={notesDraft} maxLength={20_000} onChange={(event) => { notesDraftRef.current = event.target.value; setNotesDraft(event.target.value); }} onBlur={commitNotes} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); closeNotes(); } }} placeholder="Add useful context, a decision, or what to remember next…" aria-label={`Notes for ${task.title}`} />
       <p>Autosaves with this task.</p>
-    </div>}
+    </div>}</Presence>
   </div>;
 }
 
@@ -1407,12 +1465,12 @@ function TaskMoveMenu({ task, targets, moveTask, moveTaskToStatus, openBelow = f
       <TaskMoveIcon />
       {!hasWorkflow && <><span>Move</span><svg className="task-move-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg></>}
     </button>
-    {open && <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" tabIndex={-1} aria-label={`Move ${task.title}`} onKeyDown={handleMenuKeyDown}>
+    <Presence show={open} className="motion-popover">{() => <div ref={menuRef} id={menuId} className="task-move-menu" role="menu" tabIndex={-1} aria-label={`Move ${task.title}`} onKeyDown={handleMenuKeyDown}>
       {hasWorkflow && <><span className="task-move-menu-label first">Workflow</span>{PROJECT_STATUSES.map((status) => <button type="button" role="menuitemradio" aria-checked={task.status === status.value} onClick={() => chooseStatus(status.value)} key={status.value}><span className={`task-workflow-option status-${status.value}`}><i /></span><span>{status.label}</span></button>)}</>}
       {directTargets.length > 0 && <span className={`task-move-menu-label ${hasWorkflow ? "" : "first"}`}>Move to</span>}
       {directTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}
       {projectTargets.length > 0 && <><span className="task-move-menu-label">Projects</span>{projectTargets.map((target) => <button type="button" role="menuitem" onClick={() => choose(target)} key={target.value}><span className="task-move-target-icon"><TaskMoveTargetIcon kind={target.kind} /></span><span>{target.label}</span></button>)}</>}
-    </div>}
+    </div>}</Presence>
   </div>;
 }
 
@@ -1454,8 +1512,8 @@ function RoutineForm({ routine, onSave, onCancel }: { routine?: Routine; onSave:
 
   return <form className="routine-form" onSubmit={submit}>
     <div className="routine-form-grid"><label className="routine-field routine-name-field"><span>Name</span><input value={name} maxLength={500} onChange={(event) => setName(event.target.value)} placeholder="Morning practice" /></label><label className="routine-field"><span>Expected duration</span><span className="routine-duration-input"><input type="number" min={1} max={480} value={expectedMinutes} onChange={(event) => setExpectedMinutes(Number(event.target.value))} /><i>min</i></span></label></div>
-    <fieldset className="routine-days"><legend>Scheduled days</legend><div>{ROUTINE_DAY_OPTIONS.map(([day, label]) => <button type="button" key={day} aria-pressed={weekdays.includes(day)} aria-label={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}>{label}</button>)}</div>{weekdays.length === 0 && <p role="alert">Choose at least one day.</p>}</fieldset>
-    <fieldset className="routine-window"><legend>Scheduled window</legend><div className="routine-window-mode"><button type="button" aria-pressed={allDay} onClick={() => setAllDay(true)}>All day</button><button type="button" aria-pressed={!allDay} onClick={() => setAllDay(false)}>Set hours</button></div>{!allDay && <div className="routine-time-fields"><label><span>Opens</span><input type="time" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} /></label><span aria-hidden="true">to</span><label><span>Closes</span><input type="time" value={windowEnd} min={windowStart} onChange={(event) => setWindowEnd(event.target.value)} /></label></div>}{!allDay && windowStart >= windowEnd && <p role="alert">Closing time must be later the same day.</p>}</fieldset>
+    <fieldset className="routine-days"><legend>Scheduled days</legend><div>{ROUTINE_DAY_OPTIONS.map(([day, label]) => <button type="button" key={day} aria-pressed={weekdays.includes(day)} aria-label={["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][day]} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}>{label}</button>)}</div><Presence show={weekdays.length === 0} className="motion-collapse">{() => <p role="alert">Choose at least one day.</p>}</Presence></fieldset>
+    <fieldset className="routine-window"><legend>Scheduled window</legend><div className="routine-window-mode"><button type="button" aria-pressed={allDay} onClick={() => setAllDay(true)}>All day</button><button type="button" aria-pressed={!allDay} onClick={() => setAllDay(false)}>Set hours</button></div><Presence show={!allDay} className="motion-collapse">{() => <div className="routine-time-fields"><label><span>Opens</span><input type="time" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} /></label><span aria-hidden="true">to</span><label><span>Closes</span><input type="time" value={windowEnd} min={windowStart} onChange={(event) => setWindowEnd(event.target.value)} /></label></div>}</Presence><Presence show={!allDay && windowStart >= windowEnd} className="motion-collapse">{() => <p role="alert">Closing time must be later the same day.</p>}</Presence></fieldset>
     <fieldset className="routine-checklist-editor"><legend>Checklist <span>optional</span></legend><div>{checklist.map((item, index) => <div className="routine-checklist-edit-row" key={item.id}><span aria-hidden="true" /><input value={item.text} maxLength={500} aria-label={`Checklist item ${index + 1}`} onChange={(event) => setChecklist((current) => current.map((entry) => entry.id === item.id ? { ...entry, text: event.target.value } : entry))} placeholder="A short practice step" /><button type="button" onClick={() => setChecklist((current) => current.filter((entry) => entry.id !== item.id))} aria-label={`Remove checklist item ${index + 1}`}><DeleteIcon /></button></div>)}</div>{checklist.length < 20 && <button type="button" className="routine-add-step" onClick={() => setChecklist((current) => [...current, { id: makeId("routine-step"), text: "" }])}>+ Add checklist item</button>}</fieldset>
     <div className="routine-form-actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit" disabled={!canSave}>{routine ? "Save routine" : "Create routine"}</button></div>
   </form>;
@@ -1470,6 +1528,7 @@ type RoutineCardActions = { setRoutineSessionStatus: (routineId: string, status:
 function RoutineCard({ routine, now, actions, management }: { routine: Routine; now: Date; actions: RoutineCardActions; management?: { updateRoutine: (routineId: string, draft: RoutineDraft) => void; removeRoutine: (routineId: string) => void; toggleRoutinePause: (routineId: string) => void; addRoutineVacation: (routineId: string, startsOn: string, endsOn: string) => void; removeRoutineVacation: (routineId: string, suspensionId: string) => void } }) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editorFormVersion, setEditorFormVersion] = useState(0);
   const [vacationOpen, setVacationOpen] = useState(false);
   const today = routineDateKey(now);
   const [vacationStart, setVacationStart] = useState(today);
@@ -1482,22 +1541,35 @@ function RoutineCard({ routine, now, actions, management }: { routine: Routine; 
   const checklist = session?.checklist ?? routine.checklist.map((item) => ({ ...item, checked: false }));
   const history = [...routine.sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
   const vacations = routine.suspensions.filter((item) => item.kind === "vacation" && (item.endsOn ?? item.startsOn) >= today);
+
+  function closeEditor() {
+    setEditing(false);
+    setEditorFormVersion((version) => version + 1);
+  }
+
   return <article className={`routine-card ${session ? "active-window" : ""} status-${session?.status ?? "idle"}`}>
     <div className="routine-card-main"><div className="routine-card-heading"><div><h3>{routine.name}</h3><p>{routineScheduleLabel(routine)} <span>·</span> {routine.expectedMinutes} min</p>{routine.pendingSchedule && <small>New schedule begins {routine.pendingSchedule.effectiveOn}</small>}</div><span className={`routine-state state-${session?.status ?? (paused || onVacation ? "suspended" : "idle")}`}><i />{state}</span></div>
     {checklist.length > 0 && <div className="routine-checklist" aria-label={`Checklist for ${routine.name}`}>{checklist.map((item) => session ? <label key={item.id}><input type="checkbox" checked={item.checked} onChange={() => actions.toggleRoutineChecklist(routine.id, item.id)} /><span>{item.text}</span></label> : <div key={item.id}><i aria-hidden="true" /><span>{item.text}</span></div>)}</div>}
     <div className="routine-card-foot"><span className="routine-consistency">{consistency.total ? <><strong>{consistency.completed} of {consistency.total}</strong> recent sessions</> : "No sessions yet"}</span><div className="routine-primary-actions">{session && <><button type="button" className="routine-complete" aria-pressed={session.status === "completed"} onClick={() => actions.setRoutineSessionStatus(routine.id, "completed")}>{session.status === "completed" ? "Completed" : "Complete"}</button><button type="button" aria-pressed={session.status === "skipped"} onClick={() => actions.setRoutineSessionStatus(routine.id, "skipped")}>{session.status === "skipped" ? "Skipped" : "Skip"}</button></>}<button type="button" aria-expanded={reviewOpen} onClick={() => setReviewOpen((open) => !open)}>{reviewOpen ? "Close review" : "Open review"}</button></div></div>
-    {management && <div className="routine-management"><button type="button" aria-expanded={editing} onClick={() => setEditing((open) => !open)}>{editing ? "Close editor" : "Edit"}</button><button type="button" onClick={() => management.toggleRoutinePause(routine.id)}>{paused ? "Resume" : "Pause"}</button><button type="button" aria-expanded={vacationOpen} onClick={() => setVacationOpen((open) => !open)}>Vacation</button><button type="button" className="routine-delete" onClick={() => management.removeRoutine(routine.id)}>Delete</button></div>}</div>
-    {reviewOpen && <section className="routine-review" aria-label={`Recent sessions for ${routine.name}`}><div><h4>Recent sessions</h4><span>{consistency.total ? `${consistency.completed}/${consistency.total} complete` : "No history"}</span></div>{history.length ? <ol>{history.map((item) => { const checked = item.checklist.filter((step) => step.checked).length; return <li key={item.date}><time dateTime={item.date}>{new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(`${item.date}T00:00:00Z`))}</time><span className={`history-status status-${item.status}`}>{routineStatusLabel(item.status)}</span><small>{item.checklist.length ? `${checked}/${item.checklist.length} steps` : "No checklist"}</small></li>; })}</ol> : <p>No scheduled sessions have closed yet.</p>}</section>}
-    {management && vacationOpen && <section className="routine-vacation-panel"><form onSubmit={(event) => { event.preventDefault(); if (vacationEnd < vacationStart) return; management.addRoutineVacation(routine.id, vacationStart, vacationEnd); setVacationOpen(false); }}><label><span>Vacation starts</span><input type="date" min={today} value={vacationStart} onChange={(event) => { setVacationStart(event.target.value); if (vacationEnd < event.target.value) setVacationEnd(event.target.value); }} /></label><label><span>Vacation ends</span><input type="date" min={vacationStart} value={vacationEnd} onChange={(event) => setVacationEnd(event.target.value)} /></label><button disabled={vacationEnd < vacationStart}>Save vacation</button></form>{vacations.length > 0 && <ul>{vacations.map((item) => <li key={item.id}><span>{item.startsOn === item.endsOn ? item.startsOn : `${item.startsOn} – ${item.endsOn}`}</span><button type="button" onClick={() => management.removeRoutineVacation(routine.id, item.id)}>Remove</button></li>)}</ul>}</section>}
-    {management && editing && <RoutineForm routine={routine} onCancel={() => setEditing(false)} onSave={(draft) => { management.updateRoutine(routine.id, draft); setEditing(false); }} />}
+    {management && <div className="routine-management"><button type="button" aria-expanded={editing} onClick={() => editing ? closeEditor() : setEditing(true)}>{editing ? "Close editor" : "Edit"}</button><button type="button" onClick={() => management.toggleRoutinePause(routine.id)}>{paused ? "Resume" : "Pause"}</button><button type="button" aria-expanded={vacationOpen} onClick={() => setVacationOpen((open) => !open)}>Vacation</button><button type="button" className="routine-delete" onClick={() => management.removeRoutine(routine.id)}>Delete</button></div>}</div>
+    <Presence show={reviewOpen} className="motion-collapse">{() => <section className="routine-review" aria-label={`Recent sessions for ${routine.name}`}><div><h4>Recent sessions</h4><span>{consistency.total ? `${consistency.completed}/${consistency.total} complete` : "No history"}</span></div>{history.length ? <ol>{history.map((item) => { const checked = item.checklist.filter((step) => step.checked).length; return <li key={item.date}><time dateTime={item.date}>{new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(`${item.date}T00:00:00Z`))}</time><span className={`history-status status-${item.status}`}>{routineStatusLabel(item.status)}</span><small>{item.checklist.length ? `${checked}/${item.checklist.length} steps` : "No checklist"}</small></li>; })}</ol> : <p>No scheduled sessions have closed yet.</p>}</section>}</Presence>
+    {management && <Presence show={vacationOpen} className="motion-collapse">{() => <section className="routine-vacation-panel"><form onSubmit={(event) => { event.preventDefault(); if (vacationEnd < vacationStart) return; management.addRoutineVacation(routine.id, vacationStart, vacationEnd); setVacationOpen(false); }}><label><span>Vacation starts</span><input type="date" min={today} value={vacationStart} onChange={(event) => { setVacationStart(event.target.value); if (vacationEnd < event.target.value) setVacationEnd(event.target.value); }} /></label><label><span>Vacation ends</span><input type="date" min={vacationStart} value={vacationEnd} onChange={(event) => setVacationEnd(event.target.value)} /></label><button disabled={vacationEnd < vacationStart}>Save vacation</button></form>{vacations.length > 0 && <ul>{vacations.map((item) => <li key={item.id}><span>{item.startsOn === item.endsOn ? item.startsOn : `${item.startsOn} – ${item.endsOn}`}</span><button type="button" onClick={() => management.removeRoutineVacation(routine.id, item.id)}>Remove</button></li>)}</ul>}</section>}</Presence>}
+    {management && <Presence show={editing} className="motion-collapse">{() => <div className="routine-form-shell"><RoutineForm key={editorFormVersion} routine={routine} onCancel={closeEditor} onSave={(draft) => { management.updateRoutine(routine.id, draft); closeEditor(); }} /></div>}</Presence>}
   </article>;
 }
 
 function RoutinesSection({ area, routines, now, addRoutine, updateRoutine, removeRoutine, setRoutineSessionStatus, toggleRoutineChecklist, toggleRoutinePause, addRoutineVacation, removeRoutineVacation }: { area: Area; routines: Routine[]; now: Date; addRoutine: (areaId: string, draft: RoutineDraft) => void; updateRoutine: (routineId: string, draft: RoutineDraft) => void; removeRoutine: (routineId: string) => void; setRoutineSessionStatus: RoutineCardActions["setRoutineSessionStatus"]; toggleRoutineChecklist: RoutineCardActions["toggleRoutineChecklist"]; toggleRoutinePause: (routineId: string) => void; addRoutineVacation: (routineId: string, startsOn: string, endsOn: string) => void; removeRoutineVacation: (routineId: string, suspensionId: string) => void }) {
   const [creating, setCreating] = useState(false);
+  const [creatorFormVersion, setCreatorFormVersion] = useState(0);
   const management = { updateRoutine, removeRoutine, toggleRoutinePause, addRoutineVacation, removeRoutineVacation };
   const actions = { setRoutineSessionStatus, toggleRoutineChecklist };
-  return <section className="routine-section"><div className="section-title"><div><h2>Routines <small>{routines.length} active</small></h2><p className="section-note">Repeating practices create check-ins, never an overdue queue.</p></div><button type="button" className={`project-add-button ${creating ? "active" : ""}`} aria-label={creating ? "Close new routine form" : "New routine"} aria-expanded={creating} onClick={() => setCreating((open) => !open)}><PlusIcon /></button></div>{creating && <RoutineForm onCancel={() => setCreating(false)} onSave={(draft) => { addRoutine(area.id, draft); setCreating(false); }} />}{routines.length ? <div className="routine-list">{routines.map((routine) => <RoutineCard key={routine.id} routine={routine} now={now} actions={actions} management={management} />)}</div> : !creating && <div className="empty-state"><strong>No routines yet.</strong><p>Add a repeating practice when consistency matters more than a finish line.</p></div>}</section>;
+
+  function closeCreator() {
+    setCreating(false);
+    setCreatorFormVersion((version) => version + 1);
+  }
+
+  return <section className="routine-section"><div className="section-title"><div><h2>Routines <small>{routines.length} active</small></h2><p className="section-note">Repeating practices create check-ins, never an overdue queue.</p></div><button type="button" className={`project-add-button ${creating ? "active" : ""}`} aria-label={creating ? "Close new routine form" : "New routine"} aria-expanded={creating} onClick={() => creating ? closeCreator() : setCreating(true)}><PlusIcon /></button></div><Presence show={creating} className="motion-collapse">{() => <div className="routine-form-shell"><RoutineForm key={creatorFormVersion} onCancel={closeCreator} onSave={(draft) => { addRoutine(area.id, draft); closeCreator(); }} /></div>}</Presence>{routines.length ? <div className="routine-list">{routines.map((routine) => <RoutineCard key={routine.id} routine={routine} now={now} actions={actions} management={management} />)}</div> : <Presence show={!creating} className="motion-panel">{() => <div className="empty-state"><strong>No routines yet.</strong><p>Add a repeating practice when consistency matters more than a finish line.</p></div>}</Presence>}</section>;
 }
 
 function Inbox({ workspace, tasks, toggleTask, renameTask, updateTask, removeTask, onTaskNoteEditorChange, moveTask, reorderProps, taskSort, setTaskSort }: { workspace: Workspace; tasks: Task[]; toggleTask: (id: string) => void; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; moveTask: (id: string, value: string) => void; reorderProps: (item: DragItem) => ReorderProps; taskSort: TaskSort; setTaskSort: (sort: TaskSort) => void }) {
@@ -1518,7 +1590,7 @@ function AreaTaskQueue({ label, description, tasks, area, projects, addTask, tog
   const [newTask, setNewTask] = useState("");
   const actionLabel = showForm ? `Close new ${label.toLowerCase()} task form` : `Add a task to ${label}`;
   return <section className="loose-tasks deferred-tasks"><div className="section-title"><div><h2>{label}</h2><p className="section-note">{description}</p></div><div className="section-header-actions"><TaskSortControl value={taskSort} onChange={setTaskSort} /><button type="button" className={`project-add-button ${showForm ? "active" : ""}`} onClick={() => setShowForm((current) => !current)} aria-label={actionLabel} title={actionLabel} aria-expanded={showForm}><PlusIcon /></button></div></div>
-    {showForm && <form className="deferred-task-create" onSubmit={(event) => { event.preventDefault(); const title = newTask.trim(); if (!title) return; addTask(area.id, title); setNewTask(""); setShowForm(false); }}><input value={newTask} maxLength={2_000} onChange={(event) => setNewTask(event.target.value)} placeholder={`${label} task`} aria-label={`New ${label.toLowerCase()} task in ${area.name}`} /><button disabled={!newTask.trim()}>Add task</button></form>}
+    <Presence show={showForm} className="motion-collapse">{() => <form className="deferred-task-create" onSubmit={(event) => { event.preventDefault(); const title = newTask.trim(); if (!title) return; addTask(area.id, title); setNewTask(""); setShowForm(false); }}><input value={newTask} maxLength={2_000} onChange={(event) => setNewTask(event.target.value)} placeholder={`${label} task`} aria-label={`New ${label.toLowerCase()} task in ${area.name}`} /><button disabled={!newTask.trim()}>Add task</button></form>}</Presence>
     <TaskRows tasks={tasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={scope} taskSort={taskSort} empty={empty} taskMoveTargets={[otherQueue, ...projects.map((project) => ({ value: `project:${project.id}`, label: project.name, kind: "project" as const }))]} moveTask={moveTask} /></section>;
 }
 
@@ -1538,7 +1610,7 @@ function AreaView({ area, projects, tasks, routines, showProjectForm, setShowPro
   });
   return <div className="page"><nav className="breadcrumb" aria-label="Breadcrumb"><button type="button" onClick={() => navigate({ kind: "today" })}>Back to Today</button><span aria-hidden="true">/</span><span aria-current="page">{area.name}</span></nav><div className="page-heading area-page-heading"><div><AreaEditor key={area.id} area={area} onSave={(patch) => updateArea(area.id, patch)} /></div></div>
     <section className="project-section"><div className="section-title project-section-title"><h2>Projects <small>{projects.length} active</small></h2><div className="section-header-actions"><ProjectSortControl value={projectSort} onChange={setProjectSort} /><button type="button" className={`project-add-button ${showProjectForm ? "active" : ""}`} onClick={() => setShowProjectForm(!showProjectForm)} aria-label={showProjectForm ? "Close new project form" : "New project"} title={showProjectForm ? "Close new project form" : "New project"} aria-expanded={showProjectForm}><PlusIcon /></button></div></div>
-    {showProjectForm && <form className="inline-create" onSubmit={addProject}><div><strong>Create a project in {area.name}</strong><span>Name a concrete body of work, not an ongoing responsibility.</span></div><input value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Project name" aria-label="Project name" /><button disabled={!newProject.trim()}>Create project</button></form>}
+    <Presence show={showProjectForm} className="motion-collapse">{() => <form className="inline-create" onSubmit={addProject}><div><strong>Create a project in {area.name}</strong><span>Name a concrete body of work, not an ongoing responsibility.</span></div><input value={newProject} onChange={(event) => setNewProject(event.target.value)} placeholder="Project name" aria-label="Project name" /><button disabled={!newProject.trim()}>Create project</button></form>}</Presence>
     {orderedProjects.length ? <div className="project-list">{orderedProjects.map((project) => {
       const descriptor = { kind: "project" as const, id: project.id, scope: area.id };
       const reorder = reorderProps(descriptor);
@@ -1551,11 +1623,11 @@ function AreaView({ area, projects, tasks, routines, showProjectForm, setShowPro
       const taskListId = `project-tasks-${project.id}`;
       return <div className={`project-summary ${isExpanded ? "expanded" : ""} ${projectSort === "custom" ? "custom-order" : "sorted-order"}`} key={project.id}>
         <div className={`entity-row project-entity ${projectSort === "custom" ? "custom-order" : "sorted-order"}`} role="link" tabIndex={0} aria-label={`Open ${project.name}`} onClick={(event) => { if (!(event.target as HTMLElement).closest("button, input, textarea, select, a")) openProject(); }} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openProject(); } }} {...(projectSort === "custom" ? { onDragOver: (event: DragEvent<HTMLElement>) => reorder.onDragOver(event, descriptor), onDrop: (event: DragEvent<HTMLElement>) => reorder.onDrop(event, descriptor) } : {})}>{projectSort === "custom" && <DragHandle {...reorder} label={`Reorder ${project.name}`} />}<div className="entity-copy"><NameEditor value={project.name} onSave={(value) => renameProject(project.id, value)} label={`Project name for ${project.name}`} /><small>{project.outcome}</small></div><span className="project-task-counts" aria-label={`${doingTasks.length} doing, ${todoTasks.length} todo`}><strong>{doingTasks.length} active</strong><i aria-hidden="true">·</i><span>{todoTasks.length} todo</span></span><button type="button" className="project-disclosure" aria-expanded={isExpanded} aria-controls={taskListId} onClick={() => toggleProject(project.id)} aria-label={`${isExpanded ? "Collapse" : "Expand"} tasks for ${project.name}`} title={`${isExpanded ? "Collapse" : "Expand"} tasks`}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6.5 8 3.5 3.5L13.5 8" /></svg></button></div>
-        {isExpanded && <div className="project-task-preview" id={taskListId}>{orderedProjectTasks.length ? orderedProjectTasks.map((task) => <div className="project-task-preview-row" key={task.id}><span className={`project-task-status status-${task.status}`}>{task.status === "doing" ? "In progress" : "Backlog"}</span><span className="project-task-title">{task.title}</span><button type="button" aria-label={`Move ${task.title} to area backlog`} onClick={() => moveTask(task.id, `backlog:${area.id}`)}><span>Move to area</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 8H3.5m3-3-3 3 3 3" /></svg></button></div>) : <p>No open tasks in this project.</p>}</div>}
+        <Presence show={isExpanded} className="motion-panel">{() => <div className="project-task-preview" id={taskListId}>{orderedProjectTasks.length ? orderedProjectTasks.map((task) => <div className="project-task-preview-row" key={task.id}><span className={`project-task-status status-${task.status}`}>{task.status === "doing" ? "In progress" : "Backlog"}</span><span className="project-task-title">{task.title}</span><button type="button" aria-label={`Move ${task.title} to area backlog`} onClick={() => moveTask(task.id, `backlog:${area.id}`)}><span>Move to area</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 8H3.5m3-3-3 3 3 3" /></svg></button></div>) : <p>No open tasks in this project.</p>}</div>}</Presence>
       </div>;
     })}</div> : <div className="empty-state"><strong>No projects yet.</strong><p>Create one when this area has a finite outcome to move.</p></div>}</section>
     <section className="loose-tasks focus-tasks"><div className="section-title"><div><h2>Area backlog</h2><p className="section-note">Standalone actions that belong to this area. Choose them in Calendar only when a block is near.</p></div><div className="section-header-actions"><TaskSortControl value={focusSort} onChange={setFocusSort} /><button type="button" className={`project-add-button ${showBacklogForm ? "active" : ""}`} onClick={() => setShowBacklogForm(!showBacklogForm)} aria-label={showBacklogForm ? "Close new backlog task form" : "Add a task to area backlog"} title={showBacklogForm ? "Close" : "Add backlog task"} aria-expanded={showBacklogForm}><PlusIcon /></button></div></div>
-    {showBacklogForm && <form className="focus-task-create" onSubmit={(event) => { event.preventDefault(); const title = newBacklogTask.trim(); if (!title) return; addAreaTask(area.id, title); setNewBacklogTask(""); setShowBacklogForm(false); }}><input value={newBacklogTask} maxLength={2_000} onChange={(event) => setNewBacklogTask(event.target.value)} placeholder="Backlog task" aria-label={`New backlog task in ${area.name}`} /><button disabled={!newBacklogTask.trim()}>Add task</button></form>}
+    <Presence show={showBacklogForm} className="motion-collapse">{() => <form className="focus-task-create" onSubmit={(event) => { event.preventDefault(); const title = newBacklogTask.trim(); if (!title) return; addAreaTask(area.id, title); setNewBacklogTask(""); setShowBacklogForm(false); }}><input value={newBacklogTask} maxLength={2_000} onChange={(event) => setNewBacklogTask(event.target.value)} placeholder="Backlog task" aria-label={`New backlog task in ${area.name}`} /><button disabled={!newBacklogTask.trim()}>Add task</button></form>}</Presence>
     <TaskRows tasks={looseTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`backlog:${area.id}`} taskSort={focusSort} emptyTitle="Area backlog is clear." empty={`Capture a standalone action here when it belongs to ${area.name} but not to a project.`} taskMoveTargets={[{ value: `waiting:${area.id}`, label: "Waiting", kind: "waiting" }, ...projects.map((project) => ({ value: `project:${project.id}`, label: project.name, kind: "project" as const }))]} moveTask={moveTask} /></section>
     <AreaTaskQueue label="Waiting" description="Tasks blocked on a person, response, event, or other dependency." tasks={waitingTasks} area={area} projects={projects} addTask={addWaitingTask} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`waiting:${area.id}`} taskSort={waitingSort} setTaskSort={setWaitingSort} empty="Move a task here when the next step depends on someone or something else." otherQueue={{ value: `backlog:${area.id}`, label: "Backlog", kind: "backlog" }} moveTask={moveTask} />
     <RoutinesSection area={area} routines={routines} now={routineNow} addRoutine={addRoutine} updateRoutine={updateRoutine} removeRoutine={removeRoutine} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} toggleRoutinePause={toggleRoutinePause} addRoutineVacation={addRoutineVacation} removeRoutineVacation={removeRoutineVacation} />
@@ -1618,11 +1690,11 @@ function ProjectNotes({ project, addNote, updateNote, removeNote, onEditorChange
 
   return <section className="project-notes" aria-labelledby={`project-notes-${project.id}`}>
     <div className="section-title project-notes-heading"><div><h2 id={`project-notes-${project.id}`}>Notes</h2><p className="section-note">Keep decisions, references, observations, and useful context close to the work.</p></div><div className="project-notes-meta"><span>{notes.length} {notes.length === 1 ? "note" : "notes"}</span><button type="button" className={`project-add-button project-note-add-button ${composing ? "active" : ""}`} onClick={() => composing ? closeComposer() : setComposing(true)} aria-label={composing ? "Close new note form" : "Add a note"} title={composing ? "Close new note form" : "Add a note"} aria-expanded={composing}><PlusIcon /></button></div></div>
-    {composing ? <form className="project-note-composer expanded" onSubmit={createNote}>
+    <Presence show={composing} className="motion-collapse">{() => <form className="project-note-composer expanded" onSubmit={createNote}>
       <input value={title} maxLength={500} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelComposer(); } }} placeholder="Title" aria-label="New note title" />
       <textarea value={body} maxLength={20_000} onChange={(event) => setBody(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelComposer(); } }} placeholder="Write a note…" aria-label="New note body" />
       <div className="project-note-composer-actions"><button type="button" className="note-cancel-button" onClick={cancelComposer}>Cancel</button><button type="submit" className="note-create-button" disabled={!canCreate}>Create note</button></div>
-    </form> : null}
+    </form>}</Presence>
     {notes.length ? <div className="notes-board">{notes.map((note) => <ProjectNoteCard key={note.id} note={note} updateNote={updateNote} removeNote={removeNote} onEditorChange={onEditorChange} />)}</div> : <div className="empty-state project-notes-empty"><strong>No notes yet.</strong><p>Add the first decision, observation, or reference for this project.</p></div>}
   </section>;
 }
@@ -1659,11 +1731,10 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
   }
 
   function statusComposer(status: TaskStatus, label: string) {
-    if (addingStatus !== status) return null;
-    return <form className="task-group-create" onSubmit={(event) => submitStatusTask(event, status)}>
+    return <Presence show={addingStatus === status} className="motion-collapse">{() => <form className="task-group-create" onSubmit={(event) => submitStatusTask(event, status)}>
       <input value={newStatusTask} maxLength={500} onChange={(event) => setNewStatusTask(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setNewStatusTask(""); setAddingStatus(null); } }} placeholder={`Add to ${label}`} aria-label={`New task in ${label}`} />
       <button disabled={!newStatusTask.trim()}>Add task</button>
-    </form>;
+    </form>}</Presence>;
   }
 
   function dropInStatus(event: DragEvent<HTMLElement>, status: TaskStatus, targetId?: string) {
@@ -1689,7 +1760,7 @@ function ProjectView({ project, area, tasks, toggleTask, renameProject, renameTa
       <section className="task-group project-waiting-group" aria-labelledby={`waiting-${project.id}`}><div className="task-group-heading"><h3 id={`waiting-${project.id}`}>Waiting</h3><div className="task-group-actions"><span>{waitingTasks.length}</span></div></div><TaskRows tasks={waitingTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project-waiting:${project.id}`} taskSort={taskSort} empty="Nothing in this project is blocked." taskMoveTargets={[{ value: `project:${project.id}`, label: "Project backlog", kind: "project" }, { value: `backlog:${area.id}`, label: "Area backlog", kind: "backlog" }]} moveTask={moveTask} /></section>
       <section className={`completed-archive ${showCompleted ? "expanded" : ""}`} aria-label="Completed tasks" onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, "done")}>
         <button type="button" className="completed-archive-toggle" aria-expanded={showCompleted} aria-controls={`completed-${project.id}`} onClick={() => setShowCompleted((current) => !current)}><span><strong>Completed</strong><small>{completedTasks.length ? "Archived from the active workflow" : "Check a task or drag it here"}</small></span><span className="completed-archive-count">{completedTasks.length}</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6.5 8 3.5 3.5L13.5 8" /></svg></button>
-        {showCompleted && <div className="completed-archive-tasks" id={`completed-${project.id}`}>{completedTasks.length ? <TaskRows tasks={completedTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:done`} taskSort={taskSort} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} empty="Completed tasks collect here." /> : <p>Nothing completed yet.</p>}</div>}
+        <Presence show={showCompleted} className="motion-panel">{() => <div className="completed-archive-tasks" id={`completed-${project.id}`}>{completedTasks.length ? <TaskRows tasks={completedTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project:${project.id}:done`} taskSort={taskSort} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} taskMoveTargets={moveTargets} moveTask={moveTask} empty="Completed tasks collect here." /> : <p>Nothing completed yet.</p>}</div>}</Presence>
       </section>
     </section>
     <ProjectNotes project={project} addNote={addProjectNote} updateNote={updateProjectNote} removeNote={removeProjectNote} onEditorChange={onProjectNoteEditorChange} />
@@ -1722,7 +1793,7 @@ function Review({ workspace, review, completeStep, navigate }: { workspace: Work
     const complete = review.completedSteps.includes(index);
     const available = complete || index <= Math.max(firstIncomplete, 0);
     return <button type="button" className={`${activeStep === index ? "active" : ""} ${complete ? "complete" : ""}`} disabled={!available} aria-current={activeStep === index ? "step" : undefined} onClick={() => setActiveStep(index)} key={title}><span>{complete ? <ConfirmIcon /> : index + 1}</span><span><strong>{title}</strong><small>{copy}</small></span></button>;
-  })}</nav><section className="review-stage" aria-labelledby="review-stage-title"><div className="review-stage-heading"><span>Step {activeStep + 1} of 5</span><h2 id="review-stage-title">{stepTitle}</h2><p>{activeStep === 1 && inboxCount > 0 ? `${inboxCount} inbox ${inboxCount === 1 ? "item is" : "items are"} still waiting for a home.` : stepCopy}</p></div>
+  })}</nav><section className="review-stage review-stage-content" aria-labelledby="review-stage-title" key={activeStep}><div className="review-stage-heading"><span>Step {activeStep + 1} of 5</span><h2 id="review-stage-title">{stepTitle}</h2><p>{activeStep === 1 && inboxCount > 0 ? `${inboxCount} inbox ${inboxCount === 1 ? "item is" : "items are"} still waiting for a home.` : stepCopy}</p></div>
     {activeStep === 0 && <><div className="review-evidence"><div><strong>{completedCount}</strong><span>tasks completed</span></div><div><strong>{openCount}</strong><span>still open</span></div><div><strong>{workspace.projects.length}</strong><span>projects carrying work</span></div></div><p className="review-prompt">Notice the work that produced learning, protected something important, or changed what you will do next.</p><button type="button" className="review-primary" onClick={() => finishStep(0)}>I noticed what moved</button></>}
     {activeStep === 1 && <div className={`review-action-state ${inboxCount === 0 ? "ready" : "waiting"}`}><strong>{inboxCount === 0 ? "Your inbox is clear." : "Give every loose task a home—or let it go."}</strong><p>{inboxCount === 0 ? "The system is ready for the next decision." : "Return here when the inbox reaches zero."}</p>{inboxCount === 0 ? <button type="button" className="review-primary" onClick={() => finishStep(1)}>Continue</button> : <button type="button" className="review-primary" onClick={() => navigate({ kind: "inbox" })}>Process inbox</button>}</div>}
     {activeStep === 2 && <><div className="review-prune-summary"><div><span>Open work</span><strong>{openCount}</strong></div><div><span>Backlog</span><strong>{backlogCount}</strong></div><div><span>Waiting</span><strong>{waitingCount}</strong></div><div><span>Projects</span><strong>{workspace.projects.length}</strong></div></div><p className="review-prompt">Remove, defer, or narrow anything that no longer earns attention. Keep only work with real stakes or useful feedback.</p><div className="review-stage-actions">{firstArea && <button type="button" className="review-secondary" onClick={() => navigate({ kind: "area", id: firstArea.id })}>Review areas</button>}<button type="button" className="review-primary" onClick={() => finishStep(2)}>I pruned the queues</button></div></>}

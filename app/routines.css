@@ -36,6 +36,8 @@
 .routine-vacation-panel ul{display:grid;gap:5px;margin:11px 0 0;padding:10px 0 0;border-top:1px solid #dce1d8;list-style:none}
 .routine-vacation-panel li{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#53625a;font:600 9px var(--mono)}
 .routine-vacation-panel li button{border:0;background:transparent;color:var(--danger);padding:5px;font:700 9px var(--sans)}
+.routine-form-shell>.routine-form{margin-bottom:12px}
+.routine-card>.routine-form-shell>.routine-form{margin:0;border:0;border-top:1px solid #dce1d8;border-radius:0;background:#f1f3ed;padding:15px 20px}
 
 @media(max-width:720px){
   .routine-form-grid{grid-template-columns:1fr}
@@ -69,4 +71,5 @@
   .routine-vacation-panel form{grid-template-columns:1fr}
   .routine-vacation-panel form>button{grid-column:auto;min-height:44px}
   .routine-review li{grid-template-columns:52px 76px minmax(0,1fr)}
+  .routine-card>.routine-form-shell>.routine-form{padding:16px 17px}
 }

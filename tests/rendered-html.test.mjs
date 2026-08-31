@@ -10,6 +10,7 @@ import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from ".
 import { currentWeekKey, emptyWeeklyReview, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
 
 const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+const presence = readFileSync(new URL("../app/presence.tsx", import.meta.url), "utf8");
 const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
 const plannerStyles = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
 const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
@@ -372,6 +373,69 @@ test("only finalized routine sessions complete planner work", () => {
   for (const status of ["completed", "skipped", "missed"]) assert.equal(isFinalRoutineSessionStatus(status), true);
 });
 
+test("presence lazily renders openings and retains committed exit content", () => {
+  assert.match(presence, /children: \(\) => ReactElement<PresenceChildProps>/);
+  assert.match(presence, /const visibleChild = show \? children\(\) : null/);
+  assert.match(presence, /if \(show && visibleChild\) retainedChild\.current = visibleChild/);
+  assert.match(presence, /return \(\) => window\.clearTimeout\(timeout\)/);
+  assert.match(presence, /retainedChild\.current = null/);
+  assert.match(presence, /"data-motion-state": show \? "open" : "closed"/);
+  assert.match(presence, /"aria-hidden": show \? child\.props\["aria-hidden"\] : true/);
+  assert.match(presence, /inert: show \? child\.props\.inert : true/);
+  assert.doesNotMatch(presence, /requestAnimationFrame|setVisibleChild|setMounted/);
+  for (const source of [page, plannerView]) assert.doesNotMatch(source, /<Presence\b[^>]*>\s*<(?!\{)/);
+});
+
+test("task note close restores focus outside an exiting planning panel", () => {
+  assert.match(page, /editButtonRef\?: Ref<HTMLButtonElement>/);
+  assert.match(page, /const taskEditButton = useRef<HTMLButtonElement>\(null\)/);
+  assert.match(page, /editButtonRef=\{taskEditButton\}/);
+  assert.match(page, /function closeNotes\(\) \{\s*commitNotes\(\);\s*const returnTarget = taskEditing \? noteButton\.current : taskEditButton\.current;\s*returnTarget\?\.focus\(\);\s*setNotesOpen\(false\);/);
+  assert.doesNotMatch(page, /returnFocus/);
+});
+
+test("reduced motion disables the planner workbench transition", () => {
+  assert.match(plannerStyles, /@media\(prefers-reduced-motion:reduce\)\{[^}]*\.planner-page\.workbench-closed \.planner-workbench[^}]*\{transition:none\}/);
+});
+
+test("workbench exits cancel opening focus and keep hidden content inert", () => {
+  assert.match(plannerView, /let frame: number \| undefined/);
+  assert.match(plannerView, /frame = requestAnimationFrame\(\(\) => \{/);
+  assert.match(plannerView, /workbenchVisible && workbench && !workbench\.hasAttribute\("inert"\)/);
+  assert.match(plannerView, /if \(frame !== undefined\) cancelAnimationFrame\(frame\)/);
+  assert.match(plannerView, /aria-hidden=\{!workbenchVisible\} inert=\{!workbenchVisible\}/);
+});
+
+test("unbounded task lists avoid block-size collapse motion", () => {
+  assert.match(page, /<Presence show=\{isExpanded\} className="motion-panel">\{\(\) => <div className="project-task-preview"/);
+  assert.match(page, /<Presence show=\{showCompleted\} className="motion-panel">\{\(\) => <div className="completed-archive-tasks"/);
+  assert.doesNotMatch(page, /<Presence show=\{isExpanded\} className="motion-collapse">\{\(\) => <div className="project-task-preview"/);
+  assert.doesNotMatch(page, /<Presence show=\{showCompleted\} className="motion-collapse">\{\(\) => <div className="completed-archive-tasks"/);
+});
+
+test("navigation discards stale view-transition callbacks", () => {
+  assert.match(page, /const navigationGeneration = useRef\(0\)/);
+  assert.match(page, /const generation = \+\+navigationGeneration\.current/);
+  assert.match(page, /if \(generation !== navigationGeneration\.current\) return/);
+  assert.match(page, /if \(selectionKey\(selection\) === selectionKey\(next\)\) \{[\s\S]*?update\(\);[\s\S]*?return;/);
+  assert.match(page, /typeof document\.startViewTransition !== "function" \|\| window\.matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches/);
+  assert.match(page, /document\.startViewTransition\(\(\) => flushSync\(update\)\)/);
+  assert.doesNotMatch(page, /ViewTransitionDocument|transitionDocument/);
+});
+
+test("routine form versions reset only when editor or creator forms close", () => {
+  assert.match(page, /const \[editorFormVersion, setEditorFormVersion\] = useState\(0\)/);
+  assert.match(page, /function closeEditor\(\) \{\s*setEditing\(false\);\s*setEditorFormVersion\(\(version\) => version \+ 1\);/);
+  assert.match(page, /onClick=\{\(\) => editing \? closeEditor\(\) : setEditing\(true\)\}/);
+  assert.match(page, /<RoutineForm key=\{editorFormVersion\} routine=\{routine\} onCancel=\{closeEditor\} onSave=\{\(draft\) => \{ management\.updateRoutine\(routine\.id, draft\); closeEditor\(\); \}\}/);
+  assert.match(page, /const \[creatorFormVersion, setCreatorFormVersion\] = useState\(0\)/);
+  assert.match(page, /function closeCreator\(\) \{\s*setCreating\(false\);\s*setCreatorFormVersion\(\(version\) => version \+ 1\);/);
+  assert.match(page, /<RoutineForm key=\{creatorFormVersion\} onCancel=\{closeCreator\} onSave=\{\(draft\) => \{ addRoutine\(area\.id, draft\); closeCreator\(\); \}\}/);
+  assert.match(page, /aria-expanded=\{reviewOpen\} onClick=\{\(\) => setReviewOpen\(\(open\) => !open\)\}/);
+  assert.match(page, /aria-expanded=\{vacationOpen\} onClick=\{\(\) => setVacationOpen\(\(open\) => !open\)\}/);
+  assert.doesNotMatch(page, /setReviewOpen\(false\)|setVacationOpen\(false\).*setEditing\(false\)/);
+});
+
 test("planner repairs preserve data and queue state", () => {
   assert.doesNotMatch(route, /archived:|resetIncompatibleWorkspace|UPDATE workspaces SET user_id/);
   assert.match(route, /incompatible data format/);
@@ -479,10 +543,11 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /target = areaSelect && focusable\.includes\(areaSelect\) \? areaSelect : focusable\[0\]/);
   assert.doesNotMatch(plannerView, /#planner-area-select, button:not\(:disabled\)/);
   assert.match(plannerView, /planner-context-card/);
-  assert.match(plannerView, /\['work', 'Tasks', projectTasks\.length\]/);
+  assert.match(plannerView, /\[\['work', 'Tasks', projectTasks\.length\], \['backlog', 'Backlog', backlogTasks\.length\], \['waiting', 'Waiting', waitingTasks\.length\], \['routines', 'Routines', selectedAreaRoutines\.length\]\]/);
+  for (const label of ["Tasks", "Backlog", "Waiting", "Routines"]) assert.match(plannerView, new RegExp(`\\['[^']+', '${label}',`));
   assert.match(plannerView, /function QueueIcon/);
   assert.match(plannerView, /aria-label=\{`\$\{label\}: \$\{count\} \$\{count === 1 \? "item" : "items"\}`\}/);
-  assert.doesNotMatch(plannerView, /planner-queue-label/);
+  assert.match(plannerView, /className="planner-queue-label" aria-hidden="true">\{label\}<\/span>/);
   assert.match(plannerView, /multiple blocks per day/);
   assert.match(plannerView, /onOpen=\{\(\) => \{ onSessionChange\(\{ selectedAreaId: occurrence\.areaId, selectedProjectId: "", selectedDate: occurrence\.date, workbenchOpen: true, workbenchPinned: true \}\); setEditor\(\{ kind: "occurrence", occurrenceId: occurrence\.id \}\); \}\}/);
   assert.doesNotMatch(plannerView, /planner-create-first-block/);
