@@ -688,20 +688,23 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
     const restoringSkippedOneTime = Boolean(editingRule && isOneTimeRule(editingRule) && planner.blockExceptions.some((item) => item.ruleId === editingRule.id && item.occurrenceDate === editingRule.effectiveOn && item.kind === "skip"));
     const identityChanged = Boolean(editingRule && (rule.kind !== editingRule.kind || (rule.kind === "area" && editingRule.kind === "area" && rule.areaId !== editingRule.areaId)));
     if (identityChanged && storedItems.length) return "Remove block tasks before changing what this schedule connects to.";
-    const rebasedPlanner = editingRule && isOneTimeRule(editingRule) && isOneTimeRule(rule)
+    const updatedPlanner = editingRule && isOneTimeRule(editingRule) && isOneTimeRule(rule)
       ? plannerAfterOneTimeRuleEdit(planner, editingRule, rule) as PlannerData
-      : planner;
-    const items = rebasedPlanner.blockItems.filter((item) => item.ruleId === rule.id);
-    if (items.some((item) => !plannerRuleOccursOn(rule, item.occurrenceDate))) return "Clear block tasks on days you are removing from this schedule first.";
+      : {
+        ...planner,
+        blockRules: editingRule ? planner.blockRules.map((item) => item.id === rule.id ? rule : item) : [...planner.blockRules, rule],
+      };
+    const persistedRule = updatedPlanner.blockRules.find((item) => item.id === rule.id)!;
+    const items = updatedPlanner.blockItems.filter((item) => item.ruleId === rule.id);
+    if (items.some((item) => !plannerRuleOccursOn(persistedRule, item.occurrenceDate))) return "Clear block tasks on days you are removing from this schedule first.";
     const shouldKeepBlockException = (item: CalendarBlockException) => item.ruleId !== rule.id
-      || (plannerRuleOccursOn(rule, item.occurrenceDate)
+      || (plannerRuleOccursOn(persistedRule, item.occurrenceDate)
         && !(restoringSkippedOneTime && item.kind === "skip" && item.occurrenceDate === editingRule?.effectiveOn));
     const next = {
-      ...rebasedPlanner,
-      blockRules: editingRule ? rebasedPlanner.blockRules.map((item) => item.id === rule.id ? rule : item) : [...rebasedPlanner.blockRules, rule],
-      blockExceptions: rebasedPlanner.blockExceptions.filter(shouldKeepBlockException),
+      ...updatedPlanner,
+      blockExceptions: updatedPlanner.blockExceptions.filter(shouldKeepBlockException),
     };
-    if (next.blockRules.some((item) => item.id !== rule.id && recurringCalendarBlockRulesConflict(rule, item))) return "That time overlaps another time block. Time blocks can touch, but they cannot overlap.";
+    if (next.blockRules.some((item) => item.id !== rule.id && recurringCalendarBlockRulesConflict(persistedRule, item))) return "That time overlaps another time block. Time blocks can touch, but they cannot overlap.";
     if (!commitPlanner(next)) return "Choose a valid block between 6 AM and 11 PM on the 15-minute grid.";
     setEditor(null);
     const oneTime = rule.endsOn === rule.effectiveOn;

@@ -272,17 +272,14 @@ test("updates and deletes a one-time standalone block as one complete record", (
   assert.deepEqual(plannerAfterRuleDelete(updated, "appointment"), expectedRemoval);
 });
 
-test("rebases one-time rule details onto a moved occurrence and remaps queued work", () => {
+test("rebases non-overridden one-time rule details and remaps queued work", () => {
   const previousRule = { id: "trading-once", kind: "area", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-26", endsOn: "2026-08-26", startTime: "09:00", endTime: "10:00", fill: "sage" };
   const unrelatedRule = { id: "family-once", kind: "area", areaId: "family", weekdays: [4], effectiveOn: "2026-08-27", endsOn: "2026-08-27", startTime: "12:00", endTime: "13:00", fill: "sand" };
   const unrelatedException = { id: "family-move", ruleId: "family-once", occurrenceDate: "2026-08-27", kind: "override", date: "2026-08-28", startTime: "12:00", endTime: "13:00" };
   const unrelatedItem = { id: "family-task", ruleId: "family-once", occurrenceDate: "2026-08-27", kind: "task", itemId: "task-family" };
   const source = {
     blockRules: [previousRule, unrelatedRule],
-    blockExceptions: [
-      { id: "trading-move", ruleId: "trading-once", occurrenceDate: "2026-08-26", kind: "override", date: "2026-08-28", startTime: "14:00", endTime: "15:00" },
-      unrelatedException,
-    ],
+    blockExceptions: [unrelatedException],
     blockItems: [
       { id: "trading-task", ruleId: "trading-once", occurrenceDate: "2026-08-26", kind: "task", itemId: "task-1" },
       unrelatedItem,
@@ -301,6 +298,70 @@ test("rebases one-time rule details onto a moved occurrence and remaps queued wo
   assert.ok(normalized);
   assert.deepEqual(materializeCalendarBlocks(normalized, ["2026-08-28", "2026-08-29"]).filter((item) => item.ruleId === "trading-once").map(({ date, startTime, endTime }) => ({ date, startTime, endTime })), [
     { date: "2026-08-29", startTime: "15:30", endTime: "17:00" },
+  ]);
+});
+
+test("preserves moved one-time standalone overrides when editing their visible details", () => {
+  const recurringRule = { id: "trading-wednesday", kind: "area", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "10:00", endTime: "12:00", fill: "sage" };
+  const recurringSkip = { id: "skip-trading", ruleId: "trading-wednesday", occurrenceDate: "2026-08-26", kind: "skip" };
+  const standaloneRule = { id: "appointment", kind: "standalone", title: "Appointment", weekdays: [2], effectiveOn: "2026-08-25", endsOn: "2026-08-25", startTime: "08:00", endTime: "09:00", fill: "slate" };
+  const standaloneMove = { id: "move-appointment", ruleId: "appointment", occurrenceDate: "2026-08-25", kind: "override", date: "2026-08-26", startTime: "10:00", endTime: "11:00" };
+  const source = { blockRules: [recurringRule, standaloneRule], blockExceptions: [recurringSkip, standaloneMove], blockItems: [] };
+  const editedStandalone = { ...standaloneRule, title: "Dentist", weekdays: [3], effectiveOn: "2026-08-26", endsOn: "2026-08-26", startTime: "10:15", endTime: "11:15", fill: "rose" };
+  const updatedStandalone = plannerAfterOneTimeRuleEdit(source, standaloneRule, editedStandalone);
+
+  assert.deepEqual(updatedStandalone.blockRules[1], { ...standaloneRule, title: "Dentist", fill: "rose" });
+  assert.deepEqual(updatedStandalone.blockExceptions, [recurringSkip, { ...standaloneMove, startTime: "10:15", endTime: "11:15" }]);
+  const normalizedStandalone = normalizePlanner(updatedStandalone, ...plannerMaps);
+  assert.ok(normalizedStandalone);
+  assert.deepEqual(materializeCalendarBlocks(normalizedStandalone, ["2026-08-25", "2026-08-26"]).filter((item) => item.ruleId === "appointment").map(({ date, startTime, endTime, title, fill }) => ({ date, startTime, endTime, title, fill })), [
+    { date: "2026-08-26", startTime: "10:15", endTime: "11:15", title: "Dentist", fill: "rose" },
+  ]);
+});
+
+test("preserves moved one-time area overrides when editing their visible details", () => {
+  const recurringRule = { id: "trading-wednesday", kind: "area", areaId: "trading", weekdays: [3], effectiveOn: "2026-08-24", startTime: "10:00", endTime: "12:00", fill: "sage" };
+  const recurringSkip = { id: "skip-trading", ruleId: "trading-wednesday", occurrenceDate: "2026-08-26", kind: "skip" };
+  const areaRule = { id: "focus", kind: "area", areaId: "trading", weekdays: [2], effectiveOn: "2026-08-25", endsOn: "2026-08-25", startTime: "08:00", endTime: "09:00", fill: "sky" };
+  const areaMove = { id: "move-focus", ruleId: "focus", occurrenceDate: "2026-08-25", kind: "override", date: "2026-08-26", startTime: "11:00", endTime: "12:00" };
+  const queuedItem = { id: "focus-task", ruleId: "focus", occurrenceDate: "2026-08-25", kind: "task", itemId: "task-1" };
+  const areaSource = { blockRules: [recurringRule, areaRule], blockExceptions: [recurringSkip, areaMove], blockItems: [queuedItem] };
+  const editedArea = { ...areaRule, weekdays: [4], effectiveOn: "2026-08-27", endsOn: "2026-08-27", startTime: "10:30", endTime: "11:30", fill: "lilac" };
+  const updatedArea = plannerAfterOneTimeRuleEdit(areaSource, areaRule, editedArea);
+
+  assert.deepEqual(updatedArea.blockRules[1], { ...areaRule, fill: "lilac" });
+  assert.deepEqual(updatedArea.blockExceptions, [recurringSkip, { ...areaMove, date: "2026-08-27", startTime: "10:30", endTime: "11:30" }]);
+  assert.deepEqual(updatedArea.blockItems, [queuedItem]);
+  const normalizedArea = normalizePlanner(updatedArea, ...plannerMaps);
+  assert.ok(normalizedArea);
+  assert.deepEqual(materializeCalendarBlocks(normalizedArea, ["2026-08-25", "2026-08-26", "2026-08-27"]).filter((item) => item.ruleId === "focus").map(({ date, startTime, endTime, fill, sourceDate }) => ({ date, startTime, endTime, fill, sourceDate })), [
+    { date: "2026-08-27", startTime: "10:30", endTime: "11:30", fill: "lilac", sourceDate: "2026-08-25" },
+  ]);
+  assert.deepEqual(plannerBlockItems(normalizedArea, materializeCalendarBlocks(normalizedArea, ["2026-08-27"]).find((item) => item.ruleId === "focus")), [queuedItem]);
+});
+
+test("converts an overridden one-time block identity when it has no queued work", () => {
+  const standaloneRule = { id: "appointment", kind: "standalone", title: "Appointment", weekdays: [2], effectiveOn: "2026-08-25", endsOn: "2026-08-25", startTime: "08:00", endTime: "09:00", fill: "slate" };
+  const existingMove = { id: "move-appointment", ruleId: "appointment", occurrenceDate: "2026-08-25", kind: "override", date: "2026-08-26", startTime: "10:00", endTime: "11:00" };
+  const source = { blockRules: [standaloneRule], blockExceptions: [existingMove], blockItems: [] };
+  const editedRule = { id: "appointment", kind: "area", areaId: "trading", weekdays: [4], effectiveOn: "2026-08-27", endsOn: "2026-08-27", startTime: "13:00", endTime: "14:00", fill: "rose" };
+
+  const normalized = normalizePlanner(plannerAfterOneTimeRuleEdit(source, standaloneRule, editedRule), ...plannerMaps);
+  assert.ok(normalized);
+  assert.deepEqual(normalized.blockRules[0], {
+    id: "appointment",
+    kind: "area",
+    areaId: "trading",
+    weekdays: [2],
+    effectiveOn: "2026-08-25",
+    endsOn: "2026-08-25",
+    startTime: "08:00",
+    endTime: "09:00",
+    fill: "rose",
+  });
+  assert.deepEqual(normalized.blockExceptions, [{ ...existingMove, date: "2026-08-27", startTime: "13:00", endTime: "14:00" }]);
+  assert.deepEqual(materializeCalendarBlocks(normalized, ["2026-08-25", "2026-08-26", "2026-08-27"]).map(({ kind, areaId, date, sourceDate }) => ({ kind, areaId, date, sourceDate })), [
+    { kind: "area", areaId: "trading", date: "2026-08-27", sourceDate: "2026-08-25" },
   ]);
 });
 
@@ -684,6 +745,11 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /plannerAfterOccurrenceUpdate\(planner, occurrence, date, startTime, endTime, fill/);
   assert.match(plannerView, /const scheduleEditorRule = editingRule && editingOneTimeOverride \? \{[\s\S]*?effectiveOn: editingOneTimeOverride\.date,[\s\S]*?startTime: editingOneTimeOverride\.startTime,[\s\S]*?endTime: editingOneTimeOverride\.endTime/);
   assert.match(plannerView, /plannerAfterOneTimeRuleEdit\(planner, editingRule, rule\)/);
+  assert.match(plannerView, /const persistedRule = updatedPlanner\.blockRules\.find\(\(item\) => item\.id === rule\.id\)!/);
+  assert.match(plannerView, /const items = updatedPlanner\.blockItems\.filter\(\(item\) => item\.ruleId === rule\.id\)/);
+  assert.match(plannerView, /items\.some\(\(item\) => !plannerRuleOccursOn\(persistedRule, item\.occurrenceDate\)\)/);
+  assert.match(plannerView, /const next = \{[\s\S]*?\.\.\.updatedPlanner,[\s\S]*?blockExceptions: updatedPlanner\.blockExceptions\.filter\(shouldKeepBlockException\),[\s\S]*?\}/);
+  assert.match(plannerView, /recurringCalendarBlockRulesConflict\(persistedRule, item\)/);
   assert.match(plannerView, /planner-schedule-row-icon fill-\$\{rule\.fill\}/);
   assert.match(plannerView, /const exceptionsByOccurrence = useMemo\(\(\) => new Map\(exceptions\.map/);
   assert.match(plannerView, /const orderedRules = useMemo\(\(\) => \[\.\.\.rules\]\.sort/);

@@ -238,11 +238,40 @@ export function plannerAfterRuleDelete(planner, ruleId) {
 }
 
 export function plannerAfterOneTimeRuleEdit(planner, previousRule, rule) {
+  const isPreviousOccurrence = (item) => item.ruleId === previousRule.id
+    && item.occurrenceDate === previousRule.effectiveOn;
+  const existingOverride = planner.blockExceptions.find((item) => isPreviousOccurrence(item)
+    && item.kind === "override");
+  if (existingOverride) {
+    const identity = rule.kind === "area"
+      ? { kind: "area", areaId: rule.areaId }
+      : { kind: "standalone", title: rule.title };
+    const storedRule = {
+      id: previousRule.id,
+      ...identity,
+      weekdays: previousRule.weekdays,
+      effectiveOn: previousRule.effectiveOn,
+      ...(previousRule.endsOn ? { endsOn: previousRule.endsOn } : {}),
+      startTime: previousRule.startTime,
+      endTime: previousRule.endTime,
+      fill: rule.fill,
+    };
+    return {
+      ...planner,
+      blockRules: planner.blockRules.map((item) => item.id === previousRule.id ? storedRule : item),
+      blockExceptions: planner.blockExceptions.map((item) => item === existingOverride ? {
+        ...existingOverride,
+        date: rule.effectiveOn,
+        startTime: rule.startTime,
+        endTime: rule.endTime,
+      } : item),
+    };
+  }
   return {
     ...planner,
     blockRules: planner.blockRules.map((item) => item.id === previousRule.id ? rule : item),
-    blockExceptions: planner.blockExceptions.filter((item) => !(item.ruleId === previousRule.id && item.occurrenceDate === previousRule.effectiveOn)),
-    blockItems: planner.blockItems.map((item) => item.ruleId === previousRule.id && item.occurrenceDate === previousRule.effectiveOn
+    blockExceptions: planner.blockExceptions.filter((item) => !isPreviousOccurrence(item)),
+    blockItems: planner.blockItems.map((item) => isPreviousOccurrence(item)
       ? { ...item, occurrenceDate: rule.effectiveOn }
       : item),
   };
