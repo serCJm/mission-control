@@ -5,10 +5,20 @@ import { normalizeWorkspace } from "../route";
 
 const RECOVERY_CONFIRMATION = "recover-calendar-block-schema";
 
+export async function GET() {
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: "Sign in with ChatGPT to recover this workspace." }, { status: 401 });
+  return new Response(`<!doctype html><html><body><main><h1>Workspace recovery</h1><p>This creates an exact archive, then updates the calendar block fields.</p><form method="post"><button name="confirmation" value="${RECOVERY_CONFIRMATION}">Recover workspace</button></form></main></body></html>`, {
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Sign in with ChatGPT to recover this workspace." }, { status: 401 });
-  if (request.headers.get("x-recovery-confirmation") !== RECOVERY_CONFIRMATION) {
+  const sameOrigin = request.headers.get("origin") === new URL(request.url).origin;
+  const confirmation = (await request.formData()).get("confirmation");
+  if (!sameOrigin || confirmation !== RECOVERY_CONFIRMATION) {
     return Response.json({ error: "Recovery confirmation is required." }, { status: 400 });
   }
 
