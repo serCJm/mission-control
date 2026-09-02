@@ -160,6 +160,14 @@ function CheckIcon() {
   return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 3.7 3.7L16 5.8" /></svg>;
 }
 
+function WaitIcon() {
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v4l2.6 1.5" /></svg>;
+}
+
+function VerticalArrowIcon({ direction }: { direction: "up" | "down" }) {
+  return <svg className={direction === "down" ? "down" : undefined} viewBox="0 0 20 20" aria-hidden="true"><path d="m5.5 12 4.5-4.5 4.5 4.5" /></svg>;
+}
+
 function BlockFillPicker({ value, onChange, repeating }: { value: CalendarBlockFill; onChange: (fill: CalendarBlockFill) => void; repeating: boolean }) {
   const scope = repeating ? "All blocks in schedule" : "This block only";
   const pickerRef = useRef<HTMLDetailsElement>(null);
@@ -430,8 +438,17 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
     onPlannerChange({ ...planner, blockItems: planner.blockItems.filter((item) => item.id !== id) });
   }
 
+  function isDone(item: BlockItem) {
+    return plannerBlockItemDone(item, occurrence.date, tasks, routines);
+  }
+
+  const orderedBlockItems = [
+    ...blockItems.filter((item) => !isDone(item)),
+    ...blockItems.filter((item) => isDone(item)),
+  ];
+
   function moveItem(id: string, distance: number) {
-    const ordered = [...blockItems];
+    const ordered = [...orderedBlockItems];
     const index = ordered.findIndex((item) => item.id === id);
     const target = index + distance;
     if (index < 0 || target < 0 || target >= ordered.length) return;
@@ -443,12 +460,8 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
     onPlannerChange({ ...planner, blockItems: remaining });
   }
 
-  function isDone(item: BlockItem) {
-    return plannerBlockItemDone(item, occurrence.date, tasks, routines);
-  }
-
   const occurrenceActive = occurrence.date === today && plannerMinutes(occurrence.startTime) <= currentMinutes && plannerMinutes(occurrence.endTime) > currentMinutes;
-  const nowItemId = occurrenceActive ? blockItems.find((item) => !isDone(item))?.id : undefined;
+  const nowItemId = occurrenceActive ? orderedBlockItems.find((item) => !isDone(item))?.id : undefined;
   const canExecuteRoutines = occurrence.date === today;
   const selectedKeys = new Set(blockItems.map((item) => `${item.kind}:${item.itemId}`));
 
@@ -456,7 +469,34 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
 
   return <div className="planner-editor occurrence-editor">
     <div className="planner-editor-heading"><div className="planner-editor-title"><div className="planner-editor-title-row"><h2>{area.name} time block</h2><BlockFillPicker value={fill} onChange={setFill} repeating={recurring} /></div><p>{formatWorkbenchDate(occurrence.date)} · {formatBlockTime(occurrence.startTime)}–{formatBlockTime(occurrence.endTime)}{recurring ? " · Repeats weekly" : " · One time"}</p></div><button type="button" onClick={onClose}>Close</button></div>
-    <section className="planner-editor-section planner-this-block"><div><h3>Block tasks</h3><span>{blockItems.length}/3</span></div>{blockItems.length ? <div className="planner-block-item-list">{blockItems.map((item, index) => { const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined; const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined; const done = isDone(item); return <div className={`planner-session-row block-work-row ${done ? "done" : ""}`} key={item.id}><span><small>{done ? "Done" : item.id === nowItemId ? "Now" : `Then · ${index + 1}`}</small><strong>{task?.title ?? routine?.name ?? "Unavailable item"}</strong><small>{task?.projectId ? projectsById.get(task.projectId)?.name : item.kind === "routine" ? "Routine" : "Area backlog"}</small></span><span className="planner-row-actions">{!done && item.kind === "task" && <><button type="button" onClick={() => onTaskChange(item.itemId, { status: "done" })}>Complete</button><button type="button" onClick={() => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); }}>Wait</button></>}{!done && item.kind === "routine" && canExecuteRoutines && <><button type="button" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "completed")}>Complete</button><button type="button" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "skipped")}>Skip</button></>}<button type="button" disabled={index === 0} aria-label={`Move ${task?.title ?? routine?.name} earlier`} onClick={() => moveItem(item.id, -1)}>↑</button><button type="button" disabled={index === blockItems.length - 1} aria-label={`Move ${task?.title ?? routine?.name} later`} onClick={() => moveItem(item.id, 1)}>↓</button><button type="button" className="danger" onClick={() => removeItem(item.id)}>Remove</button></span></div>; })}</div> : <p className="planner-editor-empty">Nothing selected. Add one to three items, or leave this block open for context-led work.</p>}
+    <section className="planner-editor-section planner-this-block"><div><h3>Block tasks</h3><span>{blockItems.length}/3</span></div>{blockItems.length ? <div className="planner-block-item-list">{orderedBlockItems.map((item, index) => {
+      const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined;
+      const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined;
+      const title = task?.title ?? routine?.name ?? "Unavailable item";
+      const done = isDone(item);
+      const canMoveEarlier = index > 0 && isDone(orderedBlockItems[index - 1]) === done;
+      const canMoveLater = index < orderedBlockItems.length - 1 && isDone(orderedBlockItems[index + 1]) === done;
+      return <div className={`planner-session-row block-work-row ${done ? "done" : ""}`} key={item.id}>
+        <span>
+          {!done && <small>{item.id === nowItemId ? "Now" : `Then · ${index + 1}`}</small>}
+          <strong>{done && <span className="sr-only">Completed: </span>}{title}</strong>
+          <small>{task?.projectId ? projectsById.get(task.projectId)?.name : item.kind === "routine" ? "Routine" : "Area backlog"}</small>
+        </span>
+        <span className="planner-row-actions">
+          {!done && item.kind === "task" && <>
+            <button type="button" className="planner-icon-action" aria-label={`Complete ${title}`} title="Complete" onClick={() => onTaskChange(item.itemId, { status: "done" })}><CheckIcon /></button>
+            <button type="button" className="planner-icon-action" aria-label={`Move ${title} to Waiting`} title="Move to Waiting" onClick={() => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); }}><WaitIcon /></button>
+          </>}
+          {!done && item.kind === "routine" && canExecuteRoutines && <>
+            <button type="button" className="planner-icon-action" aria-label={`Complete ${title}`} title="Complete" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "completed")}><CheckIcon /></button>
+            <button type="button" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "skipped")}>Skip</button>
+          </>}
+          <button type="button" className="planner-icon-action" disabled={!canMoveEarlier} aria-label={`Move ${title} earlier`} title="Move earlier" onClick={() => moveItem(item.id, -1)}><VerticalArrowIcon direction="up" /></button>
+          <button type="button" className="planner-icon-action" disabled={!canMoveLater} aria-label={`Move ${title} later`} title="Move later" onClick={() => moveItem(item.id, 1)}><VerticalArrowIcon direction="down" /></button>
+          <button type="button" className="planner-icon-action danger" aria-label={`Remove ${title} from block`} title="Remove from block" onClick={() => removeItem(item.id)}><DeleteIcon /></button>
+        </span>
+      </div>;
+    })}</div> : <p className="planner-editor-empty">Nothing selected. Add one to three items, or leave this block open for context-led work.</p>}
       {blockItems.length < 3 && <div className="planner-add-row block-item-add"><select value={candidate} onChange={(event) => setCandidate(event.target.value)} aria-label="Task or routine"><option value="">Choose work…</option><optgroup label="Project tasks">{matchingTasks.filter((task) => task.projectId && !selectedKeys.has(`task:${task.id}`)).map((task) => <option value={`task:${task.id}`} key={task.id}>{projectsById.get(task.projectId!)?.name} · {task.title}</option>)}</optgroup><optgroup label="Area backlog">{matchingTasks.filter((task) => !task.projectId && !selectedKeys.has(`task:${task.id}`)).map((task) => <option value={`task:${task.id}`} key={task.id}>{task.title}</option>)}</optgroup><optgroup label="Routines">{matchingRoutines.filter((routine) => !selectedKeys.has(`routine:${routine.id}`)).map((routine) => <option value={`routine:${routine.id}`} key={routine.id}>{routine.name}</option>)}</optgroup></select><button type="button" disabled={!candidate} onClick={addCandidate}>Add to block</button></div>}
     </section>
     <form className="planner-occurrence-form" onSubmit={saveOccurrence}><label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div><button type="submit" className="planner-inline-save planner-button-with-icon"><CheckIcon />Save block</button></form>
