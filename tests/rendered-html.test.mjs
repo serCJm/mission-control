@@ -717,9 +717,14 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /\{done && <span className="sr-only">Completed: <\/span>}\{title}<\/strong>/);
   assert.match(plannerView, /title="Complete"[\s\S]*?<CheckIcon \/>/);
   assert.match(plannerView, /title="Move to Waiting"[\s\S]*?<WaitIcon \/>/);
-  assert.match(plannerView, /title="Remove from block"[\s\S]*?<DeleteIcon \/>/);
+  assert.match(plannerView, /function BlockItemActionMenu[\s\S]*?aria-haspopup="menu"[\s\S]*?<MoreIcon \/>/);
+  assert.match(plannerView, /<span>Move earlier<\/span>[\s\S]*?<span>Move later<\/span>[\s\S]*?<span>Remove from block<\/span>/);
+  assert.match(plannerView, /<BlockItemActionMenu itemId=\{item\.id\} title=\{title\}/);
   assert.match(plannerStyles, /\.block-work-row\.done strong\{[^}]*text-decoration:line-through/);
   assert.match(plannerStyles, /\.planner-row-actions \.planner-icon-action\{width:30px/);
+  assert.match(plannerStyles, /\.planner-session-row>span:first-child\{[^}]*flex:1 1 auto/);
+  assert.match(plannerStyles, /\.planner-row-actions\{[^}]*flex-wrap:nowrap/);
+  assert.match(plannerStyles, /\.planner-row-menu-popover\{[^}]*width:148px/);
   assert.match(plannerView, /Add to queue/);
   assert.doesNotMatch(plannerView, /nowLabel|addLabel|onSchedule|onNow/);
   assert.match(plannerView, /placePlannerBlockItem/);
