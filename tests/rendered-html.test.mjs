@@ -716,10 +716,11 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /\{!done && <small>\{item\.id === nowItemId \? "Now" : `Then · \$\{index \+ 1\}`}<\/small>\}/);
   assert.match(plannerView, /\{done && <span className="sr-only">Completed: <\/span>}\{title}<\/strong>/);
   assert.match(plannerView, /title="Complete"[\s\S]*?<CheckIcon \/>/);
-  assert.match(plannerView, /title="Move to Waiting"[\s\S]*?<WaitIcon \/>/);
+  assert.match(plannerView, /\{onWait && <button[^>]*>[\s\S]*?<WaitIcon \/><span>Move to Waiting<\/span>/);
   assert.match(plannerView, /function BlockItemActionMenu[\s\S]*?aria-haspopup="menu"[\s\S]*?<MoreIcon \/>/);
-  assert.match(plannerView, /<span>Move earlier<\/span>[\s\S]*?<span>Move later<\/span>[\s\S]*?<span>Remove from block<\/span>/);
-  assert.match(plannerView, /<BlockItemActionMenu itemId=\{item\.id\} title=\{title\}/);
+  assert.match(plannerView, /disabled=\{!canMoveEarlier\}[\s\S]*?<span>Move earlier<\/span>[\s\S]*?disabled=\{!canMoveLater\}[\s\S]*?<span>Move later<\/span>[\s\S]*?<span>Remove from block<\/span>/);
+  assert.match(plannerView, /<BlockItemActionMenu itemId=\{item\.id\} title=\{title\}[\s\S]*?onWait=\{!done && item\.kind === "task"/);
+  assert.match(plannerView, /querySelectorAll<HTMLButtonElement>\("button:not\(:disabled\)"\)/);
   assert.match(plannerStyles, /\.block-work-row\.done strong\{[^}]*text-decoration:line-through/);
   assert.match(plannerStyles, /\.planner-row-actions \.planner-icon-action\{width:30px/);
   assert.match(plannerStyles, /\.planner-session-row>span:first-child\{[^}]*flex:1 1 auto/);
