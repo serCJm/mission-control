@@ -349,18 +349,10 @@ export default function Home() {
       setHydrated(true);
 
       try {
-        let response = await fetch("/api/workspace", { cache: "no-store" });
+        const response = await fetch("/api/workspace", { cache: "no-store" });
         if (response.status === 401) {
           window.location.assign("/signin-with-chatgpt?return_to=%2F");
           return;
-        }
-        if (response.status === 409) {
-          const recoveryResponse = await fetch("/api/workspace/recover", {
-            method: "POST",
-            headers: { "content-type": "application/x-www-form-urlencoded" },
-            body: "confirmation=recover-calendar-block-schema",
-          });
-          if (recoveryResponse.ok) response = await fetch("/api/workspace", { cache: "no-store" });
         }
         if (!response.ok) throw new Error("Unable to load the synced workspace.");
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number; user: Account };
