@@ -682,6 +682,17 @@ test("task controls align to the title line across desktop and touch layouts", (
   assert.match(globalStyles, /@media\(max-width:720px\)\{\.task-row>\.task-check,\.task-row \.drag-handle\{height:44px\}/);
 });
 
+test("area and project views share a sticky native area switcher", () => {
+  assert.match(page, /function AreaSwitcher\(\{ areas, area, navigate \}/);
+  assert.match(page, /<select value=\{area\.id\} onChange=\{\(event\) => navigate\(\{ kind: "area", id: event\.target\.value \}\)\} aria-label=\{`Switch area\. Current area: \$\{area\.name\}`\}/);
+  assert.equal([...page.matchAll(/<AreaSwitcher areas=\{areas\} area=\{area\} navigate=\{navigate\} \/>/g)].length, 2);
+  assert.match(page, /<AreaView key=\{activeArea\.id\} areas=\{workspace\.areas\}/);
+  assert.match(page, /<ProjectView key=\{activeProject\.id\} project=\{activeProject\} areas=\{workspace\.areas\}/);
+  assert.match(globalStyles, /\.area-context-nav\{position:sticky;top:84px/);
+  assert.match(globalStyles, /\.area-switcher select\{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;opacity:0;cursor:pointer;font-size:16px\}/);
+  assert.match(globalStyles, /@media\(max-width:720px\)\{\.area-context-nav\{top:80px;width:calc\(100% \+ 12px\)/);
+});
+
 test("planner repairs preserve data and queue state", () => {
   assert.doesNotMatch(route, /archived:|resetIncompatibleWorkspace|UPDATE workspaces SET user_id/);
   assert.match(route, /incompatible data format/);
