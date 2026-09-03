@@ -1,6 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { normalizeArea } from "../../area-schema.mjs";
-import { normalizeProjectNotes } from "../../project-note-schema.mjs";
+import { normalizeProject } from "../../project-note-schema.mjs";
 import { isPlannerDeadline, normalizePlanner } from "../../planner-schema.mjs";
 import { normalizeRoutines } from "../../routine-schema.mjs";
 import { isTaskStatus, normalizeTaskNotes } from "../../task-schema.mjs";
@@ -10,7 +10,7 @@ import { getD1 } from "../../../db";
 type AreaIconName = "target" | "trend" | "sprout" | "people" | "briefcase" | "heart" | "home" | "book" | "calendar" | "clock" | "star" | "flag" | "wallet" | "chart" | "dumbbell" | "music" | "camera" | "plane" | "car" | "utensils" | "leaf" | "paw" | "globe" | "palette";
 type Area = { id: string; name: string; icon: AreaIconName };
 type ProjectNote = { id: string; title: string; body: string; pinned: boolean; createdAt: number; updatedAt: number };
-type Project = { id: string; areaId: string; name: string; outcome: string; notes: ProjectNote[] };
+type Project = { id: string; areaId: string; name: string; outcome: string; notes: ProjectNote[]; completedAt?: number };
 type Task = {
   id: string;
   title: string;
@@ -60,13 +60,7 @@ function normalizeWorkspace(value: unknown): Workspace | null {
     if (!isText(item.id, 200) || !isText(item.name, 500)) return null;
     return normalizeArea(item);
   }).filter(Boolean) as Area[];
-  const projects = candidate.projects.map((project) => {
-    if (!project || typeof project !== "object") return null;
-    const item = project as Record<string, unknown>;
-    const notes = normalizeProjectNotes(item.notes);
-    if (!isText(item.id, 200) || !isText(item.areaId, 200) || !isText(item.name, 500) || !isText(item.outcome) || notes === null) return null;
-    return { id: item.id, areaId: item.areaId, name: item.name, outcome: item.outcome, notes };
-  }).filter(Boolean) as Project[];
+  const projects = candidate.projects.map(normalizeProject).filter(Boolean) as Project[];
   const tasks = candidate.tasks.filter((task): task is Task => {
     if (!task || typeof task !== "object") return false;
     const item = task as Record<string, unknown>;

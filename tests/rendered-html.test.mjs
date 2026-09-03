@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
-import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
+import { normalizeProject, normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
 import { CALENDAR_BLOCK_FILLS, DEFAULT_AREA_CALENDAR_BLOCK_FILL, DEFAULT_STANDALONE_CALENDAR_BLOCK_FILL, isFinalRoutineSessionStatus, materializeCalendarBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerAfterOccurrenceDelete, plannerAfterOccurrenceUpdate, plannerAfterOneTimeRuleEdit, plannerAfterRuleDelete, plannerBlockItems, plannerBlockTarget, plannerDragSelection } from "../app/planner-schema.mjs";
 import { normalizeRoutine, reconcileRoutine, routineDateKey } from "../app/routine-schema.mjs";
 import { createStarterWorkspace } from "../app/starter-workspace.mjs";
@@ -54,6 +54,14 @@ test("sorts tasks and project notes without mutating durable order", () => {
   const notes = normalizeProjectNotes([{ id: "old", title: "", body: "Old", pinned: false, createdAt: 1, updatedAt: 1 }, { id: "pin", title: "Pinned", body: "", pinned: true, createdAt: 2, updatedAt: 2 }]);
   assert.ok(notes);
   assert.deepEqual(sortProjectNotes(notes).map((note) => note.id), ["pin", "old"]);
+});
+
+test("keeps completed projects as a strict optional lifecycle state", () => {
+  const project = { id: "execution", areaId: "trading", name: "Execution system", outcome: "Trade one setup consistently.", notes: [] };
+  assert.deepEqual(normalizeProject(project), project);
+  assert.deepEqual(normalizeProject({ ...project, completedAt: 1_788_329_600_000 }), { ...project, completedAt: 1_788_329_600_000 });
+  assert.equal(normalizeProject({ ...project, completedAt: "today" }), null);
+  assert.equal(normalizeProject({ ...project, completedAt: -1 }), null);
 });
 
 test("reconciles a routine session without creating overdue debt", () => {
@@ -647,6 +655,19 @@ test("unbounded task lists avoid block-size collapse motion", () => {
   assert.match(page, /<Presence show=\{showCompleted\} className="motion-panel">\{\(\) => <div className="completed-archive-tasks"/);
   assert.doesNotMatch(page, /<Presence show=\{isExpanded\} className="motion-collapse">\{\(\) => <div className="project-task-preview"/);
   assert.doesNotMatch(page, /<Presence show=\{showCompleted\} className="motion-collapse">\{\(\) => <div className="completed-archive-tasks"/);
+});
+
+test("completed projects leave active planning and remain restorable in their area", () => {
+  assert.match(page, /type Project = \{[^}]*completedAt\?: number/);
+  assert.match(page, /function setProjectCompletion\(projectId: string, completed: boolean\)/);
+  assert.match(page, /blockItems: current\.planner\.blockItems\.filter\(\(item\) => item\.kind !== "task" \|\| !projectTaskIds\.has\(item\.itemId\)\)/);
+  assert.match(page, /const activeProjects = projects\.filter\(\(project\) => !project\.completedAt\)/);
+  assert.match(page, /<strong>Completed projects<\/strong>/);
+  assert.match(page, /Saved with tasks and notes intact/);
+  assert.match(page, /setProjectCompletion\(project\.id, false\)/);
+  assert.match(page, /setProjectCompletion\(project\.id, true\)/);
+  assert.match(page, /projects=\{activeProjects\} tasks=\{activeTasks\}/);
+  assert.match(route, /candidate\.projects\.map\(normalizeProject\)/);
 });
 
 test("navigation wires native view transitions through the guarded coordinator", () => {
