@@ -696,7 +696,8 @@ test("area and project views share a sticky native area switcher", () => {
   assert.match(page, /<AreaView key=\{activeArea\.id\} areas=\{workspace\.areas\}/);
   assert.match(page, /<ProjectView key=\{activeProject\.id\} project=\{activeProject\} areas=\{workspace\.areas\}/);
   assert.match(globalStyles, /\.area-context-nav\{position:sticky;top:84px/);
-  assert.match(globalStyles, /\.area-switcher select\{position:absolute;inset:0;width:100%;height:100%;margin:0;border:0;opacity:0;cursor:pointer;font-size:16px\}/);
+  assert.match(globalStyles, /\.area-switcher select\{[^}]*background:#fff;color:var\(--ink\);opacity:0;[^}]*color-scheme:light\}/);
+  assert.match(globalStyles, /\.area-switcher option\{background:#fff;color:var\(--ink\)\}/);
   assert.match(globalStyles, /@media\(max-width:720px\)\{\.area-context-nav\{top:80px;width:calc\(100% \+ 12px\)/);
 });
 
