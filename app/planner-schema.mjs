@@ -52,6 +52,22 @@ export function plannerTime(minutes) {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
+export function plannerDragSelection(anchorMinutes, pointerMinutes) {
+  const snap = (value) => Math.round(value / PLANNER_SNAP_MINUTES) * PLANNER_SNAP_MINUTES;
+  const anchor = Math.max(PLANNER_START_MINUTES, Math.min(PLANNER_END_MINUTES - MIN_CALENDAR_BLOCK_MINUTES, snap(anchorMinutes)));
+  const pointer = Math.max(PLANNER_START_MINUTES, Math.min(PLANNER_END_MINUTES, snap(pointerMinutes)));
+  if (pointer < anchor) {
+    return {
+      startMinutes: Math.max(PLANNER_START_MINUTES, Math.min(pointer, anchor - MIN_CALENDAR_BLOCK_MINUTES)),
+      endMinutes: anchor,
+    };
+  }
+  return {
+    startMinutes: anchor,
+    endMinutes: Math.min(PLANNER_END_MINUTES, Math.max(pointer, anchor + MIN_CALENDAR_BLOCK_MINUTES)),
+  };
+}
+
 export function plannerDateKey(date = new Date(), timeZone = PLANNER_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
   const value = (type) => Number(parts.find((part) => part.type === type)?.value);

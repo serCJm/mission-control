@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { changedAreaPatch, normalizeArea } from "../app/area-schema.mjs";
 import { normalizeProjectNotes, sortProjectNotes } from "../app/project-note-schema.mjs";
-import { CALENDAR_BLOCK_FILLS, DEFAULT_AREA_CALENDAR_BLOCK_FILL, DEFAULT_STANDALONE_CALENDAR_BLOCK_FILL, isFinalRoutineSessionStatus, materializeCalendarBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerAfterOccurrenceDelete, plannerAfterOccurrenceUpdate, plannerAfterOneTimeRuleEdit, plannerAfterRuleDelete, plannerBlockItems, plannerBlockTarget } from "../app/planner-schema.mjs";
+import { CALENDAR_BLOCK_FILLS, DEFAULT_AREA_CALENDAR_BLOCK_FILL, DEFAULT_STANDALONE_CALENDAR_BLOCK_FILL, isFinalRoutineSessionStatus, materializeCalendarBlocks, normalizePlanner, parsePlannerCandidate, placePlannerBlockItem, plannerAfterOccurrenceDelete, plannerAfterOccurrenceUpdate, plannerAfterOneTimeRuleEdit, plannerAfterRuleDelete, plannerBlockItems, plannerBlockTarget, plannerDragSelection } from "../app/planner-schema.mjs";
 import { normalizeRoutine, reconcileRoutine, routineDateKey } from "../app/routine-schema.mjs";
 import { createStarterWorkspace } from "../app/starter-workspace.mjs";
 import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
@@ -404,6 +404,13 @@ test("materializes one-time blocks only on their selected date", () => {
   assert.equal(normalizePlanner(invalidWork, ...plannerMaps), null);
 });
 
+test("snaps drag-created blocks to the calendar grid and minimum duration", () => {
+  assert.deepEqual(plannerDragSelection(9 * 60 + 7, 10 * 60 + 4), { startMinutes: 9 * 60, endMinutes: 10 * 60 });
+  assert.deepEqual(plannerDragSelection(9 * 60, 9 * 60 + 4), { startMinutes: 9 * 60, endMinutes: 9 * 60 + 30 });
+  assert.deepEqual(plannerDragSelection(10 * 60, 9 * 60 + 2), { startMinutes: 9 * 60, endMinutes: 10 * 60 });
+  assert.deepEqual(plannerDragSelection(22 * 60 + 55, 23 * 60), { startMinutes: 22 * 60 + 30, endMinutes: 23 * 60 });
+});
+
 test("allows matching one-time slots on different dates without hiding real conflicts", () => {
   const separateDates = plannerFixture();
   separateDates.blockRules = [
@@ -764,6 +771,11 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /Resume/);
   assert.match(plannerView, /TouchSensor/);
   assert.match(plannerView, /KeyboardSensor/);
+  assert.match(plannerView, /event\.pointerType === "touch"/);
+  assert.match(plannerView, /plannerDragSelection\(current\.anchorMinutes, pointerMinutes\(event\)\)/);
+  assert.match(plannerView, /initialFrequency: "once"/);
+  assert.match(plannerView, /Drag to add a \$\{dragCreateArea\.name\} block/);
+  assert.match(plannerView, /That time overlaps another time block\. Drag across open time instead\./);
   assert.match(plannerView, /Add to block/);
   assert.match(plannerView, /active \? "active" : ""/);
   assert.match(plannerView, /function visiblePlannerBlockItemCount/);
@@ -857,6 +869,9 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /planner-schedule-overview/);
   assert.doesNotMatch(plannerView, /planner-context-area-icon|renderAreaIcon/);
   assert.match(plannerStyles, /\.planner-calendar-block\.active\{/);
+  assert.match(plannerStyles, /\.planner-day\.can-create\{cursor:crosshair\}/);
+  assert.match(plannerStyles, /\.planner-create-selection\{[^}]*pointer-events:none/);
+  assert.match(plannerStyles, /\.planner-create-selection\.conflict\{/);
   assert.match(plannerStyles, /\.planner-editor-title-row\{[^}]*align-items:center/);
   assert.doesNotMatch(plannerStyles, /\.planner-fill-picker\{/);
   assert.match(plannerStyles, /\.fill-rose\{/);
