@@ -774,6 +774,8 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /event\.pointerType === "touch"/);
   assert.match(plannerView, /plannerDragSelection\(current\.anchorMinutes, pointerMinutes\(event\)\)/);
   assert.match(plannerView, /initialFrequency: "once"/);
+  assert.match(plannerView, /editor\.kind === "series" && !editor\.ruleId && newBlockConnection\?\.kind === "area"/);
+  assert.match(plannerView, /onConnectionChange=\{editingRule \? undefined : setNewBlockConnection\}/);
   assert.match(plannerView, /Drag to add a \$\{dragCreateArea\.name\} block/);
   assert.match(plannerView, /That time overlaps another time block\. Drag across open time instead\./);
   assert.match(plannerView, /Add to block/);
