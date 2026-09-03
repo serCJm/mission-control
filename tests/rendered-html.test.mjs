@@ -719,15 +719,18 @@ test("task controls align to the title line across desktop and touch layouts", (
   assert.match(globalStyles, /@media\(max-width:720px\)\{\.task-row>\.task-check,\.task-row \.drag-handle\{height:44px\}/);
 });
 
-test("area and project views share a sticky native area switcher", () => {
+test("area and project views share a styled, keyboard-accessible area switcher", () => {
   assert.match(page, /function AreaSwitcher\(\{ areas, area, navigate \}/);
-  assert.match(page, /<select value=\{area\.id\} onChange=\{\(event\) => navigate\(\{ kind: "area", id: event\.target\.value \}\)\} aria-label=\{`Switch area\. Current area: \$\{area\.name\}`\}/);
+  assert.match(page, /className="area-switcher-trigger" aria-haspopup="menu" aria-expanded=\{open\} aria-controls=\{menuId\} aria-label=\{`Switch area\. Current area: \$\{area\.name\}`\}/);
+  assert.match(page, /className="area-switcher-menu" role="menu" tabIndex=\{-1\} aria-label="Switch area" onKeyDown=\{handleMenuKeyDown\}/);
+  assert.match(page, /role="menuitemradio" aria-checked=\{item\.id === area\.id\}/);
+  assert.match(page, /\["ArrowDown", "ArrowUp"\]|event\.key === "ArrowDown"/);
   assert.equal([...page.matchAll(/<AreaSwitcher areas=\{areas\} area=\{area\} navigate=\{navigate\} \/>/g)].length, 2);
   assert.match(page, /<AreaView key=\{activeArea\.id\} areas=\{workspace\.areas\}/);
   assert.match(page, /<ProjectView key=\{activeProject\.id\} project=\{activeProject\} areas=\{workspace\.areas\}/);
   assert.match(globalStyles, /\.area-context-nav\{position:sticky;top:84px/);
-  assert.match(globalStyles, /\.area-switcher select\{[^}]*background:#fff;color:var\(--ink\);opacity:0;[^}]*color-scheme:light\}/);
-  assert.match(globalStyles, /\.area-switcher option\{background:#fff;color:var\(--ink\)\}/);
+  assert.match(globalStyles, /\.area-switcher-menu\{position:absolute;top:calc\(100% \+ 8px\);left:0;z-index:12;[^}]*border-radius:12px;background:var\(--panel\);[^}]*box-shadow:0 16px 40px/);
+  assert.match(globalStyles, /\.area-switcher-options button\[aria-checked="true"\]\{background:var\(--lime-soft\);color:var\(--forest\)\}/);
   assert.match(globalStyles, /@media\(max-width:720px\)\{\.area-context-nav\{top:80px;width:calc\(100% \+ 12px\)/);
 });
 

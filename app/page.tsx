@@ -1305,12 +1305,75 @@ function AreaEditor({ area, onSave }: { area: Area; onSave: (patch: Partial<Pick
 }
 
 function AreaSwitcher({ areas, area, navigate }: { areas: Area[]; area: Area; navigate: (selection: Selection) => void }) {
-  return <label className="area-switcher">
-    <span className="area-switcher-icon" aria-hidden="true"><AreaIcon icon={area.icon} /></span>
-    <span className="area-switcher-name" aria-hidden="true">{area.name}</span>
-    <svg className="area-switcher-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-    <select value={area.id} onChange={(event) => navigate({ kind: "area", id: event.target.value })} aria-label={`Switch area. Current area: ${area.name}`}>{areas.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
-  </label>;
+  const [open, setOpen] = useState(false);
+  const switcherRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = `area-switcher-menu-${area.id}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const focusFrame = window.requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus());
+    function dismiss(event: MouseEvent) {
+      if (!switcherRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  function choose(item: Area) {
+    setOpen(false);
+    if (item.id === area.id) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+      return;
+    }
+    navigate({ kind: "area", id: item.id });
+  }
+
+  function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
+    if (!buttons.length) return;
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = buttons.length - 1;
+    else if (event.key === "ArrowDown") nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % buttons.length;
+    else if (event.key === "ArrowUp") nextIndex = currentIndex < 0 ? buttons.length - 1 : (currentIndex - 1 + buttons.length) % buttons.length;
+    else if (event.key.length === 1 && /\S/.test(event.key)) {
+      const query = event.key.toLocaleLowerCase();
+      const matchOffset = [...buttons.slice(currentIndex + 1), ...buttons.slice(0, currentIndex + 1)].findIndex((button) => button.textContent?.trim().toLocaleLowerCase().startsWith(query));
+      if (matchOffset < 0) return;
+      nextIndex = (currentIndex + 1 + matchOffset) % buttons.length;
+    } else return;
+    event.preventDefault();
+    buttons[nextIndex].focus();
+  }
+
+  return <div className="area-switcher" ref={switcherRef}>
+    <button ref={triggerRef} type="button" className="area-switcher-trigger" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} aria-label={`Switch area. Current area: ${area.name}`} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}>
+      <span className="area-switcher-icon" aria-hidden="true"><AreaIcon icon={area.icon} /></span>
+      <span className="area-switcher-name">{area.name}</span>
+      <svg className="area-switcher-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+    </button>
+    <Presence show={open} className="motion-popover">{() => <div ref={menuRef} id={menuId} className="area-switcher-menu" role="menu" tabIndex={-1} aria-label="Switch area" onKeyDown={handleMenuKeyDown}>
+      <div className="area-switcher-menu-heading"><span>Areas</span><small>{areas.length}</small></div>
+      <div className="area-switcher-options">{areas.map((item) => <button type="button" role="menuitemradio" aria-checked={item.id === area.id} onClick={() => choose(item)} key={item.id}>
+        <span className="area-switcher-option-icon" aria-hidden="true"><AreaIcon icon={item.icon} /></span>
+        <span>{item.name}</span>
+        <span className="area-switcher-option-check" aria-hidden="true"><ConfirmIcon /></span>
+      </button>)}</div>
+    </div>}</Presence>
+  </div>;
 }
 
 type SortOption<Value extends string> = readonly [Value, string];
