@@ -697,9 +697,18 @@ test("routine form versions reset only when editor or creator forms close", () =
 test("inactive routines can be completed for today", () => {
   assert.match(page, /const todaySession = routine\.sessions\.find\(\(item\) => item\.date === today\) \?\? null/);
   assert.match(page, /const completedToday = todaySession\?\.status === "completed"/);
-  assert.match(page, /className="routine-complete" aria-pressed=\{completedToday\} onClick=\{\(\) => actions\.setRoutineSessionStatus\(routine\.id, "completed"\)\}/);
-  assert.match(page, /\{completedToday \? "Completed today" : "Complete today"\}<\/button>\{session && <button/);
-  assert.doesNotMatch(page, /\{session && <><button type="button" className="routine-complete"/);
+  assert.match(page, /className="routine-icon-button routine-complete"[^>]*aria-pressed=\{completedToday\} onClick=\{\(\) => actions\.setRoutineSessionStatus\(routine\.id, "completed"\)\}><ConfirmIcon \/>/);
+  assert.doesNotMatch(page, /\{session && <><button type="button" className="routine-icon-button routine-complete"/);
+});
+
+test("routine row actions use labeled icon controls with touch-sized targets", () => {
+  for (const icon of ["ConfirmIcon", "SkipIcon", "ReviewIcon", "EditIcon", "PauseIcon", "VacationIcon", "DeleteIcon"]) assert.match(page, new RegExp(`<${icon}(?: paused=\\{paused\\})? \\/>`));
+  assert.match(page, /className="routine-primary-actions" role="group" aria-label=\{`Actions for \$\{routine\.name\}`\}/);
+  assert.match(page, /className="routine-management" role="group" aria-label=\{`Manage \$\{routine\.name\}`\}/);
+  assert.match(page, /title=\{completedToday \? "Mark incomplete" : "Complete today"\}/);
+  assert.match(page, /title=\{reviewOpen \? "Close review" : "Open review"\}/);
+  assert.match(globalStyles, /\.routine-primary-actions \.routine-icon-button,\.routine-management \.routine-icon-button\{width:36px;height:36px/);
+  assert.match(globalStyles, /@media\(max-width:580px\)\{\.routine-card-foot\{align-items:flex-end\}\.routine-primary-actions \.routine-icon-button,\.routine-management \.routine-icon-button\{width:44px;height:44px/);
 });
 
 test("task controls align to the title line across desktop and touch layouts", () => {
