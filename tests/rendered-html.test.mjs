@@ -665,6 +665,14 @@ test("routine form versions reset only when editor or creator forms close", () =
   assert.doesNotMatch(page, /setReviewOpen\(false\)|setVacationOpen\(false\).*setEditing\(false\)/);
 });
 
+test("inactive routines can be completed for today", () => {
+  assert.match(page, /const todaySession = routine\.sessions\.find\(\(item\) => item\.date === today\) \?\? null/);
+  assert.match(page, /const completedToday = todaySession\?\.status === "completed"/);
+  assert.match(page, /className="routine-complete" aria-pressed=\{completedToday\} onClick=\{\(\) => actions\.setRoutineSessionStatus\(routine\.id, "completed"\)\}/);
+  assert.match(page, /\{completedToday \? "Completed today" : "Complete today"\}<\/button>\{session && <button/);
+  assert.doesNotMatch(page, /\{session && <><button type="button" className="routine-complete"/);
+});
+
 test("planner repairs preserve data and queue state", () => {
   assert.doesNotMatch(route, /archived:|resetIncompatibleWorkspace|UPDATE workspaces SET user_id/);
   assert.match(route, /incompatible data format/);
