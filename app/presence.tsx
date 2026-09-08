@@ -32,7 +32,7 @@ export function Presence({ show, children, className, exitMs = 180 }: PresencePr
     const timeout = window.setTimeout(() => {
       retainedChild.current = null;
       setExitVersion((version) => version + 1);
-    }, reducedMotion ? 30 : exitMs);
+    }, reducedMotion ? 80 : exitMs);
     return () => window.clearTimeout(timeout);
   }, [exitMs, show]);
 

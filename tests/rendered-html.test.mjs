@@ -877,7 +877,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /const FOCUSABLE_SELECTOR = 'button:not\(:disabled\), summary, select:not\(:disabled\), input:not\(:disabled\):not\(\[type="hidden"\]\), \[tabindex\]:not\(\[tabindex="-1"\]\):not\(:disabled\)'/);
   assert.match(plannerView, /function focusableElements\(container: ParentNode \| null\)/);
   assert.match(plannerView, /ancestor\.tagName === "DETAILS" && !ancestor\.hasAttribute\("open"\) && !\(element\.tagName === "SUMMARY" && element\.parentElement === ancestor\)/);
-  assert.match(plannerView, /target = focusableElements\(workbench\?\.querySelector<HTMLElement>\('\.planner-editor'\) \?\? null\)\[0\]/);
+  assert.match(plannerView, /target = focusableElements\(workbench\?\.querySelector<HTMLElement>\('\.planner-editor:not\(\[inert\]\)'\) \?\? null\)\[0\]/);
   assert.match(plannerView, /const focusable = focusableElements\(workbench\)/);
   assert.match(plannerView, /const areaSelect = workbench\?\.querySelector<HTMLElement>\('#planner-area-select'\)/);
   assert.match(plannerView, /target = areaSelect && focusable\.includes\(areaSelect\) \? areaSelect : focusable\[0\]/);

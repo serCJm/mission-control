@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./interface.css";
 
 export const metadata: Metadata = {
   title: "Mission Control — Direct the work that matters",

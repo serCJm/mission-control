@@ -1,0 +1,67 @@
+/* Quiet working surfaces: names first, context second, controls close to the work. */
+html { scroll-padding-block-start: 90px; }
+::selection { background: var(--lime); color: var(--forest); }
+* { scrollbar-width: thin; scrollbar-color: #a5afa8 transparent; }
+input, textarea { caret-color: var(--forest); }
+:where(.quiet-count, .area-count, .planner-queue-count, .project-open-count,
+.completed-archive-count, .review-evidence strong, .review-prune-summary strong) { font-variant-numeric: tabular-nums; }
+:where(button, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid #6f8c48; outline-offset: 3px; }
+:where(button):disabled { cursor: default; }
+:where(input, textarea)::placeholder { color: #737d76; opacity: 1; }
+
+.topbar-nav button { font-size: 12px; }
+.topbar-nav small { font-size: 10px; opacity: .85; }
+.page-heading p { max-width: 65ch; line-height: 1.6; }
+.section-note { max-width: 65ch; font-size: 12px; line-height: 1.55; }
+.name-editor:not(.large) > span { font-size: 14px; line-height: 1.45; }
+.entity-copy > small, .project-task-counts, .project-task-preview-row { font-size: 11px; }
+.task-note-preview { font-size: 12px; }
+.task-row, .inbox-row { scroll-margin-block: 100px 32px; }
+.empty-state > strong { font-size: 13px; font-weight: 600; }
+.empty-state > p { font-size: 12px; line-height: 1.55; }
+.project-open-count { border: 0; background: transparent; padding-right: 0; }
+.project-open-count strong { background: #e8eddf; }
+.notes-board.empty { column-count: 1; }
+.project-view-content, .review-stage-switch, .planner-queue-switch, .planner-workbench-views { min-width: 0; }
+
+.planner-context-heading h2, .planner-editor-heading h2 { font-size: 16px; font-weight: 650; }
+.planner-context-heading p, .planner-editor-heading p, .planner-block-status small,
+.planner-queue-empty p, .planner-schedule-row-main small { font-size: 11px; line-height: 1.5; }
+.planner-compact-source strong, .planner-waiting-source strong,
+.planner-session-row strong, .planner-schedule-row-main strong { font-size: 12px; line-height: 1.45; font-weight: 600; }
+.planner-compact-source small, .planner-waiting-source small, .planner-session-row small { font-size: 10px; line-height: 1.45; }
+.planner-context-heading > button, .planner-editor-heading > button { font-size: 11px; }
+.planner-compact-source, .planner-waiting-source { padding-block: 11px; }
+.planner-queue-tabs { gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #f3f5ef; }
+.planner-queue-tabs button { height: 52px; border-color: transparent; border-radius: 7px; background: transparent; }
+.planner-queue-tabs button:hover { border-color: transparent; background: #e9eee2; }
+.planner-queue-tabs button.active { border-color: transparent; background: var(--forest); }
+.planner-queue-label { font: 600 10px/1.2 var(--sans); }
+.planner-day-head span { font-size: 10px; letter-spacing: 0; }
+.planner-day-head strong { font-size: 12px; }
+.planner-block-copy > small { font-size: 9px; }
+.planner-calendar-block.compact .planner-block-copy > small { font-size: 8px; }
+.routine-card-heading p, .routine-consistency { font-size: 11px; }
+.routine-card-heading small { font-size: 10px; }
+.routine-section .routine-card.active-window { background: transparent; }
+
+@media (max-width: 720px) {
+  .name-editor:not(.large) > span { font-size: 15px; }
+  .planner-compact-source strong, .planner-waiting-source strong, .planner-session-row strong { font-size: 14px; }
+  .planner-queue-tabs button { height: 56px; }
+  .planner-queue-label { font-size: 11px; }
+  .project-open-count { padding: 0; }
+}
+
+.planner-day-events { position: absolute; inset: 0; pointer-events: none; }
+.planner-day-events > * { pointer-events: auto; }
+.planner-queue-empty, .planner-schedule-empty, .planner-editor-empty { width: 100%; }
+
+/* A block's name should survive before secondary timing yields. */
+.planner-calendar-block.compact:not(.short) .planner-block-copy { display: grid; gap: 2px; }
+.planner-block-title strong { font-size: 11px; line-height: 1.25; }
+.planner-calendar-block.compact:not(.short) .planner-block-main { min-height: 34px; padding-block: 5px 3px; }
+.planner-calendar-block.short .planner-block-copy { gap: 4px; }
+.planner-calendar-block.short .planner-block-copy > small { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
+.planner-calendar-block.short .planner-block-title { flex: 0 1 auto; }
+.planner-time-rail span { font-size: 9px; }
