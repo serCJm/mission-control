@@ -782,7 +782,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /This block already has three items/);
   assert.match(plannerView, /const orderedBlockItems = \[[\s\S]*?blockItems\.filter\(\(item\) => !isDone\(item\)\),[\s\S]*?blockItems\.filter\(\(item\) => isDone\(item\)\),/);
   assert.match(plannerView, /const nowItemId = occurrenceActive \? orderedBlockItems\.find/);
-  assert.match(plannerView, /\{!done && <small>\{item\.id === nowItemId \? "Now" : `Then · \$\{index \+ 1\}`}<\/small>\}/);
+  assert.match(plannerView, /\{!done && <small>\{item\.id === nowItemId \? "Now" : `Up next · \$\{index \+ 1\}`}<\/small>\}/);
   assert.match(plannerView, /\{done && <span className="sr-only">Completed: <\/span>}\{title}<\/strong>/);
   assert.match(plannerView, /title="Complete"[\s\S]*?<CheckIcon \/>/);
   assert.match(plannerView, /\{onWait && <button[^>]*>[\s\S]*?<WaitIcon \/><span>Move to Waiting<\/span>/);
@@ -802,7 +802,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /standaloneOccurrenceAt\(over\.date, over\.minutes\) \? "No-area blocks cannot hold tasks or routines" : "Drop a routine inside a time block for its area"/);
   assert.match(plannerView, /onTaskChange\(itemId, \{ someday: undefined, waiting: undefined \}\)/);
   assert.match(plannerView, /Waiting/);
-  assert.match(plannerView, /Resume/);
+  assert.match(page, /<option value="waiting">Waiting<\/option>/);
   assert.match(plannerView, /TouchSensor/);
   assert.match(plannerView, /KeyboardSensor/);
   assert.match(plannerView, /event\.pointerType === "touch"/);
@@ -812,7 +812,8 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /onConnectionChange=\{editingRule \? undefined : setNewBlockConnection\}/);
   assert.match(plannerView, /Drag to add a \$\{dragCreateArea\.name\} block/);
   assert.match(plannerView, /That time overlaps another time block\. Drag across open time instead\./);
-  assert.match(plannerView, /Add to block/);
+  assert.match(plannerView, /renderWork\(area.id/);
+  assert.doesNotMatch(plannerView, /Choose work…|Workbench queues|Open area workspace|Open project workspace/);
   assert.match(plannerView, /active \? "active" : ""/);
   assert.match(plannerView, /function visiblePlannerBlockItemCount/);
   assert.match(plannerView, /const compact = height < 90/);
@@ -823,7 +824,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /function ScheduleOverview/);
   assert.match(plannerView, /function BlockFillPicker/);
   assert.match(plannerView, /All blocks in schedule/);
-  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\} time block<\/h2><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
+  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\}<\/h2><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
   assert.match(plannerView, /className="planner-editor-title-row"><h2>\{rule \? existingOneTimeBlock/);
   assert.doesNotMatch(plannerView, /className="planner-fill-picker"|<strong>Block fill<\/strong>/);
   assert.match(plannerView, /className=\{`planner-fill-menu fill-\$\{value\}`\}/);
@@ -853,10 +854,6 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /restoringSkippedOneTime/);
   assert.match(plannerView, /item\.kind === "skip" && item\.occurrenceDate === editingRule\?\.effectiveOn/);
   assert.match(plannerView, /kind: "schedule"; areaId: string/);
-  assert.match(plannerView, /aria-label="Open area workspace"/);
-  assert.match(plannerView, /aria-label="Open project workspace"/);
-  assert.match(plannerView, /aria-label=\{areaCreatorOpen \? "Close new area form" : "New area"\}/);
-  assert.match(plannerView, /<WorkspaceIcon \/><\/button>/);
   assert.doesNotMatch(plannerView, /SettingsIcon|Area settings|Project settings|areaCreatorOpen \? "Cancel" : "New"/);
   assert.match(plannerView, /<CalendarIcon \/>View schedule/);
   assert.match(plannerView, /<PlusIcon \/>New block/);
@@ -874,7 +871,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.doesNotMatch(plannerView, /area management view/);
   assert.doesNotMatch(plannerView, /into an \$\{area\?\.name \?\? "area"\} block|area block queue/);
   assert.match(plannerView, /previousEditorOpen/);
-  assert.match(plannerView, /const FOCUSABLE_SELECTOR = 'button:not\(:disabled\), summary, select:not\(:disabled\), input:not\(:disabled\):not\(\[type="hidden"\]\), \[tabindex\]:not\(\[tabindex="-1"\]\):not\(:disabled\)'/);
+  assert.match(plannerView, /const FOCUSABLE_SELECTOR = 'button:not\(:disabled\), summary, select:not\(:disabled\), textarea:not\(:disabled\), input:not\(:disabled\):not\(\[type="hidden"\]\), \[tabindex\]:not\(\[tabindex="-1"\]\):not\(:disabled\)'/);
   assert.match(plannerView, /function focusableElements\(container: ParentNode \| null\)/);
   assert.match(plannerView, /ancestor\.tagName === "DETAILS" && !ancestor\.hasAttribute\("open"\) && !\(element\.tagName === "SUMMARY" && element\.parentElement === ancestor\)/);
   assert.match(plannerView, /target = focusableElements\(workbench\?\.querySelector<HTMLElement>\('\.planner-editor:not\(\[inert\]\)'\) \?\? null\)\[0\]/);
@@ -883,11 +880,6 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /target = areaSelect && focusable\.includes\(areaSelect\) \? areaSelect : focusable\[0\]/);
   assert.doesNotMatch(plannerView, /#planner-area-select, button:not\(:disabled\)/);
   assert.match(plannerView, /planner-context-card/);
-  assert.match(plannerView, /\[\['work', 'Tasks', projectTasks\.length\], \['backlog', 'Backlog', backlogTasks\.length\], \['waiting', 'Waiting', waitingTasks\.length\], \['routines', 'Routines', selectedAreaRoutines\.length\]\]/);
-  for (const label of ["Tasks", "Backlog", "Waiting", "Routines"]) assert.match(plannerView, new RegExp(`\\['[^']+', '${label}',`));
-  assert.match(plannerView, /function QueueIcon/);
-  assert.match(plannerView, /aria-label=\{`\$\{label\}: \$\{count\} \$\{count === 1 \? "item" : "items"\}`\}/);
-  assert.match(plannerView, /className="planner-queue-label" aria-hidden="true">\{label\}<\/span>/);
   assert.match(plannerView, /Time blocks can touch, but they cannot overlap/);
   assert.match(plannerView, /occurrence\.kind === "area" \? \{ selectedAreaId: occurrence\.areaId, selectedProjectId: "" \} : \{\}/);
   assert.match(plannerView, /function StandaloneOccurrenceEditor/);
@@ -943,7 +935,6 @@ test("calendar owns This block and derives Now from its first unfinished item", 
 test("area, project, Today, and Review speak one execution language", () => {
   assert.match(page, /session=\{plannerSession\}/);
   assert.match(page, /className="topbar-nav"/);
-  assert.match(page, /onCreateArea=\{createArea\}/);
   assert.match(page, /<h2>Area backlog<\/h2>/);
   assert.match(page, /Project waiting/);
   assert.match(page, /Areas carry the work/);

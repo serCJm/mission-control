@@ -7,6 +7,7 @@ import { createNavigationTransition } from "./navigation-transition.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProject, sortProjectNotes } from "./project-note-schema.mjs";
 import { formatPlannerTime, isPlannerDeadline, normalizePlanner, plannerDateKey } from "./planner-schema.mjs";
+import { BlockProjectWork } from "./block-project-work";
 import { Planner, type PlannerData, type PlannerSessionState } from "./planner";
 import { Presence } from "./presence";
 import { listMotionRef } from "./list-motion";
@@ -613,14 +614,6 @@ export default function Home() {
     prependTask(task, "Added to Waiting");
   }
 
-  function createArea(value: string) {
-    const name = value.trim();
-    if (!name) return;
-    const area: Area = { id: makeId("area"), name, icon: "target" };
-    setWorkspace((current) => ({ ...current, areas: [...current.areas, area] }));
-    navigate({ kind: "area", id: area.id });
-  }
-
   function addProject(event: FormEvent) {
     event.preventDefault();
     if (!activeArea) return;
@@ -985,38 +978,38 @@ export default function Home() {
     setWorkspace((current) => ({ ...current, projects: current.projects.map((project) => project.id === activeProject.id ? { ...project, ...patch } : project) }));
   }
 
-  function addProjectNote(title: string, body: string) {
-    if (!activeProject || (!title.trim() && !body.trim())) return;
+  function addProjectNote(title: string, body: string, projectId = activeProject?.id) {
+    if (!projectId || (!title.trim() && !body.trim())) return;
     const timestamp = Date.now();
     const note: ProjectNote = { id: makeId("note"), title, body, pinned: false, createdAt: timestamp, updatedAt: timestamp };
     setUndoWorkspace(null);
     setWorkspace((current) => ({
       ...current,
-      projects: current.projects.map((project) => project.id === activeProject.id ? { ...project, notes: [...project.notes, note] } : project),
+      projects: current.projects.map((project) => project.id === projectId ? { ...project, notes: [...project.notes, note] } : project),
     }));
     setToast("Note added");
   }
 
-  function updateProjectNote(noteId: string, patch: Partial<Pick<ProjectNote, "title" | "body" | "pinned">>) {
-    if (!activeProject) return;
+  function updateProjectNote(noteId: string, patch: Partial<Pick<ProjectNote, "title" | "body" | "pinned">>, projectId = activeProject?.id) {
+    if (!projectId) return;
     const updatedAt = Date.now();
     setUndoWorkspace(null);
     setWorkspace((current) => ({
       ...current,
-      projects: current.projects.map((project) => project.id === activeProject.id ? {
+      projects: current.projects.map((project) => project.id === projectId ? {
         ...project,
         notes: project.notes.map((note) => note.id === noteId ? { ...note, ...patch, updatedAt } : note),
       } : project),
     }));
   }
 
-  function removeProjectNote(noteId: string) {
-    if (!activeProject) return;
+  function removeProjectNote(noteId: string, projectId = activeProject?.id) {
+    if (!projectId) return;
     setUndoWorkspace(workspace);
     setTaskUndo(null);
     setWorkspace((current) => ({
       ...current,
-      projects: current.projects.map((project) => project.id === activeProject.id ? { ...project, notes: project.notes.filter((note) => note.id !== noteId) } : project),
+      projects: current.projects.map((project) => project.id === projectId ? { ...project, notes: project.notes.filter((note) => note.id !== noteId) } : project),
     }));
     setToast("Note removed");
   }
@@ -1102,7 +1095,17 @@ export default function Home() {
           <Presence show={workspaceMenuOpen} className="motion-popover">{() => <nav ref={workspaceMenu} id="workspace-menu" className="workspace-menu-popover" aria-label="Workspace menu"><button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}><span>Today</span><small>{openTasks.length} open</small></button><button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}><span>Inbox</span><small>{inboxTasks.length}</small></button><button className={selection.kind === "review" ? "active" : ""} onClick={() => navigate({ kind: "review" })}><span>Weekly review</span><small>{currentReview.completedSteps.length}/5</small></button></nav>}</Presence>
         </header>
 
-        {selection.kind === "today" && <Planner areas={workspace.areas} projects={activeProjects} tasks={activeTasks} routines={workspace.routines} planner={workspace.planner} onChange={(planner) => setWorkspace((current) => ({ ...current, planner }))} onTaskChange={(taskId, patch) => updateTask(taskId, patch)} onRoutineSessionStatus={(routineId, date, status) => setRoutineSessionStatus(routineId, status, date)} makeId={makeId} onNotice={setToast} onEditorOpenChange={handlePlannerEditorChange} session={plannerSession} onSessionChange={(patch) => setPlannerSession((current) => ({ ...current, ...patch }))} onManage={navigate} onCreateArea={createArea} />}
+        {selection.kind === "today" && <Planner areas={workspace.areas} projects={activeProjects} tasks={activeTasks} routines={workspace.routines} planner={workspace.planner} onChange={(planner) => setWorkspace((current) => ({ ...current, planner }))} onTaskChange={(taskId, patch) => updateTask(taskId, patch)} onRoutineSessionStatus={(routineId, date, status) => setRoutineSessionStatus(routineId, status, date)} makeId={makeId} onNotice={setToast} onEditorOpenChange={handlePlannerEditorChange} session={plannerSession} onSessionChange={(patch) => setPlannerSession((current) => ({ ...current, ...patch }))} onCreateArea={(name) => {
+          const area: Area = { id: makeId("area"), name, icon: "target" };
+          setWorkspace((current) => ({ ...current, areas: [...current.areas, area] }));
+          setPlannerSession((current) => ({ ...current, selectedAreaId: area.id, selectedProjectId: "" }));
+        }} renderWork={(areaId, selectedTaskIds, full, onQueue, onRelease) => <BlockProjectWork key={areaId} projects={activeProjects.filter((project) => project.areaId === areaId)} tasks={activeTasks.filter((task) => task.areaId === areaId)} selectedTaskIds={selectedTaskIds} full={full} onQueue={onQueue} onCreateTask={(title, projectId) => projectId ? addProjectTask(projectId, areaId, "todo", title) : addAreaTask(areaId, title)} onCreateProject={(name) => { const project = { id: makeId("project"), areaId, name, outcome: "", notes: [] }; setWorkspace((current) => ({ ...current, projects: [...current.projects, project] })); return project.id; }} renderTask={(taskId) => {
+          const task = workspace.tasks.find((item) => item.id === taskId)!;
+          return <><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} /><label className="block-task-status"><span className="sr-only">Status for {task.title}</span><select value={task.waiting ? "waiting" : task.status} onChange={(event) => { if (event.target.value === "waiting") { onRelease(task.id); updateTask(task.id, { waiting: true }); } else updateTask(task.id, { status: event.target.value as TaskStatus, waiting: undefined }); }}><option value="todo">To do</option><option value="doing">In progress</option><option value="waiting">Waiting</option><option value="done">Done</option></select></label></>;
+        }} renderProject={(projectId) => {
+          const project = workspace.projects.find((item) => item.id === projectId)!;
+          return <div className="block-project-details"><NameEditor value={project.name} onSave={(name) => renameProject(project.id, name)} label="Project name" /><label className="planner-field"><span>Outcome</span><textarea maxLength={20000} key={`${project.id}:${project.outcome}`} defaultValue={project.outcome} onBlur={(event) => { const outcome = event.target.value.trim(); if (outcome !== project.outcome) setWorkspace((current) => ({ ...current, projects: current.projects.map((item) => item.id === project.id ? { ...item, outcome } : item) })); }} /></label><ProjectNotes key={project.id} project={project} addNote={(title, body) => addProjectNote(title, body, project.id)} updateNote={(noteId, patch) => updateProjectNote(noteId, patch, project.id)} removeNote={(noteId) => removeProjectNote(noteId, project.id)} onEditorChange={handleProjectNoteEditorChange} /></div>;
+        }} />} />}
         {selection.kind === "inbox" && <Inbox workspace={workspace} tasks={inboxTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} reorderProps={reorderProps} taskSort={taskSortFor("inbox")} setTaskSort={(sort) => setTaskSort("inbox", sort)} />}
         {selection.kind === "area" && activeArea && <AreaView key={activeArea.id} areas={workspace.areas} area={activeArea} projects={workspace.projects.filter((project) => project.areaId === activeArea.id)} tasks={contextualTasks} routines={workspace.routines.filter((routine) => routine.areaId === activeArea.id)} showProjectForm={showProjectForm} setShowProjectForm={setShowProjectForm} newProject={newProject} setNewProject={setNewProject} addProject={addProject} addAreaTask={addAreaTask} addWaitingTask={addWaitingTask} addRoutine={addRoutine} updateRoutine={updateRoutine} removeRoutine={removeRoutine} setRoutineSessionStatus={setRoutineSessionStatus} toggleRoutineChecklist={toggleRoutineChecklist} toggleRoutinePause={toggleRoutinePause} addRoutineVacation={addRoutineVacation} removeRoutineVacation={removeRoutineVacation} routineNow={routineNow} navigate={navigate} toggleTask={toggleTask} updateArea={updateArea} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} moveTask={moveTask} setProjectCompletion={setProjectCompletion} reorderProps={reorderProps} focusSort={taskSortFor(`backlog:${activeArea.id}`)} setFocusSort={(sort) => setTaskSort(`backlog:${activeArea.id}`, sort)} waitingSort={taskSortFor(`waiting:${activeArea.id}`)} setWaitingSort={(sort) => setTaskSort(`waiting:${activeArea.id}`, sort)} removeArea={removeArea} />}
         {selection.kind === "project" && activeProject && activeArea && <ProjectView key={activeProject.id} project={activeProject} areas={workspace.areas} area={activeArea} tasks={contextualTasks} toggleTask={toggleTask} renameProject={renameProject} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} addProjectTask={addProjectTask} onTaskNoteEditorChange={handleTaskNoteEditorChange} reorderProps={reorderProps} taskSort={taskSortFor(`project:${activeProject.id}`)} setTaskSort={(sort) => setTaskSort(`project:${activeProject.id}`, sort)} updateProject={updateProject} addProjectNote={addProjectNote} updateProjectNote={updateProjectNote} removeProjectNote={removeProjectNote} onProjectNoteEditorChange={handleProjectNoteEditorChange} removeProject={removeProject} setProjectCompletion={setProjectCompletion} view={projectView} setView={setProjectView} dragged={dragged} moveTaskToStatus={moveTaskToStatus} moveTask={moveTask} setDragged={setDragged} navigate={navigate} />}

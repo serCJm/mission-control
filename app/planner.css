@@ -46,3 +46,40 @@
 @media(max-width:580px){.planner-toolbar{gap:7px}.planner-week-controls{grid-template-columns:36px minmax(86px,auto) 36px}.planner-range{padding-inline:7px}.planner-layout{padding:0}.planner-calendar{border-right:0;border-left:0;border-radius:0}.planner-workbench{width:calc(100% - 18px);border-top-left-radius:0;border-bottom-left-radius:0;padding:15px}.planner-context-heading>button{min-height:44px}.planner-context-controls{grid-template-columns:1fr}.planner-context-controls select{min-height:44px}.planner-context-label .planner-label-action{min-width:44px;min-height:44px}.planner-manage-row{grid-template-columns:1fr}.planner-manage-actions{display:grid;grid-template-columns:1fr 1fr}.planner-manage-actions button{min-height:44px}.planner-block-status-button{min-height:52px}.planner-source-actions button,.planner-waiting-source>button{min-height:44px}.planner-source-actions .planner-queue-button{width:44px;min-width:44px;height:44px}.planner-compact-source{align-items:center;grid-template-columns:minmax(0,1fr) auto}.planner-source-actions{padding:0}.planner-editor-actions{grid-template-columns:1fr 1fr}.planner-editor-actions>span{display:none}.planner-editor-actions .planner-delete{grid-column:1/-1;justify-self:start}.planner-session-row{display:grid}.planner-session-row.block-work-row{display:flex}.planner-row-actions{justify-content:flex-end}.planner-row-actions button{min-height:44px}.planner-row-actions .planner-icon-action{width:44px;min-width:44px;height:44px}.planner-row-menu-popover{top:calc(100% + 4px);width:168px}.planner-row-menu-popover button{min-height:44px}.planner-add-row{grid-template-columns:1fr}.planner-add-row button{min-height:40px}.planner-schedule-new{min-height:44px}.planner-schedule-row{grid-template-columns:minmax(0,1fr) auto}.planner-schedule-row-main{min-height:48px;padding-block:8px}.planner-schedule-row-actions button{width:40px;height:40px}.planner-schedule-row-actions.confirming{padding-left:40px}.planner-schedule-row-actions.confirming button{height:40px}.planner-calendar-block{right:7px;left:7px}.planner-block-move{top:2px;right:2px;width:36px;height:36px}.planner-block-main{min-height:40px;padding-right:42px}.planner-queue-tabs{gap:5px}.planner-queue-tabs button{height:62px}.planner-queue-label{font-size:9px}}
 @media(max-width:580px){.planner-frequency button,.planner-block-kind button{min-height:40px}.planner-title-suggestions button{min-height:40px}.planner-fill-menu>summary{width:44px;height:44px}.planner-fill-palette{grid-template-columns:repeat(3,36px)}.planner-fill-option{width:36px;height:36px}}
 @media(prefers-reduced-motion:reduce){.planner-layout,.planner-workbench,.planner-page.workbench-closed .planner-workbench,.planner-drop-slot,.planner-calendar-block{transition:none}}
+
+/* The selected block owns both choosing work and execution. */
+@media(min-width:981px){.planner-layout{grid-template-columns:420px minmax(0,1fr)}}
+.planner-context-field>select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px;color:var(--ink)}
+.planner-week-blocks,.block-project-work,.block-project-details{display:grid;gap:14px;min-width:0}
+.planner-week-blocks h3,.block-work-heading h3{margin:0;font-size:14px}
+.planner-week-blocks .planner-schedule-row-main{width:100%;grid-template-columns:minmax(0,1fr) 20px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:12px 0;text-align:left}
+.block-project-work{border-top:1px solid var(--line);padding-top:18px}
+.block-work-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.block-work-heading button,.block-work-finished{border:0;background:transparent;color:var(--forest);padding:8px 0;font-size:12px;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.block-work-create{display:flex;gap:8px;min-width:0}
+.block-work-create input,.block-project-details textarea{min-width:0;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;font:inherit;font-size:13px}
+.block-project-details textarea{min-height:80px;resize:vertical}
+.block-work-create button,.block-work-task-footer button{flex-shrink:0;border:1px solid var(--forest);border-radius:8px;background:var(--forest);color:#fff;padding:8px 10px;font-size:12px;min-height:40px}
+.block-work-create button:disabled,.block-work-task-footer button:disabled{opacity:.45;cursor:not-allowed}
+.block-work-tasks{display:grid}
+.block-work-task{display:grid;gap:10px;padding:16px 0;border-bottom:1px solid var(--line);min-width:0}
+.block-work-task .task-copy{min-width:0;width:100%}
+.block-work-task .name-editor{min-width:0}
+.block-work-task .name-editor-text{white-space:normal}
+.block-task-status select{max-width:100%;min-height:36px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--forest);padding:6px;font-size:12px}
+.block-work-task-footer{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.block-work-task-footer small{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.block-work-task-footer>span{color:var(--forest);font-size:12px;font-weight:650}
+.planner-work-group,.planner-block-settings{min-width:0;border-top:1px solid var(--line);padding-top:12px}
+.planner-work-group>summary,.planner-block-settings>summary{cursor:pointer;color:var(--forest);font-size:13px;font-weight:650;padding:8px 0}
+.planner-block-settings[open]{display:grid;gap:14px}
+.planner-work-group[open]>summary{margin-bottom:12px}
+.block-project-details .project-notes{padding:0;margin:0}
+.block-project-details .notes-board{grid-template-columns:minmax(0,1fr)}
+.occurrence-editor .planner-session-row strong{white-space:normal;font-size:13px;line-height:1.4}
+.occurrence-editor .planner-session-row small{font-size:11px}
+.occurrence-editor .planner-editor-heading h2{font-size:20px}
+.occurrence-editor .planner-editor-heading p{font-size:12px}
+.occurrence-editor .planner-editor-section h3{font-size:13px}
+.occurrence-editor .planner-editor-empty{font-size:12px}
+@media(max-width:580px){.block-work-create{flex-wrap:wrap}.block-work-create input{flex:1 1 160px}.block-work-create button,.block-work-task-footer button,.block-task-status select,.planner-work-group>summary,.planner-block-settings>summary{min-height:44px}.block-work-task-footer{flex-wrap:wrap}}

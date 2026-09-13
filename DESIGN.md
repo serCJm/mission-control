@@ -158,7 +158,7 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 ## Layout
 
-Desktop uses one fluid content column. The sticky 72px top bar holds the command mark, compact Today/Inbox/Review navigation, quick capture, and sync state. Calendar-first Today places a 320px contextual workbench directly beside the fluid week, while management pages remain capped at 1180px with fluid horizontal padding from 24px to 60px. Primary work areas use two-column grids with 16px gaps; panels usually carry 23px internal padding and 14px corners.
+Desktop uses one fluid content column. The sticky 72px top bar holds the command mark, compact Today/Inbox/Review navigation, quick capture, and sync state. Calendar-first Today places a 420px contextual workbench directly beside the fluid week, while management pages remain capped at 1180px with fluid horizontal padding from 24px to 60px. Primary work areas use two-column grids with 16px gaps; panels usually carry 23px internal padding and 14px corners.
 
 At 980px and below, the contextual workbench becomes an overlay drawer with a dimmed scrim. At 920px and below, the week becomes one selected day and global navigation moves into a compact top-bar menu; project and review grids stack. At 720px and below, task sort, due-date, priority, Edit, and move controls gain touch-sized targets while list columns collapse without losing actions. At 580px and below, page headings, inbox rows, and inline creation layouts stack; page gutters tighten to 17px. The 460px fallback removes nonessential area initials and stacks task metadata into a readable single column.
 
@@ -212,11 +212,13 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. Area and project navigation lives in the adjacent contextual workbench through selectors and explicit management links, avoiding a second persistent rail. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
+The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with area scheduling. Opening a calendar block brings its projects, tasks, and project notes into that same workbench without a separate management-page detour. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
 ### Calendar Blocks
 
 Today has one forest “New block” action in the calendar toolbar. Creation uses a shared workbench editor whose first decision is “Connect to”: Area or No area. Area blocks inherit the existing area-work behavior and can hold up to three tasks or routines. No-area blocks require a concise title, offer Driving, Break, Meal, Appointment, and Buffer as optional shortcuts, default to the neutral slate fill, and never expose task queues, “Now,” notes, or completion state.
+
+Creating a block opens its working surface directly. An area block shows its one-to-three selected actions first, followed by inline project selection, task creation and editing, task status, and project outcome and notes. Timing and repeat controls sit behind Block settings. The scheduling overview lists this week’s blocks rather than duplicating task queues.
 
 Both block kinds use the same one-time or weekly schedule, date, time, fill, drag, resize, occurrence-edit, and delete behaviors. A no-area calendar card shows only its title and time. Conversion remains available in the shared editor, but an area block with queued work must be emptied before it can become a no-area block. Time blocks may touch but never overlap, regardless of kind.
 
@@ -241,7 +243,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Do** use Warm Paper for the canvas and Quiet Panel for primary work surfaces.
 - **Do** keep hierarchy-first lists readable, lightly divided, and equipped with visible Edit, task sorting, due-date, priority, and contextual Custom-order affordances.
 - **Do** keep project notes compact, project-owned, pin-first, and readable as a responsive board rather than one undifferentiated document.
-- **Do** keep one side surface: the 320px contextual workbench beside the calendar, becoming a drawer below 980px.
+- **Do** keep one side surface: the 420px contextual workbench beside the calendar, becoming a drawer below 980px.
 - **Do** use the shared New block editor for both area work and protected no-area time.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
