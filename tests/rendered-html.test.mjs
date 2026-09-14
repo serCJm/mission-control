@@ -813,7 +813,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /Drag to add a \$\{dragCreateArea\.name\} block/);
   assert.match(plannerView, /That time overlaps another time block\. Drag across open time instead\./);
   assert.match(plannerView, /renderWork\(area.id/);
-  assert.doesNotMatch(plannerView, /Choose work…|Workbench queues|Open area workspace|Open project workspace/);
+  assert.doesNotMatch(plannerView, /Choose work…|Workbench queues|Open project workspace/);
   assert.match(plannerView, /active \? "active" : ""/);
   assert.match(plannerView, /function visiblePlannerBlockItemCount/);
   assert.match(plannerView, /const compact = height < 90/);
@@ -824,7 +824,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /function ScheduleOverview/);
   assert.match(plannerView, /function BlockFillPicker/);
   assert.match(plannerView, /All blocks in schedule/);
-  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\}<\/h2><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
+  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\}<\/h2><AreaWorkspaceButton area=\{area\} onOpen=\{onOpenArea\} \/><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
   assert.match(plannerView, /className="planner-editor-title-row"><h2>\{rule \? existingOneTimeBlock/);
   assert.doesNotMatch(plannerView, /className="planner-fill-picker"|<strong>Block fill<\/strong>/);
   assert.match(plannerView, /className=\{`planner-fill-menu fill-\$\{value\}`\}/);
@@ -844,7 +844,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /planner-schedule-row-icon fill-\$\{rule\.fill\}/);
   assert.match(plannerView, /const exceptionsByOccurrence = useMemo\(\(\) => new Map\(exceptions\.map/);
   assert.match(plannerView, /const orderedRules = useMemo\(\(\) => \[\.\.\.rules\]\.sort/);
-  assert.match(plannerView, /const scheduleRules = useMemo\(\(\) => scheduleArea \? planner\.blockRules\.filter/);
+  assert.match(plannerView, /const scheduleRules = useMemo\(\(\) => selectedArea \? planner\.blockRules\.filter/);
   assert.match(plannerView, /const WORKBENCH_DATE_FORMATTER = new Intl\.DateTimeFormat/);
   assert.match(plannerView, /return WORKBENCH_DATE_FORMATTER\.format/);
   assert.doesNotMatch(plannerView, /exceptions\.find\(\(item\) => item\.ruleId === rule\.id/);
@@ -853,9 +853,9 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /oneTime && !skipped \? onEditOccurrence\(plannerOccurrenceId\(rule\.id, rule\.effectiveOn\), date\) : onEditSeries\(rule\.id\)/);
   assert.match(plannerView, /restoringSkippedOneTime/);
   assert.match(plannerView, /item\.kind === "skip" && item\.occurrenceDate === editingRule\?\.effectiveOn/);
-  assert.match(plannerView, /kind: "schedule"; areaId: string/);
+  assert.doesNotMatch(plannerView, /kind: "schedule"; areaId: string/);
   assert.doesNotMatch(plannerView, /SettingsIcon|Area settings|Project settings|areaCreatorOpen \? "Cancel" : "New"/);
-  assert.match(plannerView, /<CalendarIcon \/>View schedule/);
+  assert.doesNotMatch(plannerView, /View schedule|planner-week-blocks/);
   assert.match(plannerView, /<PlusIcon \/>New block/);
   assert.match(plannerView, /Delete this block only/);
   assert.match(plannerView, /Delete repeating schedule/);
