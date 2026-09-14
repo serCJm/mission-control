@@ -369,7 +369,7 @@ function ScheduleOverview({ area, rules, exceptions, onEditSeries, onEditOccurre
     if (!focusAfterDelete.current) return;
     focusAfterDelete.current = false;
     const nextTarget = rules.length
-      ? overviewRef.current?.querySelector<HTMLElement>('.planner-schedule-row-main, .planner-schedule-new')
+      ? overviewRef.current?.querySelector<HTMLElement>('.planner-schedule-row-actions button, .planner-schedule-new')
       : overviewRef.current?.querySelector<HTMLElement>('.planner-schedule-empty .planner-schedule-new');
     nextTarget?.focus();
   }, [rules]);
@@ -394,11 +394,10 @@ function ScheduleOverview({ area, rules, exceptions, onEditSeries, onEditOccurre
       const edit = () => oneTime && !skipped ? onEditOccurrence(plannerOccurrenceId(rule.id, rule.effectiveOn), date) : onEditSeries(rule.id);
       const confirming = confirmRuleId === rule.id;
       return <article className="planner-schedule-row" ref={listMotionRef} key={rule.id}>
-        <button type="button" className="planner-schedule-row-main" onClick={edit}>
+        <div className="planner-schedule-row-main">
           <span className={`planner-schedule-row-icon fill-${rule.fill}`}><CalendarIcon /></span>
           <span><strong>{label}</strong><small>{formatBlockTime(startTime)}–{formatBlockTime(endTime)} · {skipped ? "Skipped · edit to restore" : oneTime ? "One time" : "Repeats weekly"}</small></span>
-          <ArrowIcon />
-        </button>
+        </div>
         <div className={`planner-schedule-row-actions ${confirming ? "confirming" : ""}`} key={confirming ? "confirm" : "actions"}>
           {confirming ? <><button type="button" className="planner-confirm-delete" onClick={() => deleteScheduleRule(rule.id)}>{oneTime ? "Confirm delete block" : "Confirm delete repeating schedule"}</button><button type="button" onClick={() => setConfirmRuleId("")}>Cancel</button></> : <><button type="button" aria-label={`Edit ${label} block`} title="Edit block" onClick={edit}><EditIcon /></button><button type="button" className="danger" aria-label={`Delete ${label} ${oneTime ? "block" : "repeating schedule"}`} title={oneTime ? "Delete block" : "Delete repeating schedule"} onClick={() => setConfirmRuleId(rule.id)}><DeleteIcon /></button></>}
         </div>
