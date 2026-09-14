@@ -90,3 +90,6 @@
 .planner-schedule-overview{display:grid;gap:12px;min-width:0}
 
 .planner-settings-toggle[aria-expanded="true"]{background:var(--lime-soft)}
+
+.planner-schedule-row-main:hover:not(:disabled){background:#f2f4ed}
+.planner-schedule-row-main:disabled{cursor:default;opacity:.6}

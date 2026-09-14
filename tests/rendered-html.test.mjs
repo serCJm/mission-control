@@ -850,7 +850,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.doesNotMatch(plannerView, /exceptions\.find\(\(item\) => item\.ruleId === rule\.id/);
   assert.match(plannerView, /const skipped = exception\?\.kind === "skip"/);
   assert.match(plannerView, /Skipped · edit to restore/);
-  assert.match(plannerView, /oneTime && !skipped \? onEditOccurrence\(plannerOccurrenceId\(rule\.id, rule\.effectiveOn\), date\) : onEditSeries\(rule\.id\)/);
+  assert.match(plannerView, /const edit = \(\) => onEditSeries\(rule.id\)/);
   assert.match(plannerView, /restoringSkippedOneTime/);
   assert.match(plannerView, /item\.kind === "skip" && item\.occurrenceDate === editingRule\?\.effectiveOn/);
   assert.doesNotMatch(plannerView, /kind: "schedule"; areaId: string/);
