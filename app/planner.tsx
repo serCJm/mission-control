@@ -169,7 +169,7 @@ function MoreIcon() {
   return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h.01M10 10h.01M15 10h.01" /></svg>;
 }
 
-function BlockItemActionMenu({ itemId, title, canMoveEarlier, canMoveLater, onWait, onMoveEarlier, onMoveLater, onRemove }: { itemId: string; title: string; canMoveEarlier: boolean; canMoveLater: boolean; onWait?: () => void; onMoveEarlier: () => void; onMoveLater: () => void; onRemove: () => void }) {
+function BlockItemActionMenu({ itemId, title, canMoveEarlier, canMoveLater, onReopen, onWait, onMoveEarlier, onMoveLater, onRemove }: { itemId: string; title: string; canMoveEarlier: boolean; canMoveLater: boolean; onReopen?: () => void; onWait?: () => void; onMoveEarlier: () => void; onMoveLater: () => void; onRemove: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -218,6 +218,7 @@ function BlockItemActionMenu({ itemId, title, canMoveEarlier, canMoveLater, onWa
   return <div className="planner-row-menu">
     <button ref={triggerRef} type="button" className="planner-icon-action" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`More actions for ${title}`} title="More actions" onClick={() => setOpen((current) => !current)}><MoreIcon /></button>
     <Presence show={open} className="motion-popover">{() => <div ref={menuRef} id={menuId} className="planner-row-menu-popover" role="menu" tabIndex={-1} aria-label={`More actions for ${title}`} onKeyDown={handleMenuKeyDown}>
+      {onReopen && <button type="button" role="menuitem" onClick={() => choose(onReopen)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 8h8a5 5 0 0 1 0 10M3 8l4-4M3 8l4 4" /></svg><span>Mark incomplete</span></button>}
       {onWait && <button type="button" role="menuitem" onClick={() => choose(onWait)}><WaitIcon /><span>Move to Waiting</span></button>}
       <button type="button" role="menuitem" disabled={!canMoveEarlier} onClick={() => choose(onMoveEarlier)}><VerticalArrowIcon direction="up" /><span>Move earlier</span></button>
       <button type="button" role="menuitem" disabled={!canMoveLater} onClick={() => choose(onMoveLater)}><VerticalArrowIcon direction="down" /><span>Move later</span></button>
@@ -534,7 +535,7 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
             <button type="button" className="planner-icon-action" aria-label={`Complete ${title}`} title="Complete" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "completed")}><CheckIcon /></button>
             <button type="button" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "skipped")}>Skip</button>
           </>}
-          <BlockItemActionMenu itemId={item.id} title={title} canMoveEarlier={canMoveEarlier} canMoveLater={canMoveLater} onWait={!done && item.kind === "task" ? () => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); } : undefined} onMoveEarlier={() => moveItem(item.id, -1)} onMoveLater={() => moveItem(item.id, 1)} onRemove={() => removeItem(item.id)} />
+          <BlockItemActionMenu itemId={item.id} title={title} onReopen={done && task ? () => onTaskChange(task.id, { status: "todo" }) : undefined} canMoveEarlier={canMoveEarlier} canMoveLater={canMoveLater} onWait={!done && item.kind === "task" ? () => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); } : undefined} onMoveEarlier={() => moveItem(item.id, -1)} onMoveLater={() => moveItem(item.id, 1)} onRemove={() => removeItem(item.id)} />
         </span>
       </div>;
     })}{!blockItems.length && <p key="empty" className="planner-editor-empty">Nothing selected. Add one to three items, or leave this block open for context-led work.</p>}</div>
