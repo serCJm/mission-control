@@ -45,7 +45,7 @@ type PlannerProps = {
   onEditorOpenChange: (open: boolean) => void;
   session: PlannerSessionState;
   onSessionChange: (patch: Partial<PlannerSessionState>) => void;
-  renderWork: (areaId: string, selectedTaskIds: Set<string>, full: boolean, onQueue: (taskId: string) => void, onRelease: (taskId: string) => void) => ReactNode;
+  renderWork: (areaId: string, selectedTaskIds: Set<string>, full: boolean, onQueue: (taskId: string) => void, onRelease: (taskId: string) => void, routines: ReactNode, routineCount: number) => ReactNode;
   onCreateArea: (name: string) => void;
 };
 type PlannerDragData = { kind?: string; taskId?: string; routineId?: string; occurrence?: CalendarOccurrence };
@@ -534,8 +534,8 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
 
     </section>
     <Presence show={Boolean(error)} className="motion-collapse">{() => <p className="planner-form-error" role="alert">{error}</p>}</Presence>
-    {renderWork(area.id, new Set(blockItems.filter((item) => item.kind === "task").map((item) => item.itemId)), blockItems.length >= 3, (taskId) => addCandidate(`task:${taskId}`), (taskId) => { const item = blockItems.find((item) => item.kind === "task" && item.itemId === taskId); if (item) removeItem(item.id); })}
-    {matchingRoutines.length > 0 && <details className="planner-work-group"><summary>Routines</summary>{matchingRoutines.filter((routine) => !selectedKeys.has(`routine:${routine.id}`)).map((routine) => <RoutineDragItem key={routine.id} routine={routine} canSchedule={blockItems.length < 3} onQueue={() => addCandidate(`routine:${routine.id}`)} />)}</details>}
+    {renderWork(area.id, new Set(blockItems.filter((item) => item.kind === "task").map((item) => item.itemId)), blockItems.length >= 3, (taskId) => addCandidate(`task:${taskId}`), (taskId) => { const item = blockItems.find((item) => item.kind === "task" && item.itemId === taskId); if (item) removeItem(item.id); }, matchingRoutines.length ? matchingRoutines.filter((routine) => !selectedKeys.has(`routine:${routine.id}`)).map((routine) => <RoutineDragItem key={routine.id} routine={routine} canSchedule={blockItems.length < 3} onQueue={() => addCandidate(`routine:${routine.id}`)} />) : <p className="planner-editor-empty">No routines in this area.</p>, matchingRoutines.filter((routine) => !selectedKeys.has(`routine:${routine.id}`)).length)}
+
     <details className="planner-block-settings"><summary>Block settings · time & repeat</summary>
     <form className="planner-occurrence-form" onSubmit={saveOccurrence}><label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div><button type="submit" className="planner-inline-save planner-button-with-icon"><CheckIcon />Save block</button></form>
     <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete planner-button-with-icon" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}><DeleteIcon />{confirmDelete ? recurring ? "Confirm this block only" : "Confirm delete block" : recurring ? "Delete this block only" : "Delete this block"}</button><span /><button type="button" className="planner-button-with-icon" onClick={onAddAnother}><PlusIcon />New block</button><button type="button" className="planner-button-with-icon" onClick={onEditSeries}><CalendarIcon />{recurring ? "Edit repeating schedule" : "Edit block details"}</button></div>

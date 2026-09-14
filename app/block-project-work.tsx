@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from "react";
 import { type PlannerProject, type PlannerTask } from "./planner";
 
-export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQueue, onCreateTask, onCreateProject, renderTask, renderProject }: {
+export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQueue, onCreateTask, onCreateProject, renderTask, renderProject, routines, routineCount }: {
   projects: PlannerProject[];
   tasks: PlannerTask[];
   selectedTaskIds: Set<string>;
@@ -13,25 +13,38 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
   onCreateProject: (name: string) => string;
   renderTask: (taskId: string) => ReactNode;
   renderProject: (projectId: string) => ReactNode;
+  routines: ReactNode;
+  routineCount: number;
 }) {
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
   const [projectName, setProjectName] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showFinished, setShowFinished] = useState(false);
+  const [queue, setQueue] = useState("tasks");
   const selectedProject = projects.find((project) => project.id === projectId);
-  const visibleTasks = tasks.filter((task) => (!projectId || task.projectId === projectId) && (showFinished || task.status !== "done"));
+  const scopedTasks = tasks.filter((task) => (!projectId || task.projectId === projectId) && (showFinished || task.status !== "done"));
+  const queues = { tasks: scopedTasks.filter((task) => task.projectId && !task.waiting), backlog: scopedTasks.filter((task) => !task.projectId && !task.waiting), waiting: scopedTasks.filter((task) => task.waiting) };
+  const visibleTasks = queue === "routines" ? [] : queues[queue as keyof typeof queues];
 
   return <section className="block-project-work" aria-label="Projects and tasks in this area">
     <div className="block-work-heading"><h3>Projects & tasks</h3><button type="button" onClick={() => setShowProjectForm(!showProjectForm)} aria-expanded={showProjectForm}>{showProjectForm ? "Cancel" : "New project"}</button></div>
     {showProjectForm && <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!projectName.trim()) return; setProjectId(onCreateProject(projectName.trim())); setProjectName(""); setShowProjectForm(false); }}><input aria-label="New project name" placeholder="Project name" required maxLength={200} value={projectName} onChange={(event) => setProjectName(event.target.value)} /><button disabled={!projectName.trim()}>Create project</button></form>}
     <label className="planner-field"><span>Project</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">All projects & area tasks</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
     {selectedProject && <details className="planner-work-group"><summary>Project outcome & notes</summary>{renderProject(selectedProject.id)}</details>}
-    <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onCreateTask(title.trim(), projectId); setTitle(""); }}><input aria-label={`New task in ${selectedProject?.name ?? "this area"}`} placeholder={`Add a task${selectedProject ? " to this project" : " to this area"}…`} required maxLength={2000} value={title} onChange={(event) => setTitle(event.target.value)} /><button disabled={!title.trim()}>Add task</button></form>
-    <div className="block-work-tasks">{visibleTasks.map((task) => <div className="block-work-task" key={task.id}>
-      {renderTask(task.id)}
-      <div className="block-work-task-footer"><small>{projects.find((project) => project.id === task.projectId)?.name ?? "Area task"}</small>{selectedTaskIds.has(task.id) ? <span>In this block</span> : task.status !== "done" && !task.waiting ? <button type="button" disabled={full} onClick={() => onQueue(task.id)} aria-label={`Choose ${task.title} for this block`}>Choose for block</button> : null}</div>
-    </div>)}{!visibleTasks.length && <p className="planner-editor-empty">No open tasks here. Add the next useful action above.</p>}</div>
+    <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onCreateTask(title.trim(), projectId); setTitle(""); setQueue(projectId ? "tasks" : "backlog"); }}><input aria-label={`New task in ${selectedProject?.name ?? "this area"}`} placeholder={`Add a task${selectedProject ? " to this project" : " to this area"}…`} required maxLength={2000} value={title} onChange={(event) => setTitle(event.target.value)} /><button disabled={!title.trim()}>Add task</button></form>
+    <nav className="planner-queue-tabs" aria-label="Block work queues">{[["tasks", "Tasks", queues.tasks.length], ["backlog", "Backlog", queues.backlog.length], ["waiting", "Waiting", queues.waiting.length], ["routines", "Routines", routineCount]].map(([key, label, count]) => <button type="button" key={key} className={queue === key ? "active" : ""} aria-pressed={queue === key} onClick={() => setQueue(String(key))}><span className="planner-queue-icon"><QueueIcon queue={String(key)} /></span><span className="planner-queue-label">{label}</span><span className="planner-queue-count"><span>{count}</span></span></button>)}</nav>
+    <div className="planner-queue-content">{queue === "routines" ? routines : visibleTasks.map((task) => <div className="planner-compact-source block-work-task" key={task.id}>
+      <details className="block-task-details"><summary><strong>{task.title}</strong><small>{projects.find((project) => project.id === task.projectId)?.name ?? "Area task"}</small></summary><div className="block-task-editor">{renderTask(task.id)}</div></details>
+      <span className="planner-source-actions">{selectedTaskIds.has(task.id) ? <span className="block-task-selected" title="In this block" aria-label="In this block"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-8" /></svg></span> : task.status !== "done" && !task.waiting ? <button type="button" className="planner-queue-button" disabled={full} onClick={() => onQueue(task.id)} aria-label={`Choose ${task.title} for this block`} title={full ? "This block already has three items" : "Add to block"}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8M3.5 10h6M3.5 14.5h5M14 10.5v5M11.5 13h5" /></svg></button> : null}</span>
+    </div>)}{queue !== "routines" && !visibleTasks.length && <p className="planner-editor-empty">No {queue === "waiting" ? "waiting" : "open"} tasks here.</p>}</div>
     <button type="button" className="block-work-finished" aria-pressed={showFinished} onClick={() => setShowFinished(!showFinished)}>{showFinished ? "Hide completed tasks" : "Show completed tasks"}</button>
   </section>;
+}
+
+function QueueIcon({ queue }: { queue: string }) {
+  if (queue === "tasks") return <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="3.5" width="12" height="13" rx="2" /><path d="m6.8 8 1.3 1.3L10.5 7M7 13h6" /></svg>;
+  if (queue === "backlog") return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12v11H4zM4 11h3l1.2 2h3.6l1.2-2h3" /></svg>;
+  if (queue === "waiting") return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v4l2.6 1.5" /></svg>;
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 8A5.8 5.8 0 0 0 5.4 6.1L4 8m0 0V4.5M4 8h3.5M4.5 12a5.8 5.8 0 0 0 10.1 1.9L16 12m0 0v3.5M16 12h-3.5" /></svg>;
 }
