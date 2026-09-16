@@ -1,12 +1,13 @@
 "use client";
 
-import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, type Ref, useCallback, useEffect, useRef, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, type Ref, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schema.mjs";
 import { createNavigationTransition } from "./navigation-transition.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
 import { normalizeProject, sortProjectNotes } from "./project-note-schema.mjs";
 import { formatPlannerTime, isPlannerDeadline, materializeCalendarBlocks, normalizePlanner, plannerDateKey, plannerWeekDates } from "./planner-schema.mjs";
+import { RowActionMenu } from "./row-action-menu";
 import { BlockProjectWork } from "./block-project-work";
 import { Planner, type PlannerData, type PlannerSessionState } from "./planner";
 import { Presence } from "./presence";
@@ -1254,8 +1255,12 @@ function VacationIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v12H3V7a2 2 0 0 1 2-2Zm-2 5h18M8 3v4m8-4v4m-8 7h3m2 0h3" /></svg>;
 }
 
-function NameEditor({ value, onSave, label, large = false, iconOnly = false, onDelete, onEditingChange, editButtonRef }: { value: string; onSave: (value: string) => void; label: string; large?: boolean; iconOnly?: boolean; onDelete?: () => void; onEditingChange?: (editing: boolean) => void; editButtonRef?: Ref<HTMLButtonElement> }) {
-  const [editing, setEditing] = useState(false);
+function NameEditor({ value, onSave, label, large = false, iconOnly = false, onDelete, onEditingChange, editButtonRef, editing: controlledEditing, hideActions = false }: { value: string; onSave: (value: string) => void; label: string; large?: boolean; iconOnly?: boolean; onDelete?: () => void; onEditingChange?: (editing: boolean) => void; editButtonRef?: Ref<HTMLButtonElement>; editing?: boolean; hideActions?: boolean }) {
+  const [localEditing, setLocalEditing] = useState(false);
+  const editing = controlledEditing ?? localEditing;
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  function setEditing(next: boolean) { setLocalEditing(next); onEditingChange?.(next); }
   const [draft, setDraft] = useState(value);
 
   function submit(event: FormEvent) {
@@ -1264,21 +1269,19 @@ function NameEditor({ value, onSave, label, large = false, iconOnly = false, onD
     if (!next) return;
     onSave(next);
     setEditing(false);
-    onEditingChange?.(false);
   }
 
   function cancel() {
     setDraft(value);
     setEditing(false);
-    onEditingChange?.(false);
   }
 
   if (editing) return <form className={`name-editor editing ${large ? "large" : ""}`} onSubmit={submit}>
-    <input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }} aria-label={label} />
+    <input ref={inputRef} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }} aria-label={label} />
     <button disabled={!draft.trim()} aria-label="Save" title="Save"><ConfirmIcon /></button>
   </form>;
 
-  return <div className={`name-editor ${large ? "large" : ""} ${iconOnly ? "icon-only" : ""}`}><span>{value}</span><button ref={editButtonRef} type="button" onClick={() => { setDraft(value); setEditing(true); onEditingChange?.(true); }} aria-label={`Edit ${value}`} title={`Edit ${value}`}><span className="edit-label">Edit</span><EditIcon /></button>{onDelete && <button type="button" className="name-delete-button" onClick={onDelete} aria-label={`Delete ${value}`} title={`Delete ${value}`}><DeleteIcon /></button>}</div>;
+  return <div className={`name-editor ${large ? "large" : ""} ${iconOnly ? "icon-only" : ""}`}><span>{value}</span>{!hideActions && <button ref={editButtonRef} type="button" onClick={() => { setDraft(value); setEditing(true); }} aria-label={`Edit ${value}`} title={`Edit ${value}`}><span className="edit-label">Edit</span><EditIcon /></button>}{!hideActions && onDelete && <button type="button" className="name-delete-button" onClick={onDelete} aria-label={`Delete ${value}`} title={`Delete ${value}`}><DeleteIcon /></button>}</div>;
 }
 
 function AreaEditor({ area, onSave }: { area: Area; onSave: (patch: Partial<Pick<Area, "name" | "icon">>) => void }) {
@@ -1475,7 +1478,7 @@ function NoteIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h12a2 2 0 0 1 2 2v8.25a2 2 0 0 1-2 2h-6l-4.5 3v-3H6a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" /><path d="M8 9h8M8 12.5h5" /></svg>;
 }
 
-function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorChange }: { task: Task; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange }) {
+function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorChange, cardActions }: { task: Task; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; cardActions?: { complete: () => void; move: ReactNode } }) {
   const [taskEditing, setTaskEditing] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
@@ -1487,10 +1490,11 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
   const hasNotes = Boolean(task.notes?.trim());
   const dueDateLabel = task.dueDate ? dueLabel(task.dueDate) : "";
   const noteEditorId = `task-notes-${task.id}`;
+  const cardMode = Boolean(cardActions);
 
   useEffect(() => {
-    if (notesOpen) noteEditor.current?.focus();
-  }, [notesOpen]);
+    if (notesOpen && (!cardMode || !taskEditing)) noteEditor.current?.focus();
+  }, [notesOpen, taskEditing, cardMode]);
 
   useEffect(() => {
     if (!notesOpen) return;
@@ -1521,7 +1525,12 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
   }
 
   return <div className="task-copy" ref={listMotionRef}>
-    <NameEditor iconOnly value={task.title} onSave={(value) => renameTask(task.id, value)} onDelete={() => removeTask(task.id)} label={`Task name for ${task.title}`} onEditingChange={setTaskEditing} editButtonRef={taskEditButton} />
+    {cardActions && <div className="kanban-card-actions"><div className="planner-row-actions"><RowActionMenu title={task.title} vertical buttonRef={taskEditButton}>{(choose) => <>
+      <button type="button" role="menuitem" onClick={() => choose(cardActions.complete)}><ConfirmIcon /><span>{task.status === "done" ? "Mark incomplete" : "Complete task"}</span></button>
+      <button type="button" role="menuitem" onClick={() => choose(() => { setTaskEditing(true); openNotes(); }, false)}><EditIcon /><span>Edit task</span></button>
+      <button type="button" role="menuitem" className="danger" onClick={() => choose(() => removeTask(task.id))}><DeleteIcon /><span>Delete task</span></button>
+    </>}</RowActionMenu></div>{cardActions.move}</div>}
+    <NameEditor key={cardMode ? task.title : undefined} iconOnly value={task.title} onSave={(value) => renameTask(task.id, value)} onDelete={() => removeTask(task.id)} label={`Task name for ${task.title}`} editing={cardMode ? taskEditing : undefined} hideActions={cardMode} onEditingChange={(editing) => { setTaskEditing(editing); if (cardMode && !editing) { commitNotes(); setNotesOpen(false); taskEditButton.current?.focus(); } }} editButtonRef={cardMode ? undefined : taskEditButton} />
     <Presence show={taskEditing || notesOpen} className="motion-panel">{() => <div className="task-planning" aria-label={`Timing, priority, and notes for ${task.title}`}>
       <TaskDetails task={task} updateTask={updateTask} />
       <button ref={noteButton} type="button" className={`task-direct-control task-note-trigger ${hasNotes ? "has-notes" : ""}`} onClick={() => notesOpen ? closeNotes() : openNotes()} aria-expanded={notesOpen} aria-controls={noteEditorId} aria-label={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`} title={`${hasNotes ? "Edit" : "Add"} notes for ${task.title}`}><NoteIcon /></button>
@@ -1916,8 +1925,7 @@ function ProjectView({ project, initialTaskId, areas, canReturnToBlock, area, ta
         const descriptor = { kind: "task" as const, id: task.id, scope: `project:${project.id}:${group.value}` };
         const reorder = reorderProps(descriptor);
         return <article id={`workspace-task-${task.id}`} data-workspace-task tabIndex={-1} aria-label={task.title} className={`kanban-card ${taskSort === "custom" ? "draggable-card" : ""} ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} draggable={taskSort === "custom"} onPointerDownCapture={(event) => { event.currentTarget.draggable = taskSort === "custom" && !(event.target as Element).closest("button, input, textarea, select, label, a, [contenteditable], [role=menu], [role=dialog]"); }} onDragStart={(event) => { if (!event.currentTarget.draggable || event.target !== event.currentTarget) { event.preventDefault(); return; } reorder.onDragStart(event, descriptor); }} onDragEnd={reorder.onDragEnd} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
-          <div className="kanban-card-top"><div className="kanban-card-actions"><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} openBelow /></div></div>
-          <div className="kanban-card-body"><label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /></div>
+          <div className="kanban-card-body"><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} cardActions={{ complete: () => toggleTask(task.id), move: <TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} openBelow /> }} /></div>
         </article>;
       })}{!group.tasks.length && <div className="kanban-empty"><strong>No tasks here.</strong><p>{group.empty}</p></div>}</div></section>)}</div>}</div>
       <section className="task-group project-waiting-group" aria-labelledby={`waiting-${project.id}`}><div className="task-group-heading"><h3 id={`waiting-${project.id}`}>Waiting</h3><div className="task-group-actions"><span>{waitingTasks.length}</span></div></div><TaskRows tasks={waitingTasks} toggleTask={toggleTask} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} reorderProps={reorderProps} scope={`project-waiting:${project.id}`} taskSort={taskSort} empty="Nothing in this project is blocked." taskMoveTargets={[{ value: `project:${project.id}`, label: "Project backlog", kind: "project" }, { value: `backlog:${area.id}`, label: "Area backlog", kind: "backlog" }]} moveTask={moveTask} /></section>

@@ -1,11 +1,12 @@
 "use client";
 
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { Presence } from "./presence";
 
-export function RowActionMenu({ title, children }: { title: string; children: (choose: (action: () => void) => void) => ReactNode }) {
+export function RowActionMenu({ title, vertical = false, buttonRef, children }: { title: string; vertical?: boolean; buttonRef?: RefObject<HTMLButtonElement | null>; children: (choose: (action: () => void, restoreFocus?: boolean) => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const localTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = buttonRef ?? localTriggerRef;
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
@@ -41,13 +42,13 @@ export function RowActionMenu({ title, children }: { title: string; children: (c
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [open]);
+  }, [open, triggerRef]);
 
-  function choose(action: () => void) {
+  function choose(action: () => void, restoreFocus = true) {
     const queueTabs = triggerRef.current?.closest(".block-project-work")?.querySelector<HTMLButtonElement>('.planner-queue-tabs button[aria-pressed="true"]');
     setOpen(false);
     action();
-    window.requestAnimationFrame(() => (triggerRef.current ?? queueTabs)?.focus());
+    if (restoreFocus) window.requestAnimationFrame(() => (triggerRef.current ?? queueTabs)?.focus());
   }
 
   function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -65,7 +66,7 @@ export function RowActionMenu({ title, children }: { title: string; children: (c
   }
 
   return <div className="planner-row-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
-    <button ref={triggerRef} type="button" className="planner-icon-action" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`More actions for ${title}`} title="More actions" onClick={() => setOpen((current) => !current)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h.01M10 10h.01M15 10h.01" /></svg></button>
+    <button ref={triggerRef} type="button" className="planner-icon-action" aria-expanded={open} aria-controls={menuId} aria-haspopup="menu" aria-label={`More actions for ${title}`} title="More actions" onClick={() => setOpen((current) => !current)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={vertical ? "M10 5h.01M10 10h.01M10 15h.01" : "M5 10h.01M10 10h.01M15 10h.01"} /></svg></button>
     <Presence show={open} className="motion-popover">{() => <div ref={menuRef} id={menuId} className="planner-row-menu-popover" role="menu" tabIndex={-1} aria-label={`More actions for ${title}`} onKeyDown={handleMenuKeyDown}>{children(choose)}</div>}</Presence>
   </div>;
 }

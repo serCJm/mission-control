@@ -633,7 +633,8 @@ test("presence lazily renders openings and retains committed exit content", () =
 test("task note close restores focus outside an exiting planning panel", () => {
   assert.match(page, /editButtonRef\?: Ref<HTMLButtonElement>/);
   assert.match(page, /const taskEditButton = useRef<HTMLButtonElement>\(null\)/);
-  assert.match(page, /editButtonRef=\{taskEditButton\}/);
+  assert.match(page, /editButtonRef=\{cardMode \? undefined : taskEditButton\}/);
+  assert.match(page, /<RowActionMenu title=\{task.title\} vertical buttonRef=\{taskEditButton\}/);
   assert.match(page, /function closeNotes\(\) \{\s*commitNotes\(\);\s*const returnTarget = taskEditing \? noteButton\.current : taskEditButton\.current;\s*returnTarget\?\.focus\(\);\s*setNotesOpen\(false\);/);
   assert.doesNotMatch(page, /returnFocus/);
 });
