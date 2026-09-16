@@ -12,6 +12,7 @@ export type PlannerArea = { id: string; name: string; icon: string };
 export type PlannerProject = { id: string; areaId: string; name: string; outcome: string };
 export type PlannerTask = { id: string; title: string; areaId?: string; projectId?: string; status: "todo" | "doing" | "done"; dueDate?: string; dueTime?: string; priority?: "low" | "medium" | "high"; someday?: boolean; waiting?: boolean };
 export type PlannerRoutine = { id: string; areaId: string; name: string; expectedMinutes: number; weekdays: number[]; scheduleEffectiveOn: string; pendingSchedule?: { weekdays: number[]; effectiveOn: string }; suspensions: Array<{ startsOn: string; endsOn?: string }>; sessions: Array<{ date: string; status: "pending" | "completed" | "skipped" | "missed" }> };
+export type PlannerRoutineChoices = { today: ReactNode[]; block: ReactNode[] };
 export type CalendarBlockFill = "sage" | "sky" | "sand" | "rose" | "lilac" | "slate";
 type CalendarBlockSchedule = { id: string; weekdays: number[]; effectiveOn: string; endsOn?: string; startTime: string; endTime: string; fill: CalendarBlockFill };
 export type AreaCalendarBlockRule = CalendarBlockSchedule & { kind: "area"; areaId: string };
@@ -49,7 +50,7 @@ type PlannerProps = {
   onEditorOpenChange: (open: boolean) => void;
   session: PlannerSessionState;
   onSessionChange: (patch: Partial<PlannerSessionState>) => void;
-  renderWork: (areaId: string, selectedTaskIds: Set<string>, full: boolean, onQueue: (taskId: string) => void, onRelease: (taskId: string) => void, routines: ReactNode, routineCount: number) => ReactNode;
+  renderWork: (areaId: string, selectedTaskIds: Set<string>, full: boolean, onQueue: (taskId: string) => void, onRelease: (taskId: string) => void, routines: PlannerRoutineChoices) => ReactNode;
   onCreateArea: (name: string) => void;
   onOpenArea: (areaId: string) => void;
 };
@@ -457,7 +458,9 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
   const nowItemId = occurrenceActive ? orderedBlockItems.find((item) => !isDone(item))?.id : undefined;
   const canExecuteRoutines = occurrence.date === today;
   const selectedKeys = new Set(blockItems.map((item) => `${item.kind}:${item.itemId}`));
-  const availableRoutines = routines.filter((routine) => routine.areaId === occurrence.areaId && routineNeedsActionOn(routine, occurrence.date) && !selectedKeys.has(`routine:${routine.id}`));
+  function routineChoicesForDate(date: string) {
+    return routines.filter((routine) => routine.areaId === occurrence.areaId && routineNeedsActionOn(routine, date) && !selectedKeys.has(`routine:${routine.id}`)).map((routine) => <RoutineDragItem key={routine.id} routine={routine} date={date} canExecute={date === today} onSessionStatus={(status) => onRoutineSessionStatus(routine.id, date, status)} onDelete={() => onDeleteRoutine(routine.id)} canSchedule={blockItems.length < 3} onQueue={() => addCandidate(`routine:${routine.id}`)} />);
+  }
 
   const recurring = !isOneTimeRule(rule);
 
@@ -493,7 +496,7 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
 
     </section>
     <Presence show={Boolean(error)} className="motion-collapse">{() => <p className="planner-form-error" role="alert">{error}</p>}</Presence>
-    {renderWork(area.id, new Set(blockItems.filter((item) => item.kind === "task").map((item) => item.itemId)), blockItems.length >= 3, (taskId) => addCandidate(`task:${taskId}`), (taskId) => { const item = blockItems.find((item) => item.kind === "task" && item.itemId === taskId); if (item) removeItem(item.id); }, availableRoutines.length ? availableRoutines.map((routine) => <RoutineDragItem key={routine.id} routine={routine} date={occurrence.date} canExecute={canExecuteRoutines} onSessionStatus={(status) => onRoutineSessionStatus(routine.id, occurrence.date, status)} onDelete={() => onDeleteRoutine(routine.id)} canSchedule={blockItems.length < 3} onQueue={() => addCandidate(`routine:${routine.id}`)} />) : <p className="planner-editor-empty">No routines left to add for this day.</p>, availableRoutines.length)}
+    {renderWork(area.id, new Set(blockItems.filter((item) => item.kind === "task").map((item) => item.itemId)), blockItems.length >= 3, (taskId) => addCandidate(`task:${taskId}`), (taskId) => { const item = blockItems.find((item) => item.kind === "task" && item.itemId === taskId); if (item) removeItem(item.id); }, { today: routineChoicesForDate(today), block: routineChoicesForDate(occurrence.date) })}
 
 
   </div>;
