@@ -1418,7 +1418,9 @@ function ProjectSortControl({ value, onChange }: { value: ProjectSort; onChange:
   return <SortControl value={value} onChange={onChange} options={PROJECT_SORT_OPTIONS} ariaLabel="Sort projects" />;
 }
 
-function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "dueTime" | "priority">>) => void }) {
+function TaskDetails({ task, updateTask, editing, onClose }: { task: Task; updateTask: (id: string, patch: Partial<Pick<Task, "dueDate" | "dueTime" | "priority">>) => void; editing?: "due" | "priority"; onClose?: () => void }) {
+  const detailEditor = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (editing) detailEditor.current?.querySelector<HTMLElement>("input, select")?.focus(); }, [editing]);
   const dateInput = useRef<HTMLInputElement>(null);
   const priorityPicker = useRef<HTMLDivElement>(null);
   const priorityTrigger = useRef<HTMLButtonElement>(null);
@@ -1451,6 +1453,14 @@ function TaskDetails({ task, updateTask }: { task: Task; updateTask: (id: string
     openDateInputPicker(input);
   }
 
+  if (editing) return <div className="task-detail-editor" ref={detailEditor}>
+    {editing === "due" ? <>
+      <label>Due date<input type="date" value={task.dueDate ?? ""} onChange={(event) => updateTask(task.id, { dueDate: event.target.value || undefined, ...(!event.target.value ? { dueTime: undefined } : {}) })} /></label>
+      {task.dueDate && <label>Due time<input type="time" step="900" min="06:00" max="22:45" value={task.dueTime ?? ""} onChange={(event) => updateTask(task.id, { dueTime: event.target.value || undefined })} /></label>}
+    </> : <label>Priority<select value={task.priority ?? ""} onChange={(event) => updateTask(task.id, { priority: (event.target.value || undefined) as TaskPriority | undefined })}><option value="">No priority</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>}
+    <button type="button" onClick={onClose}>Done</button>
+  </div>;
+
   return <>
     <div className={`task-direct-control timing ${task.dueDate ? "active" : ""}`} title={`${dueDateLabel || "Set timing"} for ${task.title}`}>
       <button type="button" className="task-direct-trigger" onClick={openDatePicker} aria-label={task.dueDate ? `Change due date for ${task.title}. ${dueDateLabel}.` : `Set due date for ${task.title}`}>
@@ -1480,6 +1490,7 @@ function NoteIcon() {
 
 function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorChange, cardActions }: { task: Task; renameTask: (id: string, value: string) => void; updateTask: UpdateTask; removeTask: RemoveTask; onTaskNoteEditorChange: TaskNoteEditorChange; cardActions?: { complete: () => void; move: ReactNode } }) {
   const [taskEditing, setTaskEditing] = useState(false);
+  const [detailEditing, setDetailEditing] = useState<"due" | "priority">();
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
   const noteButton = useRef<HTMLButtonElement>(null);
@@ -1527,9 +1538,13 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
   return <div className="task-copy" ref={listMotionRef}>
     {cardActions && <div className="kanban-card-actions"><div className="planner-row-actions"><RowActionMenu title={task.title} vertical buttonRef={taskEditButton}>{(choose) => <>
       <button type="button" role="menuitem" onClick={() => choose(cardActions.complete)}><ConfirmIcon /><span>{task.status === "done" ? "Mark incomplete" : "Complete task"}</span></button>
-      <button type="button" role="menuitem" onClick={() => choose(() => { setTaskEditing(true); openNotes(); }, false)}><EditIcon /><span>Edit task</span></button>
+      <button type="button" role="menuitem" onClick={() => choose(() => setTaskEditing(true), false)}><EditIcon /><span>Edit task</span></button>
+      <button type="button" role="menuitem" onClick={() => choose(openNotes, false)}><NoteIcon /><span>Edit notes</span></button>
+      <button type="button" role="menuitem" onClick={() => choose(() => setDetailEditing("due"), false)}><ClockIcon /><span>Edit due</span></button>
+      <button type="button" role="menuitem" onClick={() => choose(() => setDetailEditing("priority"), false)}><PriorityFlag priority={task.priority} /><span>Edit priority</span></button>
       <button type="button" role="menuitem" className="danger" onClick={() => choose(() => removeTask(task.id))}><DeleteIcon /><span>Delete task</span></button>
     </>}</RowActionMenu></div>{cardActions.move}</div>}
+    {detailEditing && <TaskDetails key={detailEditing} task={task} updateTask={updateTask} editing={detailEditing} onClose={() => { setDetailEditing(undefined); taskEditButton.current?.focus(); }} />}
     <NameEditor key={cardMode ? task.title : undefined} iconOnly value={task.title} onSave={(value) => renameTask(task.id, value)} onDelete={() => removeTask(task.id)} label={`Task name for ${task.title}`} editing={cardMode ? taskEditing : undefined} hideActions={cardMode} onEditingChange={(editing) => { setTaskEditing(editing); if (cardMode && !editing) { commitNotes(); setNotesOpen(false); taskEditButton.current?.focus(); } }} editButtonRef={cardMode ? undefined : taskEditButton} />
     <Presence show={taskEditing || notesOpen} className="motion-panel">{() => <div className="task-planning" aria-label={`Timing, priority, and notes for ${task.title}`}>
       <TaskDetails task={task} updateTask={updateTask} />
