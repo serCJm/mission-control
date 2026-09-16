@@ -58,7 +58,7 @@ type MoveTaskUndo = { taskId: string; from: TaskPlacement; to: TaskPlacement; bl
 type TaskMoveTarget = { value: string; label: string; kind: "backlog" | "waiting" | "project" };
 type ReorderProps = {
   descriptor: DragItem;
-  onDragStart: (event: DragEvent<HTMLButtonElement>, item: DragItem) => void;
+  onDragStart: (event: DragEvent<HTMLElement>, item: DragItem) => void;
   onDragEnd: () => void;
   onDragOver: (event: DragEvent<HTMLElement>, item: DragItem) => void;
   onDrop: (event: DragEvent<HTMLElement>, item: DragItem) => void;
@@ -1066,7 +1066,7 @@ export default function Home() {
     setToast("Sequence updated");
   }
 
-  function dragStart(event: DragEvent<HTMLButtonElement>, item: DragItem) {
+  function dragStart(event: DragEvent<HTMLElement>, item: DragItem) {
     setDragged(item);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", item.id);
@@ -1915,8 +1915,8 @@ function ProjectView({ project, initialTaskId, areas, canReturnToBlock, area, ta
       : <div key="board" className="kanban-board">{activeTaskGroups.map((group) => <section className={`kanban-column status-${group.value}`} key={group.value} aria-labelledby={`board-${project.id}-${group.value}`} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value)}><ProjectStatusHeading group={group} headingClass="kanban-column-heading" headingId={`board-${project.id}-${group.value}`} addingStatus={addingStatus} toggleStatusComposer={toggleStatusComposer} />{statusComposer(group.value, group.label)}<div className="kanban-cards" ref={listMotionRef}>{sortTasks(group.tasks, taskSort).map((task: Task) => {
         const descriptor = { kind: "task" as const, id: task.id, scope: `project:${project.id}:${group.value}` };
         const reorder = reorderProps(descriptor);
-        return <article id={`workspace-task-${task.id}`} data-workspace-task tabIndex={-1} aria-label={task.title} className={`kanban-card ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
-          <div className="kanban-card-top">{taskSort === "custom" && <DragHandle {...reorder} label={`Move or reorder ${task.title}`} />}<div className="kanban-card-actions"><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} openBelow /></div></div>
+        return <article id={`workspace-task-${task.id}`} data-workspace-task tabIndex={-1} aria-label={task.title} className={`kanban-card ${taskSort === "custom" ? "draggable-card" : ""} ${task.status === "done" ? "done" : ""} ${task.priority ? `has-priority priority-${task.priority}` : ""}`} key={task.id} draggable={taskSort === "custom"} onPointerDownCapture={(event) => { event.currentTarget.draggable = taskSort === "custom" && !(event.target as Element).closest("button, input, textarea, select, label, a, [contenteditable], [role=menu], [role=dialog]"); }} onDragStart={(event) => { if (!event.currentTarget.draggable || event.target !== event.currentTarget) { event.preventDefault(); return; } reorder.onDragStart(event, descriptor); }} onDragEnd={reorder.onDragEnd} onDragOver={(event) => { if (dragged?.kind === "task") event.preventDefault(); }} onDrop={(event) => dropInStatus(event, group.value, task.id)}>
+          <div className="kanban-card-top"><div className="kanban-card-actions"><TaskMoveMenu task={task} targets={moveTargets} moveTask={moveTask} moveTaskToStatus={(id, status) => moveTaskToStatus(id, status, project.id)} openBelow /></div></div>
           <div className="kanban-card-body"><label className="task-check"><input type="checkbox" checked={task.status === "done"} onChange={() => toggleTask(task.id)} /><span className="sr-only">Mark {task.title} {task.status === "done" ? "incomplete" : "complete"}</span></label><TaskCopy task={task} renameTask={renameTask} updateTask={updateTask} removeTask={removeTask} onTaskNoteEditorChange={onTaskNoteEditorChange} /></div>
         </article>;
       })}{!group.tasks.length && <div className="kanban-empty"><strong>No tasks here.</strong><p>{group.empty}</p></div>}</div></section>)}</div>}</div>
