@@ -30,6 +30,7 @@ export type PlannerSessionState = {
   workbenchOpen: boolean;
   workbenchPinned?: boolean;
   calendarScrollTop?: number;
+  openOccurrenceId?: string;
 };
 
 type PlannerProps = {
@@ -537,7 +538,10 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   const anchorDate = session.anchorDate;
   const dates = plannerWeekDates(anchorDate);
   const selectedDate = dates.includes(session.selectedDate) ? session.selectedDate : dates[0];
-  const [editor, setEditor] = useState<PlannerEditor | null>(null);
+  const [editor, setEditor] = useState<PlannerEditor | null>(() => {
+    const occurrence = materializeCalendarBlocks(planner, dates).find((item) => item.id === session.openOccurrenceId);
+    return occurrence ? { kind: "occurrence", occurrenceId: occurrence.id } : null;
+  });
   const [activeLabel, setActiveLabel] = useState("");
   const [calendarSelection, setCalendarSelection] = useState<CalendarDragSelection | null>(null);
   const [newBlockConnection, setNewBlockConnection] = useState<NewBlockConnection | null>(null);
@@ -555,6 +559,10 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   const previousWorkbenchVisible = useRef(workbenchVisible);
   const previousEditorOpen = useRef(false);
   const restoredScroll = useRef(false);
+  useEffect(() => {
+    const openOccurrenceId = editor?.kind === "occurrence" ? editor.occurrenceId : undefined;
+    if (session.openOccurrenceId !== openOccurrenceId) onSessionChange({ openOccurrenceId });
+  }, [editor, onSessionChange, session.openOccurrenceId]);
   useEffect(() => {
     onEditorOpenChange(editor !== null);
   }, [editor, onEditorOpenChange]);
