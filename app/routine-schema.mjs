@@ -178,6 +178,10 @@ function isScheduled(routine, dateKey) {
   return scheduleForDate(routine, dateKey).weekdays.includes(weekdayForDate(dateKey));
 }
 
+export function routineNeedsActionOn(routine, dateKey) {
+  return isScheduled(routine, dateKey) && !routine.sessions.some((session) => session.date === dateKey && ROUTINE_FINAL_STATUSES.includes(session.status));
+}
+
 function windowState(routine, dateKey, now) {
   const currentDate = routineDateKey(now);
   if (dateKey < currentDate) return "closed";
