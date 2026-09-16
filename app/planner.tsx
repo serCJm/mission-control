@@ -158,9 +158,10 @@ function VerticalArrowIcon({ direction }: { direction: "up" | "down" }) {
   return <svg className={direction === "down" ? "down" : undefined} viewBox="0 0 20 20" aria-hidden="true"><path d="m5.5 12 4.5-4.5 4.5 4.5" /></svg>;
 }
 
-function BlockItemActionMenu({ title, canMoveEarlier, canMoveLater, onReopen, onWait, onMoveEarlier, onMoveLater, onRemove }: { title: string; canMoveEarlier: boolean; canMoveLater: boolean; onReopen?: () => void; onWait?: () => void; onMoveEarlier: () => void; onMoveLater: () => void; onRemove: () => void }) {
+function BlockItemActionMenu({ title, canMoveEarlier, canMoveLater, onReopen, onSkip, onWait, onMoveEarlier, onMoveLater, onRemove }: { title: string; canMoveEarlier: boolean; canMoveLater: boolean; onReopen?: () => void; onSkip?: () => void; onWait?: () => void; onMoveEarlier: () => void; onMoveLater: () => void; onRemove: () => void }) {
   return <RowActionMenu title={title}>{(choose) => <>
       {onReopen && <button type="button" role="menuitem" onClick={() => choose(onReopen)}><ReopenIcon /><span>Mark incomplete</span></button>}
+      {onSkip && <button type="button" role="menuitem" onClick={() => choose(onSkip)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 7 5-7 5ZM15 5v10" /></svg><span>Skip</span></button>}
       {onWait && <button type="button" role="menuitem" onClick={() => choose(onWait)}><WaitIcon /><span>Move to Waiting</span></button>}
       <button type="button" role="menuitem" disabled={!canMoveEarlier} onClick={() => choose(onMoveEarlier)}><VerticalArrowIcon direction="up" /><span>Move earlier</span></button>
       <button type="button" role="menuitem" disabled={!canMoveLater} onClick={() => choose(onMoveLater)}><VerticalArrowIcon direction="down" /><span>Move later</span></button>
@@ -485,11 +486,10 @@ function AreaOccurrenceEditor({ occurrence, rule, today, currentMinutes, area, p
         </span>
         <span className="planner-row-actions">
           {!done && item.kind === "task" && <button type="button" className="planner-icon-action" aria-label={`Complete ${title}`} title="Complete" onClick={() => onTaskChange(item.itemId, { status: "done" })}><CheckIcon /></button>}
-          {!done && item.kind === "routine" && canExecuteRoutines && <>
+          {!done && item.kind === "routine" && canExecuteRoutines &&
             <button type="button" className="planner-icon-action" aria-label={`Complete ${title}`} title="Complete" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "completed")}><CheckIcon /></button>
-            <button type="button" onClick={() => onRoutineSessionStatus(item.itemId, occurrence.date, "skipped")}>Skip</button>
-          </>}
-          <BlockItemActionMenu title={title} onReopen={done && task ? () => onTaskChange(task.id, { status: "todo" }) : undefined} canMoveEarlier={canMoveEarlier} canMoveLater={canMoveLater} onWait={!done && item.kind === "task" ? () => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); } : undefined} onMoveEarlier={() => moveItem(item.id, -1)} onMoveLater={() => moveItem(item.id, 1)} onRemove={() => removeItem(item.id)} />
+          }
+          <BlockItemActionMenu title={title} onReopen={done && task ? () => onTaskChange(task.id, { status: "todo" }) : undefined} onSkip={!done && item.kind === "routine" && canExecuteRoutines ? () => onRoutineSessionStatus(item.itemId, occurrence.date, "skipped") : undefined} canMoveEarlier={canMoveEarlier} canMoveLater={canMoveLater} onWait={!done && item.kind === "task" ? () => { onTaskChange(item.itemId, { waiting: true, someday: undefined }); removeItem(item.id); } : undefined} onMoveEarlier={() => moveItem(item.id, -1)} onMoveLater={() => moveItem(item.id, 1)} onRemove={() => removeItem(item.id)} />
         </span>
       </div>;
     })}{!blockItems.length && <p key="empty" className="planner-editor-empty">Nothing selected. Add one to three items, or leave this block open for context-led work.</p>}</div>
