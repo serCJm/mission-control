@@ -67,8 +67,6 @@
 .block-task-open small{color:var(--muted)}
 .block-task-open>svg{flex:0 0 auto;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
 .block-task-open:hover{background:#eef2e8;color:var(--forest)}
-.block-task-selected{width:36px;height:36px;display:grid;place-items:center;color:var(--forest)}
-.block-task-selected svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .planner-work-group,.planner-block-settings{min-width:0;border-top:1px solid var(--line);padding-top:12px}
 .planner-work-group>summary{cursor:pointer;color:var(--forest);font-size:13px;font-weight:650;padding:8px 0}
 .planner-block-settings:not([hidden]){display:grid;gap:14px}
