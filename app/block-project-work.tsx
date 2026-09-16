@@ -4,7 +4,7 @@ import { type ReactNode, useState } from "react";
 import { type PlannerProject, type PlannerTask } from "./planner";
 import { RowActionMenu, CheckIcon, DeleteIcon, ReopenIcon, WaitIcon } from "./row-action-menu";
 
-export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQueue, onTaskChange, onDeleteTask, onCreateTask, onCreateProject, renderTask, renderProject, routines, routineCount }: {
+export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQueue, onTaskChange, onDeleteTask, onCreateTask, onCreateProject, onOpenTask, renderProject, routines, routineCount }: {
   projects: PlannerProject[];
   tasks: PlannerTask[];
   selectedTaskIds: Set<string>;
@@ -14,7 +14,7 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
   onDeleteTask: (taskId: string) => void;
   onCreateTask: (title: string, projectId: string) => void;
   onCreateProject: (name: string) => string;
-  renderTask: (taskId: string) => ReactNode;
+  onOpenTask: (task: PlannerTask) => void;
   renderProject: (projectId: string) => ReactNode;
   routines: ReactNode;
   routineCount: number;
@@ -38,7 +38,7 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
     <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onCreateTask(title.trim(), projectId); setTitle(""); setQueue(projectId ? "tasks" : "backlog"); }}><input aria-label={`New task in ${selectedProject?.name ?? "this area"}`} placeholder={`Add a task${selectedProject ? " to this project" : " to this area"}…`} required maxLength={2000} value={title} onChange={(event) => setTitle(event.target.value)} /><button disabled={!title.trim()}>Add task</button></form>
     <nav className="planner-queue-tabs" aria-label="Block work queues">{[["all", "All", queues.all.length], ["tasks", "Tasks", queues.tasks.length], ["backlog", "Backlog", queues.backlog.length], ["waiting", "Waiting", queues.waiting.length], ["routines", "Routines", routineCount]].map(([key, label, count]) => <button type="button" key={key} className={queue === key ? "active" : ""} aria-pressed={queue === key} onClick={() => setQueue(String(key))}><span className="planner-queue-icon"><QueueIcon queue={String(key)} /></span><span className="planner-queue-label">{label}</span><span className="planner-queue-count"><span>{count}</span></span></button>)}</nav>
     <div className="planner-queue-content">{queue === "routines" ? routines : visibleTasks.map((task) => <div className="planner-compact-source block-work-task" key={task.id}>
-      <details className="block-task-details"><summary><strong>{task.title}</strong><small>{projects.find((project) => project.id === task.projectId)?.name ?? "Area task"}{task.status === "done" ? " · Completed" : task.waiting ? " · Waiting" : ""}</small></summary><div className="block-task-editor">{renderTask(task.id)}</div></details>
+      <button type="button" className="block-task-open" onClick={() => onOpenTask(task)} aria-label={`Open ${task.title} in ${task.projectId ? "project" : "area"} workspace`}><span><strong>{task.title}</strong><small>{projects.find((project) => project.id === task.projectId)?.name ?? "Area task"}{task.status === "done" ? " · Completed" : task.waiting ? " · Waiting" : ""}</small></span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 5 5 5-5 5" /></svg></button>
       <div className="planner-source-actions">{selectedTaskIds.has(task.id) ? <span className="block-task-selected" title="In this block" aria-label="In this block"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-8" /></svg></span> : task.status !== "done" && !task.waiting ? <button type="button" className="planner-queue-button" disabled={full} onClick={() => onQueue(task.id)} aria-label={`Choose ${task.title} for this block`} title={full ? "This block already has three items" : "Add to block"}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8M3.5 10h6M3.5 14.5h5M14 10.5v5M11.5 13h5" /></svg></button> : null}<div className="planner-row-actions"><RowActionMenu title={task.title}>{(choose) => <>
         <button type="button" role="menuitem" onClick={() => choose(() => onTaskChange(task.id, { status: task.status === "done" ? "todo" : "done", waiting: undefined }))}>{task.status === "done" ? <ReopenIcon /> : <CheckIcon />}<span>{task.status === "done" ? "Mark incomplete" : "Complete task"}</span></button>
         {task.status !== "done" && <button type="button" role="menuitem" onClick={() => choose(() => onTaskChange(task.id, { waiting: task.waiting ? undefined : true, someday: undefined }))}>{task.waiting ? <ReopenIcon /> : <WaitIcon />}<span>{task.waiting ? "Return to tasks" : "Move to Waiting"}</span></button>}

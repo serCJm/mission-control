@@ -17,6 +17,8 @@ input, textarea { caret-color: var(--forest); }
 .entity-copy > small, .project-task-counts, .project-task-preview-row { font-size: 11px; }
 .task-note-preview { font-size: 12px; }
 .task-row, .inbox-row { scroll-margin-block: 100px 32px; }
+.kanban-card { scroll-margin-block: 100px 32px; }
+[data-workspace-task]:focus { outline: 2px solid var(--forest); outline-offset: 4px; border-radius: 8px; background: var(--lime-soft); }
 .empty-state > strong { font-size: 13px; font-weight: 600; }
 .empty-state > p { font-size: 12px; line-height: 1.55; }
 .project-open-count { border: 0; background: transparent; padding-right: 0; }

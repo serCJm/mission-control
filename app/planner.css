@@ -61,16 +61,12 @@
 .block-project-details textarea{min-height:80px;resize:vertical}
 .block-work-create button{flex-shrink:0;border:1px solid var(--forest);border-radius:8px;background:var(--forest);color:#fff;padding:8px 10px;font-size:12px;min-height:40px}
 .block-work-create button:disabled{opacity:.45;cursor:not-allowed}
-.block-work-task .task-copy{min-width:0;width:100%}
-.block-task-details{min-width:0}
-.block-task-details>summary{display:grid;gap:4px;cursor:pointer;list-style:none;padding:7px 3px;color:var(--ink)}
-.block-task-details>summary::-webkit-details-marker{display:none}
-.block-task-details>summary strong{font-size:11px;line-height:1.5;font-weight:700}
-.block-task-details>summary small{color:var(--muted);font-size:10px;line-height:1.4}
-.block-task-details>summary:hover strong{color:var(--forest)}
-.block-task-details>summary:focus-visible{outline:2px solid var(--forest);outline-offset:3px;border-radius:4px}
-.block-task-editor{display:grid;gap:8px;padding:10px 3px 3px}
-.block-task-status select{max-width:100%;min-height:36px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--forest);padding:6px;font-size:10px}
+.block-task-open{min-width:0;width:100%;min-height:44px;display:flex;align-items:center;gap:8px;border:0;border-radius:7px;background:transparent;padding:9px 4px;color:var(--ink);text-align:left;cursor:pointer}
+.block-task-open>span{min-width:0;flex:1;display:grid;gap:4px}
+.block-task-open strong{overflow-wrap:anywhere}
+.block-task-open small{color:var(--muted)}
+.block-task-open>svg{flex:0 0 auto;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.block-task-open:hover{background:#eef2e8;color:var(--forest)}
 .block-task-selected{width:36px;height:36px;display:grid;place-items:center;color:var(--forest)}
 .block-task-selected svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .planner-work-group,.planner-block-settings{min-width:0;border-top:1px solid var(--line);padding-top:12px}
@@ -79,7 +75,7 @@
 .planner-work-group[open]>summary{margin-bottom:12px}
 .block-project-details .project-notes{padding:0;margin:0}
 .block-project-details .notes-board{grid-template-columns:minmax(0,1fr)}
-@media(max-width:580px){.block-work-create{flex-wrap:wrap}.block-work-create input{flex:1 1 160px}.block-work-create button,.block-task-status select,.planner-work-group>summary{min-height:44px}}
+@media(max-width:580px){.block-work-create{flex-wrap:wrap}.block-work-create input{flex:1 1 160px}.block-work-create button,.planner-work-group>summary{min-height:44px}}
 
 .planner-workspace-link{flex:0 0 auto;display:grid;place-items:center;min-width:32px;min-height:32px;border:0;border-radius:6px;background:transparent;color:var(--forest);padding:5px;cursor:pointer}
 .planner-workspace-link svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}

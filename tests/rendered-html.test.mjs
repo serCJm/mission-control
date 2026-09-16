@@ -15,6 +15,7 @@ const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url)
 const presence = readFileSync(new URL("../app/presence.tsx", import.meta.url), "utf8");
 const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
 const rowActionMenu = readFileSync(new URL("../app/row-action-menu.tsx", import.meta.url), "utf8");
+const blockProjectWork = readFileSync(new URL("../app/block-project-work.tsx", import.meta.url), "utf8");
 const plannerStyles = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
 const motionStyles = readFileSync(new URL("../app/motion.css", import.meta.url), "utf8");
 const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
@@ -728,7 +729,7 @@ test("area and project views share a styled, keyboard-accessible area switcher",
   assert.match(page, /\["ArrowDown", "ArrowUp"\]|event\.key === "ArrowDown"/);
   assert.equal([...page.matchAll(/<AreaSwitcher areas=\{areas\} area=\{area\} navigate=\{navigate\} \/>/g)].length, 2);
   assert.match(page, /<AreaView key=\{activeArea\.id\} areas=\{workspace\.areas\}/);
-  assert.match(page, /<ProjectView key=\{activeProject\.id\} project=\{activeProject\} areas=\{workspace\.areas\}/);
+  assert.match(page, /<ProjectView key=\{activeProject\.id\} initialTaskId=\{selection\.taskId\} project=\{activeProject\} areas=\{workspace\.areas\}/);
   assert.match(globalStyles, /\.area-context-nav\{position:sticky;top:84px/);
   assert.match(globalStyles, /\.area-switcher-menu\{position:absolute;top:calc\(100% \+ 8px\);left:0;z-index:12;[^}]*border-radius:12px;background:var\(--panel\);[^}]*box-shadow:0 16px 40px/);
   assert.match(globalStyles, /\.area-switcher-options button\[aria-checked="true"\]\{background:var\(--lime-soft\);color:var\(--forest\)\}/);
@@ -804,7 +805,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /standaloneOccurrenceAt\(over\.date, over\.minutes\) \? "No-area blocks cannot hold tasks or routines" : "Drop a routine inside a time block for its area"/);
   assert.match(plannerView, /onTaskChange\(itemId, \{ someday: undefined, waiting: undefined \}\)/);
   assert.match(plannerView, /Waiting/);
-  assert.match(page, /<option value="waiting">Waiting<\/option>/);
+  assert.match(blockProjectWork, /Move to Waiting/);
   assert.match(plannerView, /TouchSensor/);
   assert.match(plannerView, /KeyboardSensor/);
   assert.match(plannerView, /event\.pointerType === "touch"/);
