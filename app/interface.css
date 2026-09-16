@@ -32,7 +32,7 @@ input, textarea { caret-color: var(--forest); }
 .planner-compact-source small, .planner-waiting-source small, .planner-session-row small { font-size: 10px; line-height: 1.45; }
 .planner-context-heading > button, .planner-editor-heading > button { font-size: 11px; }
 .planner-compact-source, .planner-waiting-source { padding-block: 11px; }
-.planner-queue-tabs { gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #f3f5ef; }
+.planner-queue-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #f3f5ef; }
 .planner-queue-tabs button { height: 52px; border-color: transparent; border-radius: 7px; background: transparent; }
 .planner-queue-tabs button:hover { border-color: transparent; background: #e9eee2; }
 .planner-queue-tabs button.active { border-color: transparent; background: var(--forest); }
