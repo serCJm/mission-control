@@ -1379,9 +1379,11 @@ function AreaSwitcher({ areas, area, navigate }: { areas: Area[]; area: Area; na
   }
 
   return <div className="area-switcher" ref={switcherRef}>
-    <button ref={triggerRef} type="button" className="area-switcher-trigger" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} aria-label={`Switch area. Current area: ${area.name}`} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}>
+    <button type="button" className="area-workspace-link" aria-label={`Open ${area.name} area workspace`} onClick={() => navigate({ kind: "area", id: area.id })}>
       <span className="area-switcher-icon" aria-hidden="true"><AreaIcon icon={area.icon} /></span>
       <span className="area-switcher-name">{area.name}</span>
+    </button>
+    <button ref={triggerRef} type="button" className="area-switcher-trigger" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} aria-label={`Switch area. Current area: ${area.name}`} onClick={() => setOpen((current) => !current)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setOpen(true); } }}>
       <svg className="area-switcher-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
     </button>
     <Presence show={open} className="motion-popover">{() => <div ref={menuRef} id={menuId} className="area-switcher-menu" role="menu" tabIndex={-1} aria-label="Switch area" onKeyDown={handleMenuKeyDown}>
