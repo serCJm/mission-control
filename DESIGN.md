@@ -212,13 +212,13 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with area scheduling. Opening a calendar block brings its projects, tasks, and project notes into that same workbench without a separate management-page detour. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
+The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with Area management: one area selector, projects, tasks, and project notes are available before any block is scheduled. A compact current/next block shortcut and an expandable Schedule section keep timing close to the work. Opening a calendar block adds its selected actions inside this same area workbench. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
 ### Calendar Blocks
 
 Today has one forest “New block” action in the calendar toolbar. Creation uses a shared workbench editor whose first decision is “Connect to”: Area or No area. Area blocks inherit the existing area-work behavior and can hold up to three tasks or routines. No-area blocks require a concise title, offer Driving, Break, Meal, Appointment, and Buffer as optional shortcuts, default to the neutral slate fill, and never expose task queues, “Now,” notes, or completion state.
 
-Creating a block opens its working surface directly. An area block shows its one-to-three selected actions first, followed by inline project selection, task creation and editing, task status, and project outcome and notes. Timing and repeat controls sit behind Block settings. The scheduling overview lists this week’s blocks rather than duplicating task queues.
+Creating a block opens its working surface directly. An area block shows its one-to-three selected actions above the area's projects and tasks. Timing, repeat, and color controls sit behind Block settings. All area work clears the selected-block context while preserving project selection and task drafts. The area schedule lists recurring and upcoming blocks, with past blocks behind a separate disclosure; expanding it never replaces the area's work. Without a selected block, task management stays available and block-assignment buttons stay hidden.
 
 Both block kinds use the same one-time or weekly schedule, date, time, fill, drag, resize, occurrence-edit, and delete behaviors. A no-area calendar card shows only its title and time. Conversion remains available in the shared editor, but an area block with queued work must be emptied before it can become a no-area block. Time blocks may touch but never overlap, regardless of kind.
 

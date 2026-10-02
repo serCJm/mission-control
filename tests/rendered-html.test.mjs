@@ -828,7 +828,6 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /function ScheduleOverview/);
   assert.match(plannerView, /function BlockFillPicker/);
   assert.match(plannerView, /All blocks in schedule/);
-  assert.match(plannerView, /className="planner-editor-title-row"><h2>\{area\.name\}<\/h2><AreaWorkspaceButton area=\{area\} onOpen=\{onOpenArea\} \/><BlockFillPicker value=\{fill\} onChange=\{setFill\} repeating=\{recurring\} \/>/);
   assert.match(plannerView, /className="planner-editor-title-row"><h2>\{rule \? existingOneTimeBlock/);
   assert.doesNotMatch(plannerView, /className="planner-fill-picker"|<strong>Block fill<\/strong>/);
   assert.match(plannerView, /className=\{`planner-fill-menu fill-\$\{value\}`\}/);

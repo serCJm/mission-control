@@ -47,7 +47,7 @@
 @media(max-width:580px){.planner-frequency button,.planner-block-kind button{min-height:40px}.planner-title-suggestions button{min-height:40px}.planner-fill-menu>summary{width:44px;height:44px}.planner-fill-palette{grid-template-columns:repeat(3,36px)}.planner-fill-option{width:36px;height:36px}}
 @media(prefers-reduced-motion:reduce){.planner-layout,.planner-workbench,.planner-page.workbench-closed .planner-workbench,.planner-drop-slot,.planner-calendar-block{transition:none}}
 
-/* The selected block owns both choosing work and execution. */
+/* Area work stays primary; selected blocks add execution context. */
 @media(min-width:981px){.planner-layout{grid-template-columns:420px minmax(0,1fr)}}
 .planner-context-field>select{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px;color:var(--ink)}
 .block-project-work,.block-project-details{display:grid;gap:14px;min-width:0}
@@ -87,3 +87,32 @@
 
 .planner-schedule-row-main:hover:not(:disabled){background:#f2f4ed}
 .planner-schedule-row-main:disabled{cursor:default;opacity:.6}
+
+.planner-workbench-context[hidden]{display:none}
+.planner-area-work{display:grid;gap:14px;min-width:0}
+.planner-unscheduled{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.planner-area-scheduling{position:relative;min-width:0}
+.planner-schedule-disclosure>summary{width:calc(100% - 124px);min-height:44px;display:flex;align-items:center;gap:8px;border-radius:8px;padding:8px;color:var(--forest);font-size:13px;font-weight:650;cursor:pointer;list-style:none}
+.planner-schedule-disclosure>summary::-webkit-details-marker{display:none}
+.planner-schedule-disclosure>summary:hover{background:var(--paper)}
+.planner-schedule-disclosure>summary>svg{flex:0 0 auto;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.planner-schedule-disclosure>summary>svg:last-child{width:14px;height:14px;margin-left:auto;transform:rotate(90deg)}
+.planner-schedule-disclosure[open]>summary>svg:last-child{transform:rotate(-90deg)}
+.planner-schedule-disclosure .planner-schedule-overview{margin-top:12px;padding-top:14px;border-top:1px solid var(--line)}
+.planner-schedule-disclosure .planner-schedule-list{max-height:300px;overflow:auto;overscroll-behavior:contain;scrollbar-color:#aab2aa transparent}
+.planner-area-new-block{position:absolute;top:0;right:0;min-height:44px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 12px;color:var(--forest);font-size:12px;font-weight:650}
+.planner-area-new-block:hover{border-color:var(--forest);background:var(--lime-soft)}
+.planner-past-toggle,.planner-block-clear{min-height:44px;justify-self:start;border:0;border-radius:6px;background:transparent;padding:8px 0;color:var(--forest);font-size:12px;text-decoration:underline;text-underline-offset:3px}
+.planner-area-block{display:grid;gap:6px;border-top:1px solid var(--line);padding-top:14px}
+.planner-area-block-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.planner-area-block-heading>div{min-width:0}
+.planner-area-block-heading strong{font-size:13px}
+.planner-area-block-heading p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums}
+.planner-block-clear{flex:0 0 auto;padding:0 2px}
+.planner-area-block-controls,.planner-block-fill{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
+.planner-area-block-controls>button{min-height:44px;border:0;border-radius:7px;background:transparent;padding:8px;color:var(--forest);font-size:12px;font-weight:650}
+.planner-area-block-controls>button:hover{background:var(--lime-soft)}
+.planner-area-work .planner-this-block{margin-top:0}
+.planner-schedule-row-main strong,.planner-schedule-row-main small{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
+.planner-schedule-row-actions button{min-width:44px;min-height:44px}
+.planner-schedule-disclosure>summary:focus-visible,.planner-area-new-block:focus-visible,.planner-past-toggle:focus-visible,.planner-block-clear:focus-visible,.planner-area-block-controls>button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
