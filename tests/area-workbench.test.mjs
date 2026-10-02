@@ -54,7 +54,8 @@ test("a selected block adds focus controls within the area workbench", () => {
   assert.match(html, /id="planner-area-select"/);
   assert.match(html, /This block · choose up to 3/);
   assert.match(html, /Choose Review trade journal for this block/);
-  assert.match(html, />Schedule</);
+  assert.match(html, /aria-label="Schedule" title="Schedule" aria-expanded="false" aria-controls="planner-area-schedule"/);
+  assert.match(html, /id="planner-area-schedule"[^>]*hidden=""[^>]*inert=""/);
   assert.match(html, />All area work</);
   assert.equal((html.match(/Projects &amp; tasks/g) ?? []).length, 1);
 });

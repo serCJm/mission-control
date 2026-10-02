@@ -212,7 +212,7 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with Area management: one area selector, projects, tasks, and project notes are available before any block is scheduled. A compact current/next block shortcut and an expandable Schedule section keep timing close to the work. Opening a calendar block adds its selected actions inside this same area workbench. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
+The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with Area management: one area selector, projects, tasks, and project notes are available before any block is scheduled. A compact current/next block shortcut keeps timing close to the work. A calendar icon beside the area workspace and add-area controls toggles the inline schedule, with New block inside that section. The icon has a Schedule tooltip and a visible expanded state. Opening a calendar block adds its selected actions inside this same area workbench. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
 ### Calendar Blocks
 

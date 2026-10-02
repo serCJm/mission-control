@@ -867,7 +867,7 @@ test("calendar owns This block and derives Now from its first unfinished item", 
   assert.match(plannerView, /function deleteOccurrence/);
   assert.match(plannerView, /plannerAfterOccurrenceDelete/);
   assert.match(plannerView, /focusAfterDelete/);
-  assert.match(plannerView, /\.planner-schedule-empty \.planner-schedule-new/);
+  assert.match(plannerView, /\.planner-schedule-new/);
   assert.match(plannerView, /className="planner-schedule-new planner-button-with-icon" onClick=\{onAdd\}><PlusIcon \/>New block<\/button><\/div>/);
   assert.doesNotMatch(plannerView, />Manage(?:\s|<)/);
   assert.doesNotMatch(plannerView, /Edit block settings|Skip this block|<EditIcon \/>Edit block|View \{selectedArea\.name\} schedule/);
