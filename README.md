@@ -33,9 +33,8 @@ docker-compose run --rm app npm install <package>
 
 This project does not use `wrangler.jsonc`.
 
-For a Sites deployment, set your own `project_id` in
-`.openai/hosting.json`. The checked-in value is intentionally blank so the
-repository does not expose deployment-specific identifiers.
+`.openai/hosting.json` identifies the existing Mission Control Site. Preserve its
+`project_id` when publishing updates so the app and plugin keep the same data.
 
 ## Included Shape
 
@@ -123,3 +122,39 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 ## License
 
 Released under the [MIT License](LICENSE).
+
+## ChatGPT plugin extension
+
+The existing Site declares `mcp` in `.openai/hosting.json` and serves a stateless
+Streamable HTTP MCP endpoint at `/mcp`. Sites provisions the private plugin and
+manages OAuth. Install or connect the Site's plugin through ChatGPT's **Plugins →
+Personal → Created by you**. Do not create a second local MCP connection.
+
+`open_mission_control` provides sidebar and conversation-panel entrypoints.
+The embedded view supports area/project filters, task capture, completion, and
+reading notes. The full app remains the calendar, routines, and weekly-review
+editor. Chat tools also support creating/editing projects and project notes:
+
+- `get_workspace`, `open_mission_control`
+- `create_task`, `update_task`
+- `create_project`, `update_project`, `save_project_note`
+
+All data-bearing calls use the authenticated Site user ID and the same D1 row as
+the website. Discovery and UI resources contain no workspace data. Read the
+workspace before mutations and supply its `updatedAt` as `expectedUpdatedAt`.
+The server atomically rejects stale writes, including browser saves. No database
+schema change or data reset is required. Unknown saved formats are preserved.
+
+The UI uses the official MCP Apps bridge, with no direct API calls or credentials
+in the iframe. `npm run build` and `npm run dev` generate its self-contained HTML
+from `plugin-ui/`; after editing that directory during development, run
+`docker-compose exec app npm run build:plugin-ui`.
+
+Validation (inside Docker): `npm run typecheck`, `npm run build`, and
+`node --test`. MCP tests use a temporary isolated D1 database, never the persisted
+development or production workspace.
+
+Official implementation references:
+[Build an MCP server](https://developers.openai.com/plugins/build/mcp-server),
+[Plugin extensions](https://developers.openai.com/plugins/build/extensions), and
+[MCP Apps UI](https://developers.openai.com/plugins/build/chatgpt-ui).

@@ -18,7 +18,7 @@ const rowActionMenu = readFileSync(new URL("../app/row-action-menu.tsx", import.
 const blockProjectWork = readFileSync(new URL("../app/block-project-work.tsx", import.meta.url), "utf8");
 const plannerStyles = readFileSync(new URL("../app/planner.css", import.meta.url), "utf8");
 const motionStyles = readFileSync(new URL("../app/motion.css", import.meta.url), "utf8");
-const route = readFileSync(new URL("../app/api/workspace/route.ts", import.meta.url), "utf8");
+const route = ["../app/api/workspace/route.ts", "../app/workspace-schema.ts", "../app/workspace-store.ts"].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);

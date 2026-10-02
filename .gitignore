@@ -39,4 +39,6 @@ yarn-error.log*
 /output/
 /outputs/
 /work/
+/.openai/*-publish.tar.gz
+/app/mcp/ui.generated.html
 /.playwright-cli/

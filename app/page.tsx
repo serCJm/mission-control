@@ -274,6 +274,7 @@ export default function Home() {
   const lastSyncedWorkspace = useRef("");
   const lastServerUpdatedAt = useRef(0);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const cloudRefreshEpoch = useRef(0);
   const openTaskNoteEditors = useRef(new Set<string>());
   const openProjectNoteEditors = useRef(new Set<string>());
   const plannerEditorOpen = useRef(false);
@@ -370,7 +371,7 @@ export default function Home() {
           const createResponse = await fetch("/api/workspace", {
             method: "PUT",
             headers: { "content-type": "application/json" },
-            body: `{"workspace":${serialized}}`,
+            body: `{"workspace":${serialized},"expectedUpdatedAt":0}`,
           });
           if (!createResponse.ok) throw new Error("Unable to create the synced workspace.");
           const created = await createResponse.json() as { updatedAt: number };
@@ -406,15 +407,21 @@ export default function Home() {
         return;
       }
       setSyncState("saving");
+      const refreshEpoch = cloudRefreshEpoch.current;
       saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
+        if (refreshEpoch !== cloudRefreshEpoch.current) return;
         const response = await fetch("/api/workspace", {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: `{"workspace":${serialized}}`,
+          body: `{"workspace":${serialized},"expectedUpdatedAt":${lastServerUpdatedAt.current}}`,
         });
         if (response.status === 401) {
           window.location.assign("/signin-with-chatgpt?return_to=%2F");
           return;
+        }
+        if (response.status === 409) {
+          setToast("Workspace changed elsewhere. Reload to get the latest version; your unsaved changes are kept on this device.");
+          throw new Error("Workspace changed elsewhere.");
         }
         if (!response.ok) throw new Error("Unable to save the workspace.");
         const payload = await response.json() as { updatedAt: number };
@@ -435,6 +442,7 @@ export default function Home() {
     async function refreshFromCloud() {
       if (document.visibilityState !== "visible" || hasOpenEditor() || JSON.stringify(workspace) !== lastSyncedWorkspace.current) return;
       try {
+        const requestedRevision = lastServerUpdatedAt.current;
         const response = await fetch("/api/workspace", {
           cache: "no-store",
           headers: lastServerUpdatedAt.current ? { "if-none-match": `"${lastServerUpdatedAt.current}"` } : undefined,
@@ -444,7 +452,8 @@ export default function Home() {
         const payload = await response.json() as { workspace: Workspace | null; updatedAt: number };
         const normalized = normalizeClientWorkspace(payload.workspace);
         const synced = normalized ? { ...normalized, routines: reconcileRoutines(normalized.routines, new Date()) } : null;
-        if (!active || hasOpenEditor() || !synced || payload.updatedAt <= lastServerUpdatedAt.current) return;
+        if (!active || hasOpenEditor() || !synced || lastServerUpdatedAt.current !== requestedRevision || payload.updatedAt <= lastServerUpdatedAt.current) return;
+        cloudRefreshEpoch.current += 1;
         lastServerUpdatedAt.current = payload.updatedAt;
         lastSyncedWorkspace.current = JSON.stringify(synced);
         setWorkspace(synced);
