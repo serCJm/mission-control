@@ -131,26 +131,31 @@ manages OAuth. Install or connect the Site's plugin through ChatGPT's **Plugins 
 Personal → Created by you**. Do not create a second local MCP connection.
 
 `open_mission_control` provides sidebar and conversation-panel entrypoints.
-The embedded view supports area/project filters, task capture, completion, and
-reading notes. The full app remains the calendar, routines, and weekly-review
-editor. Chat tools also support creating/editing projects and project notes:
+The website and extension render the same `app/mission-control.tsx` component and
+styles, including the calendar, areas, projects, tasks, notes, routines, and weekly
+review. The existing responsive layout adapts to a conversation panel or fullscreen.
+Chat tools also support creating/editing projects and project notes:
 
 - `get_workspace`, `open_mission_control`
 - `create_task`, `update_task`
 - `create_project`, `update_project`, `save_project_note`
+
+The interface uses the app-only `save_workspace` tool for all edits. It validates
+the full workspace and checks its revision; it is not exposed to the model.
 
 All data-bearing calls use the authenticated Site user ID and the same D1 row as
 the website. Discovery and UI resources contain no workspace data. Read the
 workspace before mutations and supply its `updatedAt` as `expectedUpdatedAt`.
 The server atomically rejects stale writes, including browser saves. No database
 schema change or data reset is required. Unknown saved formats are preserved.
-On a browser save conflict, the unsaved workspace is retained in localStorage
-under a timestamped `mission-control-conflict-` key before prompting a reload.
+On a save conflict, the unsaved workspace is retained in localStorage under a
+timestamped `mission-control-conflict-` key before prompting a reload. If the host
+blocks local storage, the interface tells the user to copy their edits first.
 These recovery copies are never automatically deleted or uploaded over newer data.
 
 The UI uses the official MCP Apps bridge, with no direct API calls or credentials
 in the iframe. `npm run build` and `npm run dev` generate its self-contained HTML
-from `plugin-ui/`; after editing that directory during development, run
+from `plugin-ui/` and the shared app components. After editing either during development, run
 `docker-compose exec app npm run build:plugin-ui`.
 
 Validation (inside Docker): `npm run typecheck`, `npm run build`, and

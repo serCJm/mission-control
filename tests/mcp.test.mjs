@@ -5,12 +5,12 @@ import { build } from 'esbuild';
 import { Miniflare } from 'miniflare';
 import { createStarterWorkspace } from '../app/starter-workspace.mjs';
 
-let mf, db, workspaceStore, handleMcpRequest, UI_URI;
+let mf, db, workspaceStore, handleMcpRequest, UI_URI, MAX_MCP_REQUEST_BYTES;
 const output = new URL(`../output/mcp-test-${process.pid}/`, import.meta.url);
 before(async () => {
   await mkdir(output, { recursive: true });
   await build({ stdin: { contents: 'export * from "./app/mcp/server.ts"; export * from "./app/workspace-store.ts";', resolveDir: process.cwd() }, outfile: new URL('server.mjs', output).pathname, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
-  ({ workspaceStore, handleMcpRequest, UI_URI } = await import(new URL('server.mjs', output)));
+  ({ workspaceStore, handleMcpRequest, UI_URI, MAX_MCP_REQUEST_BYTES } = await import(new URL('server.mjs', output)));
   mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("test"); } }', compatibilityDate: '2026-08-01', d1Databases: ['DB'] });
   db = await mf.getD1Database('DB');
   await db.prepare('CREATE TABLE workspaces (user_id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)').run();
@@ -27,7 +27,8 @@ test('discovery advertises sidebar and conversation extensions without private d
   assert.equal(init.status, 200);
   assert.equal(init.body.result.serverInfo.name, 'mission-control');
   const { body } = await rpc('tools/list', {}, null);
-  assert.equal(body.result.tools.length, 7);
+  assert.equal(body.result.tools.length, 8);
+  assert.deepEqual(body.result.tools.find((tool) => tool.name === 'save_workspace')._meta.ui.visibility, ['app']);
   const open = body.result.tools.find((tool) => tool.name === 'open_mission_control');
   assert.deepEqual(open._meta['openai/ui'].entrypoints, [{ type: 'global' }, { type: 'thread' }]);
   assert.equal(open._meta.ui.resourceUri, UI_URI);
@@ -80,12 +81,35 @@ test('invalid persisted data remains byte-for-byte untouched', async () => {
   await db.prepare('INSERT INTO workspaces VALUES (?, ?, ?)').bind('recovery', original, 1).run();
   assert.equal((await call('get_workspace', {}, 'recovery')).isError, true);
   assert.equal((await call('create_task', { title: 'Do not reset', expectedUpdatedAt: 1 }, 'recovery')).isError, true);
+  assert.equal((await call('save_workspace', { workspace: createStarterWorkspace(), expectedUpdatedAt: 1 }, 'recovery'))._meta.status, 409);
   assert.equal((await db.prepare('SELECT data FROM workspaces WHERE user_id = ?').bind('recovery').first()).data, original);
 });
 
 test('malformed and oversized requests fail cleanly', async () => {
-  for (const [body, status] of [['{', 400], [' '.repeat(65537), 413]]) {
+  for (const [body, status] of [['{', 400], [' '.repeat(MAX_MCP_REQUEST_BYTES + 1), 413]]) {
     const response = await handleMcpRequest(new Request('https://example.test/mcp', { method: 'POST', body }), null, '');
     assert.equal(response.status, status);
   }
+});
+
+
+test('embedded full workspace saves all features with validation, account isolation, and revision protection', async () => {
+  const workspace = createStarterWorkspace();
+  // Exceeds the old 64 KiB tool limit while remaining a valid normal workspace.
+  for (let i = 0; i < 5; i++) workspace.projects[0].notes.push({ id: `large-note-${i}`, title: `Notes ${i}`, body: 'a'.repeat(18000), pinned: false, createdAt: 1, updatedAt: 1 });
+  const initial = await call('save_workspace', { workspace, expectedUpdatedAt: 0 }, 'embedded');
+  assert.equal(initial.isError, undefined);
+  let snapshot = (await call('get_workspace', {}, 'embedded')).structuredContent;
+  assert.deepEqual(snapshot.workspace, workspace);
+  assert.equal((await rpc('tools/call', { name: 'save_workspace', arguments: { workspace, expectedUpdatedAt: 0 } }, null)).status, 401);
+  workspace.weeklyReview.intention = 'Protect focused work';
+  workspace.areas[0].name = 'Updated area';
+  const changed = await call('save_workspace', { workspace, expectedUpdatedAt: snapshot.updatedAt }, 'embedded');
+  assert.ok(changed.structuredContent.updatedAt > snapshot.updatedAt);
+  assert.equal((await call('save_workspace', { workspace, expectedUpdatedAt: snapshot.updatedAt }, 'embedded'))._meta.status, 409);
+  assert.equal((await call('save_workspace', { workspace, expectedUpdatedAt: changed.structuredContent.updatedAt }, 'another-account'))._meta.status, 409);
+  assert.equal((await call('save_workspace', { workspace: { tasks: [] }, expectedUpdatedAt: changed.structuredContent.updatedAt }, 'embedded'))._meta.status, 400);
+  snapshot = (await call('get_workspace', {}, 'embedded')).structuredContent;
+  assert.deepEqual(snapshot.workspace, workspace);
+  assert.equal((await call('get_workspace', {}, 'another-account')).structuredContent.workspace, null);
 });
