@@ -144,6 +144,9 @@ the website. Discovery and UI resources contain no workspace data. Read the
 workspace before mutations and supply its `updatedAt` as `expectedUpdatedAt`.
 The server atomically rejects stale writes, including browser saves. No database
 schema change or data reset is required. Unknown saved formats are preserved.
+On a browser save conflict, the unsaved workspace is retained in localStorage
+under a timestamped `mission-control-conflict-` key before prompting a reload.
+These recovery copies are never automatically deleted or uploaded over newer data.
 
 The UI uses the official MCP Apps bridge, with no direct API calls or credentials
 in the iframe. `npm run build` and `npm run dev` generate its self-contained HTML

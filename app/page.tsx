@@ -420,7 +420,8 @@ export default function Home() {
           return;
         }
         if (response.status === 409) {
-          setToast("Workspace changed elsewhere. Reload to get the latest version; your unsaved changes are kept on this device.");
+          localStorage.setItem(`mission-control-conflict-${Date.now()}`, serialized);
+          setToast("Workspace changed elsewhere. A recovery copy of your edits is saved on this device. Reload to get the latest version.");
           throw new Error("Workspace changed elsewhere.");
         }
         if (!response.ok) throw new Error("Unable to save the workspace.");
