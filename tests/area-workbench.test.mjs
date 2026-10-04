@@ -41,7 +41,9 @@ function render(blockRules = [], openOccurrenceId, blockExceptions = [], blockIt
 test("area work is available with no schedule", () => {
   const html = render();
   assert.match(html, />Area management</);
-  assert.match(html, /Projects &amp; tasks/);
+  assert.match(html, /<section[^>]*aria-label="Projects and tasks in this area"/);
+  assert.match(html, /<label[^>]*>Project<\/label>/);
+  assert.match(html, /<button[^>]*aria-label="New project"/);
   assert.match(html, /Review trade journal/);
   assert.match(html, /New task in Trading backlog/);
   assert.doesNotMatch(html, /Choose Review trade journal for this block|Choose up to 3 actions/);
@@ -58,7 +60,7 @@ test("a selected block adds focus controls within the area workbench", () => {
   assert.match(html, /id="planner-area-schedule"[^>]*hidden=""[^>]*inert=""/);
   assert.doesNotMatch(html, /aria-label="Back to area"|aria-label="Return to (?:current|next) block"/);
   assert.match(html, /<button[^>]*aria-label="Block settings"[^>]*title="Block settings"/);
-  assert.equal((html.match(/Projects &amp; tasks/g) ?? []).length, 1);
+  assert.equal((html.match(/<section[^>]*aria-label="Projects and tasks in this area"/g) ?? []).length, 1);
 });
 
 test("queued tasks remain visible without a duplicate choose action", () => {

@@ -50,15 +50,10 @@
 /* Area work stays primary; selected blocks add execution context. */
 @media(min-width:981px){.planner-layout{grid-template-columns:420px minmax(0,1fr)}}
 .block-project-work,.block-project-details{display:grid;gap:14px;min-width:0}
-.planner-schedule-overview h3,.block-work-heading h3{margin:0;font-size:14px}
+.planner-schedule-overview h3{margin:0;font-size:14px}
 
 .block-project-work{border-top:1px solid var(--line);padding-top:18px}
-.block-work-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.block-project-create-toggle{min-height:36px;flex-shrink:0;display:inline-flex;align-items:center;gap:6px;border:1px solid #cbd3c3;border-radius:8px;background:transparent;color:var(--forest);padding:7px 10px;font-size:11px;font-weight:650;transition:background .16s ease-out,border-color .16s ease-out}
-.block-project-create-toggle:hover,.block-project-create-toggle[aria-expanded="true"]{border-color:#abbc98;background:var(--lime-soft)}
-.block-project-create-toggle svg,.block-work-finished>svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.block-project-create-toggle svg{transition:transform .16s ease-out}
-.block-project-create-toggle[aria-expanded="true"] svg{transform:rotate(45deg)}
+.block-work-finished>svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .block-work-filters{display:grid;gap:2px;min-width:0}
 .block-work-finished{width:100%;min-height:44px;display:flex;align-items:center;gap:8px;border:0;border-radius:7px;background:transparent;color:var(--muted);padding:10px 4px;font-size:11px;font-weight:550;text-align:left;transition:color .16s ease-out}
 .block-work-finished:hover,.block-work-finished[aria-checked="true"]{color:var(--forest)}
@@ -66,7 +61,6 @@
 .block-work-switch:after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(23,61,51,.15);transition:transform .16s ease-out}
 .block-work-finished[aria-checked="true"] .block-work-switch{border-color:var(--forest);background:var(--forest)}
 .block-work-finished[aria-checked="true"] .block-work-switch:after{transform:translateX(12px);background:var(--lime)}
-@media(max-width:720px){.block-project-create-toggle{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.block-work-switch:after{transition:none}}
 .block-work-create{display:flex;gap:8px;min-width:0}
 .block-work-create input,.block-project-details textarea{min-width:0;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;font:inherit;font-size:13px}

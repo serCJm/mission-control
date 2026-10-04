@@ -230,7 +230,7 @@ Rows are the core operating pattern. Entity rows prioritize the name and expose 
 
 The area workbench places its always-visible task input below the queue filters and directly above the list. A quiet input and secondary Add task button keep the work prominent. The placeholder names the selected project or the area's backlog, reflecting the actual creation destination regardless of the viewing filter.
 
-New project is a compact outlined button with a plus icon that becomes a close icon while the inline form is open. A quiet Completed tasks switch sits directly below the queue filters and above the task input, keeping the control in place as the list expands. Finished tasks appear after active tasks and routines, preserving the position and order of unfinished work.
+The Project label has a compact plus icon for creating a project, matching the Area label controls. It becomes a close icon while the inline form below the selector is open. There is no separate Projects & tasks heading. A quiet Completed tasks switch sits directly below the queue filters and above the task input, keeping the control in place as the list expands. Finished tasks appear after active tasks and routines, preserving the position and order of unfinished work.
 
 Area and Project selectors share a warm-paper dropdown with a leading icon, rounded outline, and rotating chevron. Menus float outside the scrolling workbench, match the trigger width, and use soft lime with a forest icon and checkmark for the selected option. Project options include their outcome as secondary text. Options have at least 48px touch targets; keyboard navigation, typeahead, selection, and focus return use the Base UI Select primitive. Opening and closing take 160ms and respect reduced motion.
 
