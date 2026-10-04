@@ -1,10 +1,12 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { type PlannerProject, type PlannerTask, type PlannerRoutineChoices } from "./planner";
 import { RowActionMenu, CheckIcon, DeleteIcon, ReopenIcon, WaitIcon } from "./row-action-menu";
+import { ContextSelect } from "./context-select";
 
-export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQueue, onTaskChange, onDeleteTask, onCreateTask, onCreateProject, onOpenTask, renderProject, routines }: {
+export function BlockProjectWork({ areaName, projects, tasks, selectedTaskIds, full, onQueue, onTaskChange, onDeleteTask, onCreateTask, onCreateProject, onOpenTask, renderProject, routines }: {
+  areaName: string;
   projects: PlannerProject[];
   tasks: PlannerTask[];
   selectedTaskIds: Set<string>;
@@ -18,6 +20,7 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
   renderProject: (projectId: string) => ReactNode;
   routines: PlannerRoutineChoices;
 }) {
+  const projectSelectId = useId();
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -25,17 +28,22 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
   const [showFinished, setShowFinished] = useState(false);
   const [queue, setQueue] = useState("tasks");
   const selectedProject = projects.find((project) => project.id === projectId);
+  const taskDestination = selectedProject?.name ?? `${areaName} backlog`;
   const scopedTasks = tasks.filter((task) => (!projectId || task.projectId === projectId) && (showFinished || task.status !== "done"));
   const queues = { all: scopedTasks, tasks: scopedTasks.filter((task) => task.projectId && !task.waiting), backlog: scopedTasks.filter((task) => !task.projectId && !task.waiting), waiting: scopedTasks.filter((task) => task.waiting) };
   const visibleTasks = queue === "routines" ? [] : queues[queue as keyof typeof queues];
 
   return <section className="block-project-work" aria-label="Projects and tasks in this area">
-    <div className="block-work-heading"><h3>Projects & tasks</h3><button type="button" onClick={() => setShowProjectForm(!showProjectForm)} aria-expanded={showProjectForm}>{showProjectForm ? "Cancel" : "New project"}</button></div>
+    <div className="block-work-heading"><h3>Projects & tasks</h3><button type="button" className="block-project-create-toggle" onClick={() => setShowProjectForm(!showProjectForm)} aria-expanded={showProjectForm}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" /></svg><span>{showProjectForm ? "Cancel" : "New project"}</span></button></div>
     {showProjectForm && <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!projectName.trim()) return; setProjectId(onCreateProject(projectName.trim())); setProjectName(""); setShowProjectForm(false); }}><input aria-label="New project name" placeholder="Project name" required maxLength={200} value={projectName} onChange={(event) => setProjectName(event.target.value)} /><button disabled={!projectName.trim()}>Create project</button></form>}
-    <label className="planner-field"><span>Project</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">All projects & area tasks</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+    <div className="planner-field"><span>Project</span><ContextSelect id={projectSelectId} label="Project" value={projectId} onValueChange={setProjectId} options={[
+      { value: "", label: "All projects & area tasks", icon: <QueueIcon queue="all" /> },
+      ...projects.map((project) => ({ value: project.id, label: project.name, description: project.outcome, icon: <ProjectIcon /> })),
+    ]} /></div>
     {selectedProject && <details className="planner-work-group"><summary>Project outcome & notes</summary>{renderProject(selectedProject.id)}</details>}
-    <form className="block-work-create" onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onCreateTask(title.trim(), projectId); setTitle(""); setQueue(projectId ? "tasks" : "backlog"); }}><input aria-label={`New task in ${selectedProject?.name ?? "this area"}`} placeholder={`Add a task${selectedProject ? " to this project" : " to this area"}…`} required maxLength={2000} value={title} onChange={(event) => setTitle(event.target.value)} /><button disabled={!title.trim()}>Add task</button></form>
     <nav className="planner-queue-tabs" aria-label="Area work queues">{[["all", "All", queues.all.length + routines.today.length], ["tasks", "Tasks", queues.tasks.length], ["backlog", "Backlog", queues.backlog.length], ["waiting", "Waiting", queues.waiting.length], ["routines", "Routines", routines.block.length]].map(([key, label, count]) => <button type="button" key={key} className={queue === key ? "active" : ""} aria-pressed={queue === key} onClick={() => setQueue(String(key))}><span className="planner-queue-icon"><QueueIcon queue={String(key)} /></span><span className="planner-queue-label">{label}</span><span className="planner-queue-count"><span>{count}</span></span></button>)}</nav>
+    <div className="block-work-list">
+    <form className="block-work-create block-task-create" onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onCreateTask(title.trim(), projectId); setTitle(""); setQueue(projectId ? "tasks" : "backlog"); }}><input aria-label={`New task in ${taskDestination}`} placeholder={`Add to ${taskDestination}…`} required maxLength={2000} value={title} onChange={(event) => setTitle(event.target.value)} /><button type="submit" disabled={!title.trim()}>Add task</button></form>
     <div className="planner-queue-content">{visibleTasks.map((task) => <div className="planner-compact-source block-work-task" key={task.id}>
       <button type="button" className="block-task-open" onClick={() => onOpenTask(task)} aria-label={`Open ${task.title} in ${task.projectId ? "project" : "area"} workspace`}><span><strong>{task.title}</strong><small>{projects.find((project) => project.id === task.projectId)?.name ?? "Area task"}{task.status === "done" ? " · Completed" : task.waiting ? " · Waiting" : ""}{selectedTaskIds.has(task.id) && " · In this block"}</small></span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 5 5 5-5 5" /></svg></button>
       <div className="planner-source-actions">{onQueue && !selectedTaskIds.has(task.id) && task.status !== "done" && !task.waiting ? <button type="button" className="planner-queue-button" disabled={full} onClick={() => onQueue(task.id)} aria-label={`Choose ${task.title} for this block`} title={full ? "This block already has three items" : "Add to block"}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h8M3.5 10h6M3.5 14.5h5M14 10.5v5M11.5 13h5" /></svg></button> : null}<div className="planner-row-actions"><RowActionMenu title={task.title}>{(choose) => <>
@@ -44,8 +52,13 @@ export function BlockProjectWork({ projects, tasks, selectedTaskIds, full, onQue
         <button type="button" role="menuitem" className="danger" onClick={() => choose(() => onDeleteTask(task.id))}><DeleteIcon /><span>Delete task</span></button>
       </>}</RowActionMenu></div></div>
     </div>)}{queue === "all" && routines.today}{queue === "routines" && (routines.block.length ? routines.block : <p className="planner-editor-empty">No routines left to add for this day.</p>)}{queue !== "routines" && !visibleTasks.length && (queue !== "all" || routines.today.length === 0) && <p className="planner-editor-empty">{queue === "all" ? "No tasks or routines here." : `No ${queue === "waiting" ? "waiting" : "open"} tasks here.`}</p>}</div>
-    <button type="button" className="block-work-finished" aria-pressed={showFinished} onClick={() => setShowFinished(!showFinished)}>{showFinished ? "Hide completed tasks" : "Show completed tasks"}</button>
+    </div>
+    <button type="button" className="block-work-finished" role="switch" aria-checked={showFinished} onClick={() => setShowFinished(!showFinished)}><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5" /><path d="m6.8 10 2.1 2.1 4.3-4.3" /></svg><span>Completed tasks</span><span className="block-work-switch" aria-hidden="true" /></button>
   </section>;
+}
+
+function ProjectIcon() {
+  return <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6a1.5 1.5 0 0 1 1.5-1.5h3.2l1.8 2h5a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 15 16H5a1.5 1.5 0 0 1-1.5-1.5Z" /></svg>;
 }
 
 function QueueIcon({ queue }: { queue: string }) {

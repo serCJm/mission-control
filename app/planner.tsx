@@ -7,8 +7,10 @@ import { RowActionMenu, CheckIcon, DeleteIcon, ReopenIcon, WaitIcon } from "./ro
 import { Presence } from "./presence";
 import { listMotionRef } from "./list-motion";
 import { routineNeedsActionOn } from "./routine-schema.mjs";
+import { AreaIcon, type AreaIconName } from "./area-icon";
+import { ContextSelect } from "./context-select";
 
-export type PlannerArea = { id: string; name: string; icon: string };
+export type PlannerArea = { id: string; name: string; icon: AreaIconName };
 export type PlannerProject = { id: string; areaId: string; name: string; outcome: string };
 export type PlannerTask = { id: string; title: string; areaId?: string; projectId?: string; status: "todo" | "doing" | "done"; dueDate?: string; dueTime?: string; priority?: "low" | "medium" | "high"; someday?: boolean; waiting?: boolean };
 export type PlannerRoutine = { id: string; areaId: string; name: string; expectedMinutes: number; weekdays: number[]; scheduleEffectiveOn: string; pendingSchedule?: { weekdays: number[]; effectiveOn: string }; suspensions: Array<{ startsOn: string; endsOn?: string }>; sessions: Array<{ date: string; status: "pending" | "completed" | "skipped" | "missed" }> };
@@ -33,7 +35,6 @@ export type PlannerSessionState = {
   workbenchPinned?: boolean;
   calendarScrollTop?: number;
   openOccurrenceId?: string;
-  dismissedOccurrenceId?: string;
 };
 
 type PlannerProps = {
@@ -393,7 +394,7 @@ function DeadlineEditor({ task, area, project, onSave, onComplete, onClear, onCl
 
 type AreaOccurrence = CalendarOccurrence & { kind: "area"; areaId: string };
 
-function AreaBlockSettings({ occurrence, rule, onSave, onDelete, onAddAnother, onEditSeries, onOpenSettings, onClose }: { occurrence: AreaOccurrence; rule: AreaCalendarBlockRule; onSave: (date: string, startTime: string, endTime: string, fill: CalendarBlockFill) => string | null; onDelete: () => void; onAddAnother: () => void; onEditSeries: () => void; onOpenSettings: () => void; onClose: () => void }) {
+function AreaBlockSettings({ occurrence, rule, returnLabel, onSave, onDelete, onAddAnother, onEditSeries, onOpenSettings, onClose }: { occurrence: AreaOccurrence; rule: AreaCalendarBlockRule; returnLabel?: string; onSave: (date: string, startTime: string, endTime: string, fill: CalendarBlockFill) => string | null; onDelete: () => void; onAddAnother: () => void; onEditSeries: () => void; onOpenSettings: () => void; onClose: () => void }) {
   const [date, setDate] = useState(occurrence.date);
   const [startTime, setStartTime] = useState(occurrence.startTime);
   const [endTime, setEndTime] = useState(occurrence.endTime);
@@ -419,10 +420,15 @@ function AreaBlockSettings({ occurrence, rule, onSave, onDelete, onAddAnother, o
 
   const recurring = !isOneTimeRule(rule);
   return <div className="planner-area-block">
-    <div className="planner-area-block-heading"><div><strong>This block</strong><p>{formatWorkbenchDate(occurrence.date)} · {formatBlockTime(occurrence.startTime)}–{formatBlockTime(occurrence.endTime)}</p></div><button type="button" className="planner-block-clear" onClick={onClose}>Back to area</button></div>
-    <div className="planner-area-block-controls"><span>{recurring ? "Repeats weekly" : "One time"}</span><button type="button" className="planner-button-with-icon planner-settings-toggle" aria-label="Block settings" aria-expanded={settingsOpen} aria-controls={`block-settings-${occurrence.id}`} onClick={() => { if (!settingsOpen) onOpenSettings(); setSettingsOpen((open) => !open); setConfirmDelete(false); }}><EditIcon />Block settings</button></div>
+    <div className="planner-area-block-heading">
+      <div className="planner-area-block-summary"><strong>{formatWorkbenchDate(occurrence.date)}</strong><time dateTime={occurrence.date} aria-label={`${formatWorkbenchDate(occurrence.date)}, ${formatBlockTime(occurrence.startTime)}–${formatBlockTime(occurrence.endTime)}`}>{formatBlockTime(occurrence.startTime)}–{formatBlockTime(occurrence.endTime)}</time></div>
+      <div className="planner-area-block-actions">
+        <button type="button" className="planner-settings-toggle" aria-label="Block settings" title="Block settings" aria-expanded={settingsOpen} aria-controls={`block-settings-${occurrence.id}`} onClick={() => { if (!settingsOpen) onOpenSettings(); setSettingsOpen((open) => !open); setConfirmDelete(false); }}><EditIcon /></button>
+        {returnLabel && <button type="button" aria-label={returnLabel} title={returnLabel} onClick={onClose}><ArrowIcon direction="left" /></button>}
+      </div>
+    </div>
     <div id={`block-settings-${occurrence.id}`} className="planner-block-settings" hidden={!settingsOpen} role="region" aria-label="Block settings">
-    <div className="planner-block-fill"><span>Block color</span><BlockFillPicker value={fill} onChange={setFill} repeating={recurring} /></div>
+    <div className="planner-block-fill"><span>{recurring ? "Repeats weekly" : "One time"}</span><BlockFillPicker value={fill} onChange={setFill} repeating={recurring} /></div>
     <form className="planner-occurrence-form" onSubmit={saveOccurrence}><label className="planner-field"><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><div className="planner-time-fields"><label className="planner-field"><span>Starts</span><input required type="time" step="900" min={CALENDAR_START} max="22:30" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label><label className="planner-field"><span>Ends</span><input required type="time" step="900" min={startTime || CALENDAR_START} max={CALENDAR_END} value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label></div><button type="submit" className="planner-inline-save planner-button-with-icon"><CheckIcon />Save block</button></form>
     <div className="planner-editor-actions occurrence-actions"><button type="button" className="planner-delete planner-button-with-icon" onClick={() => confirmDelete ? onDelete() : setConfirmDelete(true)}><DeleteIcon />{confirmDelete ? recurring ? "Confirm this block only" : "Confirm delete block" : recurring ? "Delete this block only" : "Delete this block"}</button><span /><button type="button" className="planner-button-with-icon" onClick={onAddAnother}><PlusIcon />New block</button><button type="button" className="planner-button-with-icon" onClick={onEditSeries}><CalendarIcon />{recurring ? "Edit repeating schedule" : "Edit block details"}</button></div>
     </div>
@@ -497,8 +503,9 @@ function AreaWork({ occurrence, today, currentMinutes, area, projects, tasks, ro
   }
 
   return <div className="planner-area-work">
+    {occurrence && <div className="planner-block-context">
     {blockSettings}
-    {occurrence && <section className="planner-editor-section planner-this-block"><div><h3>Choose up to 3 actions</h3><span>{blockItems.length}/3 selected</span></div><div className="planner-block-item-list" ref={listMotionRef}>{orderedBlockItems.map((item, index) => {
+    <section className="planner-editor-section planner-this-block"><div><h3>Choose up to 3 actions</h3><span>{blockItems.length}/3 selected</span></div><div className="planner-block-item-list" ref={listMotionRef}>{orderedBlockItems.map((item, index) => {
       const task = item.kind === "task" ? tasks.find((value) => value.id === item.itemId) : undefined;
       const routine = item.kind === "routine" ? routines.find((value) => value.id === item.itemId) : undefined;
       const title = task?.title ?? routine?.name ?? "Unavailable item";
@@ -521,7 +528,7 @@ function AreaWork({ occurrence, today, currentMinutes, area, projects, tasks, ro
       </div>;
     })}{!blockItems.length && <p key="empty" className="planner-editor-empty">Nothing selected. Add one to three items, or leave this block open for context-led work.</p>}</div>
 
-    </section>}
+    </section></div>}
     <Presence show={Boolean(error)} className="motion-collapse">{() => <p className="planner-form-error" role="alert">{error}</p>}</Presence>
     {renderWork(area.id, new Set(blockItems.filter((item) => item.kind === "task").map((item) => item.itemId)), blockItems.length >= 3, occurrence ? (taskId) => addCandidate(`task:${taskId}`) : undefined, (taskId) => { const item = blockItems.find((item) => item.kind === "task" && item.itemId === taskId); if (item) removeItem(item.id); }, { today: routineChoicesForDate(today), block: routineChoicesForDate(occurrence?.date ?? today) })}
   </div>;
@@ -643,6 +650,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
     if (!compactLayout || !workbenchVisible || !workbench) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        if (workbench?.querySelector('[role="combobox"][aria-expanded="true"]')) return;
         event.preventDefault();
         setEditor(null);
         onSessionChange({ workbenchOpen: false, workbenchPinned: true });
@@ -689,10 +697,12 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   const currentTimeParts = new Intl.DateTimeFormat("en-US", { timeZone: PLANNER_TIME_ZONE, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date());
   const currentMinutes = Number(currentTimeParts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(currentTimeParts.find((part) => part.type === "minute")?.value ?? 0);
   const blockTarget = useMemo(() => selectedArea ? plannerBlockTarget(planner, selectedArea.id, today, currentMinutes) as { occurrence: CalendarOccurrence & { kind: "area"; areaId: string }; active: boolean } | null : null, [currentMinutes, planner, selectedArea, today]);
-  const currentAreaBlock = blockTarget?.active && selectedDate === today ? blockTarget.occurrence : undefined;
-  const automaticOccurrence = !editor && currentAreaBlock && currentAreaBlock.id !== session.dismissedOccurrenceId && plannerBlockItems(planner, currentAreaBlock).length > 0 ? currentAreaBlock : undefined;
+  const automaticOccurrence = !editor ? blockTarget?.occurrence : undefined;
   const areaOccurrence = editingOccurrence?.kind === "area" && editingOccurrence.areaId === selectedArea?.id ? editingOccurrence : automaticOccurrence;
   const areaOccurrenceRule = areaOccurrence ? planner.blockRules.find((rule): rule is AreaCalendarBlockRule => rule.kind === "area" && rule.id === areaOccurrence.ruleId) : undefined;
+  const blockReturnLabel = editingOccurrence?.kind === "area" && editingOccurrence.id !== blockTarget?.occurrence.id
+    ? blockTarget ? blockTarget.active ? "Return to current block" : "Return to next block" : "Back to area"
+    : undefined;
   const areaWorkbenchHidden = editor?.kind === "series" || editor?.kind === "deadline" || editingOccurrence?.kind === "standalone";
   const dragCreateArea = !editor || areaOccurrence
     ? selectedArea
@@ -719,14 +729,15 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
 
   function backToArea() {
     setEditor(null);
-    onSessionChange({ openOccurrenceId: undefined, dismissedOccurrenceId: currentAreaBlock?.id ?? areaOccurrence?.id ?? session.dismissedOccurrenceId });
-    workbenchRef.current?.querySelector<HTMLSelectElement>("#planner-area-select")?.focus();
+    onSessionChange({ openOccurrenceId: undefined });
+    workbenchRef.current?.querySelector<HTMLButtonElement>("#planner-area-select")?.focus();
   }
 
-  function engageAreaBlockSettings(occurrenceId: string) {
-    if (editor?.kind === "occurrence" && editor.occurrenceId === occurrenceId) return;
+  function engageAreaBlockSettings(occurrence: AreaOccurrence) {
+    if (editor?.kind === "occurrence" && editor.occurrenceId === occurrence.id) return;
     preserveWorkbenchFocus.current = true;
-    setEditor({ kind: "occurrence", occurrenceId });
+    onSessionChange({ anchorDate: occurrence.date, selectedDate: occurrence.date });
+    setEditor({ kind: "occurrence", occurrenceId: occurrence.id });
   }
 
   function openNewSeries(areaId: string | undefined, date: string, blockKind: "area" | "standalone" = areaId ? "area" : "standalone") {
@@ -1068,15 +1079,14 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
           {selectedArea && <div className="planner-workbench-context" hidden={areaWorkbenchHidden} inert={areaWorkbenchHidden}>
             <header className="planner-context-heading"><div><h2>Area management</h2></div><button type="button" onClick={() => onSessionChange({ workbenchOpen: false, workbenchPinned: true })}>Close</button></header>
             <section className="planner-context-card" aria-label="Current planning context">
-              <div className="planner-context-field"><div className="planner-context-label"><label htmlFor="planner-area-select">Area</label><span className="planner-context-label-actions"><AreaWorkspaceButton area={selectedArea} onOpen={onOpenArea} /><button type="button" className="planner-workspace-link planner-schedule-toggle" aria-label="Schedule" title="Schedule" aria-expanded={scheduleOpen} aria-controls="planner-area-schedule" onClick={() => setExpandedScheduleAreaId(scheduleOpen ? null : selectedArea.id)}><CalendarIcon /></button><button type="button" className="planner-label-action" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen} aria-label={areaCreatorOpen ? "Close new area form" : "New area"} title={areaCreatorOpen ? "Close new area form" : "New area"}><PlusIcon /></button></span></div><select id="planner-area-select" value={selectedArea.id} onChange={(event) => { setEditor(null); setAreaCreatorOpen(false); setExpandedScheduleAreaId(null); onSessionChange({ selectedAreaId: event.target.value, selectedProjectId: "", openOccurrenceId: undefined }); }}>{areas.map((area) => <option value={area.id} key={area.id}>{area.name}</option>)}</select></div>
+              <div className="planner-context-field"><div className="planner-context-label"><label htmlFor="planner-area-select">Area</label><span className="planner-context-label-actions"><AreaWorkspaceButton area={selectedArea} onOpen={onOpenArea} /><button type="button" className="planner-workspace-link planner-schedule-toggle" aria-label="Schedule" title="Schedule" aria-expanded={scheduleOpen} aria-controls="planner-area-schedule" onClick={() => setExpandedScheduleAreaId(scheduleOpen ? null : selectedArea.id)}><CalendarIcon /></button><button type="button" className="planner-label-action" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen} aria-label={areaCreatorOpen ? "Close new area form" : "New area"} title={areaCreatorOpen ? "Close new area form" : "New area"}><PlusIcon /></button></span></div><ContextSelect id="planner-area-select" label="Area" value={selectedArea.id} options={areas.map((area) => ({ value: area.id, label: area.name, icon: <AreaIcon icon={area.icon} /> }))} onValueChange={(areaId) => { setEditor(null); setAreaCreatorOpen(false); setExpandedScheduleAreaId(null); onSessionChange({ selectedAreaId: areaId, selectedProjectId: "", openOccurrenceId: undefined }); }} /></div>
             </section>
             <Presence show={areaCreatorOpen} className="motion-collapse">{() => <form className="planner-area-create" onSubmit={createArea}><input value={areaName} onChange={(event) => setAreaName(event.target.value)} placeholder="Area name" aria-label="New area name" /><button type="submit" disabled={!areaName.trim()}>Create</button></form>}</Presence>
             <div id="planner-area-schedule" className="planner-area-scheduling" key={selectedArea.id} hidden={!scheduleOpen} inert={!scheduleOpen}>
               {blockTarget && <button type="button" className={`planner-block-status planner-block-status-button ${blockTarget.active ? "active" : ""}`} onClick={() => openTargetForArea(selectedArea.id)}><i aria-hidden="true" /><span><strong>{blockTarget.active ? "Current time block" : "Next time block"}</strong><small>{formatWorkbenchDate(blockTarget.occurrence.date)} · {formatBlockTime(blockTarget.occurrence.startTime)}–{formatBlockTime(blockTarget.occurrence.endTime)}</small></span><ArrowIcon /></button>}
               <ScheduleOverview onOpenRule={openRuleTasks} key={selectedArea.id} area={selectedArea} rules={scheduleRules} exceptions={planner.blockExceptions} onEditSeries={(ruleId) => setEditor({ kind: "series", ruleId })} onOpenOccurrence={(occurrenceId, date) => { setExpandedScheduleAreaId(null); onSessionChange({ anchorDate: date, selectedDate: date }); setEditor({ kind: "occurrence", occurrenceId }); }} onDelete={deleteRuleById} onAdd={() => openNewSeries(selectedArea.id, selectedDate, "area")} />
             </div>
-            {!areaOccurrence && currentAreaBlock && <div className="planner-current-block"><span><strong>Happening now</strong><span>{formatBlockTime(currentAreaBlock.startTime)}–{formatBlockTime(currentAreaBlock.endTime)}</span></span><button type="button" onClick={() => openTargetForArea(selectedArea.id)}>{plannerBlockItems(planner, currentAreaBlock).length ? "Open block" : "Choose work"}<ArrowIcon /></button></div>}
-            <AreaWork key={selectedArea.id} occurrence={areaOccurrence} today={today} currentMinutes={currentMinutes} area={selectedArea} projects={projects} tasks={tasks} routines={routines} planner={planner} onPlannerChange={(next) => { commitPlanner(next); }} onTaskChange={onTaskChange} onRoutineSessionStatus={onRoutineSessionStatus} onDeleteRoutine={onDeleteRoutine} makeId={makeId} renderWork={renderWork} blockSettings={areaOccurrence && areaOccurrenceRule?.kind === "area" ? <AreaBlockSettings key={`${areaOccurrence.id}:${areaOccurrence.date}:${areaOccurrence.startTime}:${areaOccurrence.endTime}:${areaOccurrenceRule.fill}`} occurrence={areaOccurrence} rule={areaOccurrenceRule} onSave={(date, startTime, endTime, fill) => upsertOccurrenceException(areaOccurrence, date, startTime, endTime, fill)} onDelete={() => deleteOccurrence(areaOccurrence)} onAddAnother={() => openNewSeries(selectedArea.id, areaOccurrence.date, "area")} onEditSeries={() => setEditor({ kind: "series", ruleId: areaOccurrence.ruleId })} onOpenSettings={() => engageAreaBlockSettings(areaOccurrence.id)} onClose={backToArea} /> : null} />
+            <AreaWork key={selectedArea.id} occurrence={areaOccurrence} today={today} currentMinutes={currentMinutes} area={selectedArea} projects={projects} tasks={tasks} routines={routines} planner={planner} onPlannerChange={(next) => { commitPlanner(next); }} onTaskChange={onTaskChange} onRoutineSessionStatus={onRoutineSessionStatus} onDeleteRoutine={onDeleteRoutine} makeId={makeId} renderWork={renderWork} blockSettings={areaOccurrence && areaOccurrenceRule?.kind === "area" ? <AreaBlockSettings key={`${areaOccurrence.id}:${areaOccurrence.date}:${areaOccurrence.startTime}:${areaOccurrence.endTime}:${areaOccurrenceRule.fill}`} occurrence={areaOccurrence} rule={areaOccurrenceRule} returnLabel={blockReturnLabel} onSave={(date, startTime, endTime, fill) => upsertOccurrenceException(areaOccurrence, date, startTime, endTime, fill)} onDelete={() => deleteOccurrence(areaOccurrence)} onAddAnother={() => openNewSeries(selectedArea.id, areaOccurrence.date, "area")} onEditSeries={() => setEditor({ kind: "series", ruleId: areaOccurrence.ruleId })} onOpenSettings={() => engageAreaBlockSettings(areaOccurrence)} onClose={backToArea} /> : null} />
           </div>}
           {!editor && !selectedArea && <div className="planner-workbench-context planner-empty-workbench"><div className="planner-queue-empty"><strong>Create your first area.</strong><p>Areas give time blocks and work queues a durable home.</p></div><button type="button" onClick={() => setAreaCreatorOpen((open) => !open)} aria-expanded={areaCreatorOpen}>{areaCreatorOpen ? "Cancel" : "New area"}</button><Presence show={areaCreatorOpen} className="motion-collapse">{() => <form className="planner-area-create" onSubmit={createArea}><input value={areaName} onChange={(event) => setAreaName(event.target.value)} placeholder="Area name" aria-label="New area name" /><button type="submit" disabled={!areaName.trim()}>Create</button></form>}</Presence></div>}
         </div></aside>

@@ -332,9 +332,28 @@ export function isFinalRoutineSessionStatus(status) {
   return status === "completed" || status === "skipped" || status === "missed";
 }
 
-export function plannerBlockTarget(planner, areaId, today, currentMinutes, horizonDays = 90) {
-  const dates = Array.from({ length: horizonDays }, (_, index) => shiftPlannerDate(today, index));
-  const occurrences = materializeCalendarBlocks(planner, dates).filter((occurrence) => occurrence.kind === "area" && occurrence.areaId === areaId);
+export function plannerBlockTarget(planner, areaId, today, currentMinutes) {
+  const rules = planner.blockRules.filter((rule) => rule.kind === "area" && rule.areaId === areaId);
+  const ruleIds = new Set(rules.map((rule) => rule.id));
+  const exceptions = planner.blockExceptions.filter((exception) => ruleIds.has(exception.ruleId));
+  const exceptionKeys = new Set(exceptions.map((exception) => plannerOccurrenceId(exception.ruleId, exception.occurrenceDate)));
+  const dates = new Set();
+  for (const rule of rules) {
+    const startsOn = rule.effectiveOn > today ? rule.effectiveOn : today;
+    for (const weekday of rule.weekdays) {
+      let date = shiftPlannerDate(startsOn, (weekday - plannerWeekday(startsOn) + 7) % 7);
+      while ((!rule.endsOn || date <= rule.endsOn)
+        && (exceptionKeys.has(plannerOccurrenceId(rule.id, date))
+          || (date === today && plannerMinutes(rule.endTime) <= currentMinutes))) {
+        date = shiftPlannerDate(date, 7);
+      }
+      if (!rule.endsOn || date <= rule.endsOn) dates.add(date);
+    }
+  }
+  for (const exception of exceptions) {
+    if (exception.kind === "override" && exception.date >= today) dates.add(exception.date);
+  }
+  const occurrences = materializeCalendarBlocks({ ...planner, blockRules: rules, blockExceptions: exceptions }, [...dates]);
   const active = occurrences.find((occurrence) => occurrence.date === today
     && plannerMinutes(occurrence.startTime) <= currentMinutes
     && plannerMinutes(occurrence.endTime) > currentMinutes);
