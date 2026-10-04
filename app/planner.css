@@ -59,7 +59,8 @@
 .block-project-create-toggle svg,.block-work-finished>svg{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .block-project-create-toggle svg{transition:transform .16s ease-out}
 .block-project-create-toggle[aria-expanded="true"] svg{transform:rotate(45deg)}
-.block-work-finished{width:100%;min-height:44px;display:flex;align-items:center;gap:8px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--muted);padding:12px 4px;font-size:11px;font-weight:550;text-align:left;transition:color .16s ease-out}
+.block-work-filters{display:grid;gap:2px;min-width:0}
+.block-work-finished{width:100%;min-height:44px;display:flex;align-items:center;gap:8px;border:0;border-radius:7px;background:transparent;color:var(--muted);padding:10px 4px;font-size:11px;font-weight:550;text-align:left;transition:color .16s ease-out}
 .block-work-finished:hover,.block-work-finished[aria-checked="true"]{color:var(--forest)}
 .block-work-switch{width:30px;height:18px;flex:0 0 auto;position:relative;margin-left:auto;border:1px solid #b6c0b1;border-radius:20px;background:#e4e8de;transition:background .16s ease-out,border-color .16s ease-out}
 .block-work-switch:after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(23,61,51,.15);transition:transform .16s ease-out}
@@ -72,7 +73,7 @@
 .block-project-details textarea{min-height:80px;resize:vertical}
 .block-work-create button{flex-shrink:0;border:1px solid var(--forest);border-radius:8px;background:var(--forest);color:#fff;padding:8px 10px;font-size:12px;min-height:40px}
 .block-work-create button:disabled{opacity:.45;cursor:not-allowed}
-.block-work-list{display:grid;gap:8px;min-width:0}
+.block-work-list{display:grid;gap:8px;min-width:0;overflow-anchor:none}
 .block-task-create input{background:var(--panel);padding:8px 10px}
 .block-task-create button{border-color:var(--line);background:transparent;color:var(--forest)}
 .block-task-create button:not(:disabled):hover{border-color:var(--forest);background:var(--lime-soft)}
