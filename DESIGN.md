@@ -94,7 +94,7 @@ components:
 
 FocusHQ feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.
 
-This is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the contextual workbench becomes a drawer or content stacks.
+This is an Operate-mode system. Brand character lives in the concentric crosshair command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the contextual workbench becomes a drawer or content stacks.
 
 **Key Characteristics:**
 
@@ -103,7 +103,7 @@ This is an Operate-mode system. Brand character lives in the concentric-orbit co
 - Hierarchy-first lists with visible Edit, a compact saved-sort dropdown, due dates, priorities, and drag handles for manual ordering.
 - Compact Geist and Geist Mono typography, with rare Georgia editorial accents.
 - Restrained borders, selective ambient shadow, and generous buffer space.
-- A CSS-built concentric-orbit command mark paired with a compact single-line wordmark.
+- A shared SVG concentric crosshair command mark paired with a compact single-line wordmark.
 
 ## Colors
 
@@ -111,7 +111,7 @@ The palette is grounded and low-glare: deep forest provides structure, warm neut
 
 ### Primary
 
-- **Deep Forest:** The structural anchor for active navigation, primary actions, focus-bearing callouts, check controls, and the orbit mark.
+- **Deep Forest:** The structural anchor for active navigation, primary actions, focus-bearing callouts, check controls, and the crosshair mark.
 - **Forest Action:** A lighter forest reserved for hover feedback and secondary emphasis inside the green family.
 
 ### Secondary
@@ -168,12 +168,12 @@ At 980px and below, the contextual workbench becomes an overlay drawer with a di
 
 ## Elevation & Depth
 
-The system is flat and tonal by default. Warm paper, quiet panels, forest fields, and hairline borders establish most depth. Ambient shadows appear selectively on the forest day brief, orbit mark, overlay workbench, compact workspace menu, and toast—elements that float above the ordinary working plane or need temporary emphasis.
+The system is flat and tonal by default. Warm paper, quiet panels, forest fields, and hairline borders establish most depth. Ambient shadows appear selectively on the forest day brief, crosshair mark, overlay workbench, compact workspace menu, and toast—elements that float above the ordinary working plane or need temporary emphasis.
 
 ### Shadow Vocabulary
 
 - **Forest Ambient** (`0 14px 35px rgba(23,61,51,.14)`): The dark day brief only, giving one editorial panel a calm lift.
-- **Command Mark** (`0 8px 20px rgba(4,24,18,.18)`): The lime orbit tile in the top-bar identity lockup.
+- **Command Mark** (`0 8px 20px rgba(4,24,18,.18)`): The lime crosshair tile in the top-bar identity lockup.
 - **Drawer Lift** (`16px 0 40px rgba(16,30,25,.22)`): The contextual workbench while it overlays the calendar.
 - **Toast Lift** (`0 12px 30px rgba(18,31,26,.22)`): Temporary confirmation and undo feedback.
 
@@ -183,7 +183,7 @@ The system is flat and tonal by default. Warm paper, quiet panels, forest fields
 
 ## Shapes
 
-The form language is gently rounded and practical. Small controls use 7–10px corners, callouts use 12px, and primary panels use 14px. Hairline borders separate rows and define working surfaces; dashed borders belong only to empty states. Circles are reserved for check controls, drag-handle dots, and the concentric-orbit identity mark.
+The form language is gently rounded and practical. Small controls use 7–10px corners, callouts use 12px, and primary panels use 14px. Hairline borders separate rows and define working surfaces; dashed borders belong only to empty states. Circles are reserved for check controls, drag-handle dots, and the concentric crosshair identity mark.
 
 **The Nested Radius Rule.** Smaller controls sit inside larger surfaces with visibly tighter corners; do not give every object the same radius.
 
@@ -240,7 +240,7 @@ Project notes form a lightweight working board below the task workflow. A center
 
 ### Command Mark
 
-The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is paired with the compact single-line FocusHQ wordmark in the desktop top bar.
+The signature mark is a 34px signal-lime tile with 10px corners, four concentric forest rings, a hollow center, four cardinal crosshair ticks, and an offset signal dot. The canonical vector is `public/favicon.svg`; the app and plugin inline the same SVG, and social and plugin identity assets use the same geometry. It is paired with the compact single-line FocusHQ wordmark in the desktop top bar.
 
 ## Do's and Don'ts
 
@@ -253,7 +253,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Do** use the shared New block editor for both area work and protected no-area time.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
-- **Do** preserve the concentric-orbit mark and compact single-line FocusHQ wordmark as the core identity lockup.
+- **Do** preserve the concentric crosshair mark and compact single-line FocusHQ wordmark as the core identity lockup.
 
 ### Don't:
 

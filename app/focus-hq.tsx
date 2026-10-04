@@ -18,6 +18,7 @@ import { currentRoutineSession, isRoutineSuspended, normalizeRoutines, reconcile
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "./task-schema.mjs";
 import { isTaskSort, sortTasks } from "./task-sorting.mjs";
 import { currentWeekKey, emptyWeeklyReview, normalizeWeeklyReview } from "./workspace-guidance.mjs";
+import logoMark from "../public/favicon.svg?raw";
 
 type Area = { id: string; name: string; icon: AreaIconName };
 type ProjectNote = { id: string; title: string; body: string; pinned: boolean; createdAt: number; updatedAt: number };
@@ -1127,7 +1128,7 @@ export default function FocusHQ({ client = browserWorkspaceClient }: { client?: 
 }
 
 function LogoMark() {
-  return <span className="brand-mark" aria-hidden="true"><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-core" /><span className="orbit-signal" /></span>;
+  return <span className="brand-mark" aria-hidden="true" dangerouslySetInnerHTML={{ __html: logoMark }} />;
 }
 
 function MenuIcon() {

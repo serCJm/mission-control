@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://focushq.work"),
   openGraph: { title: "FocusHQ", siteName: "FocusHQ", description: "Direct the work that matters.", images: [{ url: "/focushq-og.png", width: 1536, height: 1024, alt: "FocusHQ — Direct the work that matters" }] },
   twitter: { card: "summary_large_image", title: "FocusHQ", description: "Direct the work that matters.", images: ["/focushq-og.png"] },
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: "/favicon.svg?v=crosshair" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

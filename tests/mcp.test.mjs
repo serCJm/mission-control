@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import { build } from 'esbuild';
 import { Miniflare } from 'miniflare';
 import { createStarterWorkspace } from '../app/starter-workspace.mjs';
@@ -9,7 +9,7 @@ let mf, db, workspaceStore, handleMcpRequest, UI_URI, MAX_MCP_REQUEST_BYTES;
 const output = new URL(`../output/mcp-test-${process.pid}/`, import.meta.url);
 before(async () => {
   await mkdir(output, { recursive: true });
-  await build({ stdin: { contents: 'export * from "./app/mcp/server.ts"; export * from "./app/workspace-store.ts";', resolveDir: process.cwd() }, outfile: new URL('server.mjs', output).pathname, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+  await build({ stdin: { contents: 'export * from "./app/mcp/server.ts"; export * from "./app/workspace-store.ts";', resolveDir: process.cwd() }, outfile: new URL('server.mjs', output).pathname, bundle: true, platform: 'node', format: 'esm', packages: 'external', loader: { '.svg': 'text' } });
   ({ workspaceStore, handleMcpRequest, UI_URI, MAX_MCP_REQUEST_BYTES } = await import(new URL('server.mjs', output)));
   mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response("test"); } }', compatibilityDate: '2026-08-01', d1Databases: ['DB'] });
   db = await mf.getD1Database('DB');
@@ -25,7 +25,8 @@ async function call(name, args = {}, user) { return (await rpc('tools/call', { n
 test('discovery advertises sidebar and conversation extensions without private data', async () => {
   const init = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } }, null);
   assert.equal(init.status, 200);
-  assert.deepEqual(init.body.result.serverInfo, { name: 'focushq', title: 'FocusHQ', version: '2.1.0' });
+  const brandMark = await readFile(new URL('../public/favicon.svg', import.meta.url), 'utf8');
+  assert.deepEqual(init.body.result.serverInfo, { name: 'focushq', title: 'FocusHQ', version: '2.1.1', icons: [{ src: `data:image/svg+xml,${encodeURIComponent(brandMark)}`, mimeType: 'image/svg+xml', sizes: ['any'] }] });
   const { body } = await rpc('tools/list', {}, null);
   assert.equal(body.result.tools.length, 8);
   assert.deepEqual(body.result.tools.find((tool) => tool.name === 'save_workspace')._meta.ui.visibility, ['app']);
@@ -33,7 +34,7 @@ test('discovery advertises sidebar and conversation extensions without private d
   assert.equal(open.title, 'Open FocusHQ');
   assert.deepEqual(open._meta['openai/ui'].entrypoints, [{ type: 'global' }, { type: 'thread' }]);
   assert.equal(open._meta.ui.resourceUri, UI_URI);
-  assert.equal(UI_URI, 'ui://focushq/workspace-v2.1.0.html');
+  assert.equal(UI_URI, 'ui://focushq/workspace-v2.1.1.html');
   const resources = (await rpc('resources/list', {}, null)).body.result.resources;
   assert.deepEqual(resources.map(({ name, uri }) => ({ name, uri })), [{ name: 'focushq-workspace', uri: UI_URI }]);
   const resource = (await rpc('resources/read', { uri: UI_URI }, null)).body.result.contents[0];

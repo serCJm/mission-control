@@ -2,10 +2,11 @@ import { createRoot } from "react-dom/client";
 import { App } from "@modelcontextprotocol/ext-apps";
 import FocusHQ from "../app/focus-hq";
 import { WorkspaceClientError, type WorkspaceClient, type WorkspaceSnapshot } from "../app/workspace-client";
+import brandMark from "../public/favicon.svg?raw";
 import "../app/globals.css";
 import "../app/interface.css";
 
-const bridge = new App({ name: "FocusHQ", version: "2.1.0" }, {});
+const bridge = new App({ name: "FocusHQ", version: "2.1.1", icons: [{ src: `data:image/svg+xml,${encodeURIComponent(brandMark)}`, mimeType: "image/svg+xml", sizes: ["any"] }] }, {});
 const listeners = new Set<() => void>();
 bridge.ontoolresult = () => { for (const refresh of listeners) refresh(); };
 
