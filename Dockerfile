@@ -13,9 +13,9 @@ RUN mkdir node_modules/.package-snapshots && \
     cp package.json package-lock.json node_modules/.package-snapshots
 
 COPY --chown=node:node . .
-COPY --chown=node:node docker/entrypoint.sh /usr/local/lib/mission-control-entrypoint.sh
+COPY --chown=node:node docker/entrypoint.sh /usr/local/lib/focushq-entrypoint.sh
 
 EXPOSE 3000
 
-ENTRYPOINT ["sh", "/usr/local/lib/mission-control-entrypoint.sh"]
+ENTRYPOINT ["sh", "/usr/local/lib/focushq-entrypoint.sh"]
 CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0"]

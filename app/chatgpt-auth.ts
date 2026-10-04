@@ -27,7 +27,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     return {
       userId: "local-development",
       displayName: "Local developer",
-      email: "local@mission-control.test",
+      email: "local@focushq.test",
       fullName: "Local developer",
     };
   }

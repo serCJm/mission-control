@@ -1,4 +1,4 @@
-# Mission Control
+# FocusHQ
 
 A calm, full-stack workspace for organizing areas, projects, and the few tasks
 that matter most. It runs on [vinext](https://github.com/cloudflare/vinext),
@@ -33,7 +33,7 @@ docker-compose run --rm app npm install <package>
 
 This project does not use `wrangler.jsonc`.
 
-`.openai/hosting.json` identifies the existing Mission Control Site. Preserve its
+`.openai/hosting.json` identifies the existing FocusHQ Site. Preserve its
 `project_id` when publishing updates so the app and plugin keep the same data.
 
 ## Included Shape
@@ -130,13 +130,13 @@ Streamable HTTP MCP endpoint at `/mcp`. Sites provisions the private plugin and
 manages OAuth. Install or connect the Site's plugin through ChatGPT's **Plugins →
 Personal → Created by you**. Do not create a second local MCP connection.
 
-`open_mission_control` provides sidebar and conversation-panel entrypoints.
-The website and extension render the same `app/mission-control.tsx` component and
+`open_focushq` provides sidebar and conversation-panel entrypoints.
+The website and extension render the same `app/focus-hq.tsx` component and
 styles, including the calendar, areas, projects, tasks, notes, routines, and weekly
 review. The existing responsive layout adapts to a conversation panel or fullscreen.
 Chat tools also support creating/editing projects and project notes:
 
-- `get_workspace`, `open_mission_control`
+- `get_workspace`, `open_focushq`
 - `create_task`, `update_task`
 - `create_project`, `update_project`, `save_project_note`
 
@@ -152,6 +152,8 @@ On a save conflict, the unsaved workspace is retained in localStorage under a
 timestamped `mission-control-conflict-` key before prompting a reload. If the host
 blocks local storage, the interface tells the user to copy their edits first.
 These recovery copies are never automatically deleted or uploaded over newer data.
+The original `mission-control-*` browser-storage identifiers stay unchanged so
+the FocusHQ rename preserves cached workspaces, view preferences, and recovery copies.
 
 The UI uses the official MCP Apps bridge, with no direct API calls or credentials
 in the iframe. `npm run build` and `npm run dev` generate its self-contained HTML

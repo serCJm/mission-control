@@ -8,11 +8,11 @@ web
 
 ## Users
 
-Mission Control is a solo personal planning system for one person balancing trading, learning, family, and business or life administration. The user plans in broad areas, chooses a small field of consequential work, and needs the system to stay useful when reality changes.
+FocusHQ is a solo personal planning system for one person balancing trading, learning, family, and business or life administration. The user plans in broad areas, chooses a small field of consequential work, and needs the system to stay useful when reality changes.
 
 ## Product Purpose
 
-Mission Control connects areas, outcome-oriented projects, concrete tasks, recurring practices, weekly review, and a flexible calendar. Success means the user can decide what deserves attention, protect time for it, and adjust the plan without maintaining a second system.
+FocusHQ connects areas, outcome-oriented projects, concrete tasks, recurring practices, weekly review, and a flexible calendar. Success means the user can decide what deserves attention, protect time for it, and adjust the plan without maintaining a second system.
 
 ## Positioning
 
@@ -40,7 +40,7 @@ The product treats time as broad area ownership first, then places projects and 
 
 ## Brand Commitments
 
-Mission Control is a calm operations desk: warm paper, sober forest structure, scarce lime signal, precise operational language, and enough visual space to absorb change.
+FocusHQ is a calm operations desk: warm paper, sober forest structure, scarce lime signal, precise operational language, and enough visual space to absorb change.
 
 ## Evidence on Hand
 

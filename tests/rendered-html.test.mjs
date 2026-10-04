@@ -10,7 +10,7 @@ import { isTaskSort, sortTasks } from "../app/task-sorting.mjs";
 import { isTaskStatus, normalizeTaskNotes, taskPlacementForDestination } from "../app/task-schema.mjs";
 import { currentWeekKey, emptyWeeklyReview, normalizeWeeklyReview } from "../app/workspace-guidance.mjs";
 
-const page = readFileSync(new URL("../app/mission-control.tsx", import.meta.url), "utf8");
+const page = readFileSync(new URL("../app/focus-hq.tsx", import.meta.url), "utf8");
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const presence = readFileSync(new URL("../app/presence.tsx", import.meta.url), "utf8");
 const plannerView = readFileSync(new URL("../app/planner.tsx", import.meta.url), "utf8");
@@ -949,9 +949,9 @@ test("server-renders a lightweight sync gate", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Mission Control/);
+  assert.match(html, /FocusHQ/);
   assert.match(html, /Loading your workspace/);
-  assert.match(html, /Connecting to your saved Mission Control data/);
+  assert.match(html, /Connecting to your saved FocusHQ data/);
   assert.ok(Buffer.byteLength(html) < 20_000, "the loading response should not contain the hidden workspace UI");
   assert.doesNotMatch(html, /Workbench queues|All projects|as="font"|\/Users\//);
 });

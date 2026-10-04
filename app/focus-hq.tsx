@@ -245,7 +245,7 @@ function mergePendingChecklist(session: RoutineSession, checklist: RoutineCheckl
   return { ...session, checklist: checklist.map((item) => ({ ...item, checked: checked.get(item.id) ?? false })) };
 }
 
-export default function MissionControl({ client = browserWorkspaceClient }: { client?: WorkspaceClient }) {
+export default function FocusHQ({ client = browserWorkspaceClient }: { client?: WorkspaceClient }) {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [selection, setSelection] = useState<Selection>({ kind: "today" });
   const [plannerSession, setPlannerSession] = useState<PlannerSessionState>(() => {
@@ -531,7 +531,7 @@ export default function MissionControl({ client = browserWorkspaceClient }: { cl
   }, [cloudReady, selection]);
 
   if (!cloudReady) {
-    return <div className="app-shell"><div className="sync-gate" role="status"><LogoMark /><h1>{syncState === "loading" ? "Loading your workspace…" : "Your workspace could not sync."}</h1><p>{syncState === "loading" ? "Connecting to your saved Mission Control data." : "Your device data is still untouched. Try the connection again."}</p>{syncState === "error" && <button onClick={retrySync}>Try again</button>}</div></div>;
+    return <div className="app-shell"><div className="sync-gate" role="status"><LogoMark /><h1>{syncState === "loading" ? "Loading your workspace…" : "Your workspace could not sync."}</h1><p>{syncState === "loading" ? "Connecting to your saved FocusHQ data." : "Your device data is still untouched. Try the connection again."}</p>{syncState === "error" && <button onClick={retrySync}>Try again</button>}</div></div>;
   }
 
   const activeArea = selection.kind === "area"
@@ -1095,7 +1095,7 @@ export default function MissionControl({ client = browserWorkspaceClient }: { cl
       <main>
         <header className="topbar">
           <div className="topbar-identity">
-            <button className="topbar-brand" onClick={() => navigate({ kind: "today" })} aria-label="Mission Control home"><LogoMark /><span className="brand-name"><strong>Mission</strong><span>Control</span></span></button>
+            <button className="topbar-brand" onClick={() => navigate({ kind: "today" })} aria-label="FocusHQ home"><LogoMark /><span className="brand-name"><strong>FocusHQ</strong></span></button>
             <nav className="topbar-nav" aria-label="Workspace">
               <button className={selection.kind === "today" ? "active" : ""} onClick={() => navigate({ kind: "today" })}>Today</button>
               <button className={selection.kind === "inbox" ? "active" : ""} onClick={() => navigate({ kind: "inbox" })}>Inbox <small>{inboxTasks.length}</small></button>

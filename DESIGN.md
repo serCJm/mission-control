@@ -1,5 +1,5 @@
 ---
-name: Mission Control
+name: FocusHQ
 description: A calm operations desk for directing the work that matters.
 colors:
   deep-forest: "#173d33"
@@ -86,13 +86,13 @@ components:
     padding: "10px 11px"
 ---
 
-# Design System: Mission Control
+# Design System: FocusHQ
 
 ## Overview
 
 **Creative North Star: "The Quiet Operations Desk"**
 
-Mission Control feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.
+FocusHQ feels like a well-kept desk beside a forest window: warm paper, sober green structure, and just enough signal color to direct attention. It is calm without becoming passive. The interface favors hierarchy, consequence, and readable work queues over decorative density, so users can decide and act without fighting the tool.
 
 This is an Operate-mode system. Brand character lives in the concentric-orbit command mark, compact wordmark, exact type hierarchy, and editorial moments—not in ornamental page furniture. Lists expose their practical controls, panels remain quiet, and responsive behavior preserves every action when the contextual workbench becomes a drawer or content stacks.
 
@@ -103,7 +103,7 @@ This is an Operate-mode system. Brand character lives in the concentric-orbit co
 - Hierarchy-first lists with visible Edit, a compact saved-sort dropdown, due dates, priorities, and drag handles for manual ordering.
 - Compact Geist and Geist Mono typography, with rare Georgia editorial accents.
 - Restrained borders, selective ambient shadow, and generous buffer space.
-- A CSS-built concentric-orbit command mark paired with a compact two-line wordmark.
+- A CSS-built concentric-orbit command mark paired with a compact single-line wordmark.
 
 ## Colors
 
@@ -212,7 +212,7 @@ The form language is gently rounded and practical. Small controls use 7–10px c
 
 ### Navigation
 
-The top bar pairs the Mission Control identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with Area management: one area selector, projects, tasks, and project notes are available before any block is scheduled. Without an explicit block selection, the area's active block or next upcoming block opens its queue and task-assignment controls automatically, even when empty and regardless of the calendar day or week on screen. A compact single-line header pairs the block's date and time with an accessible Block settings icon button. Selecting a different block adds a return control for the current or next block. Schedule lists the area's blocks, and unscheduled areas do not show a scheduling prompt. A calendar icon beside the area workspace and add-area controls toggles the inline schedule, with New block inside that section. The icon has a Schedule tooltip and a visible expanded state. Opening a calendar block adds its selected actions inside this same area workbench. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
+The top bar pairs the FocusHQ identity with compact Today, Inbox, and Review destinations. Active navigation uses a deep forest field with white text; inactive destinations sit on a quiet neutral surface. The contextual workbench starts with Area management: one area selector, projects, tasks, and project notes are available before any block is scheduled. Without an explicit block selection, the area's active block or next upcoming block opens its queue and task-assignment controls automatically, even when empty and regardless of the calendar day or week on screen. A compact single-line header pairs the block's date and time with an accessible Block settings icon button. Selecting a different block adds a return control for the current or next block. Schedule lists the area's blocks, and unscheduled areas do not show a scheduling prompt. A calendar icon beside the area workspace and add-area controls toggles the inline schedule, with New block inside that section. The icon has a Schedule tooltip and a visible expanded state. Opening a calendar block adds its selected actions inside this same area workbench. Below 920px, global destinations move into a compact anchored menu while the workbench remains the only drawer.
 
 ### Calendar Blocks
 
@@ -240,7 +240,7 @@ Project notes form a lightweight working board below the task workflow. A center
 
 ### Command Mark
 
-The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is paired with the compact two-line Mission Control wordmark in the desktop top bar.
+The signature mark is a 34px signal-lime tile with 10px corners, two fine concentric forest rings, a central core, and an offset signal dot. It is built in CSS, not rendered as a generic icon, and is paired with the compact single-line FocusHQ wordmark in the desktop top bar.
 
 ## Do's and Don'ts
 
@@ -253,7 +253,7 @@ The signature mark is a 34px signal-lime tile with 10px corners, two fine concen
 - **Do** use the shared New block editor for both area work and protected no-area time.
 - **Do** use signal lime sparingly for identity, status, and consequential cues.
 - **Do** keep touch actions at least 44px tall in compact list layouts.
-- **Do** preserve the concentric-orbit mark and compact two-line Mission Control wordmark as the core identity lockup.
+- **Do** preserve the concentric-orbit mark and compact single-line FocusHQ wordmark as the core identity lockup.
 
 ### Don't:
 

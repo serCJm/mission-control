@@ -17,7 +17,7 @@ before(async () => {
 });
 after(async () => { await mf?.dispose(); await rm(output, { recursive: true, force: true }); });
 async function rpc(method, params = {}, user = 'alice') {
-  const response = await handleMcpRequest(new Request('https://example.test/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }), user ? async () => workspaceStore(db, user) : null, '<html>Mission Control</html>');
+  const response = await handleMcpRequest(new Request('https://example.test/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }), user ? async () => workspaceStore(db, user) : null, '<html>FocusHQ</html>');
   return { status: response.status, body: await response.json() };
 }
 async function call(name, args = {}, user) { return (await rpc('tools/call', { name, arguments: args }, user)).body.result; }
@@ -25,14 +25,20 @@ async function call(name, args = {}, user) { return (await rpc('tools/call', { n
 test('discovery advertises sidebar and conversation extensions without private data', async () => {
   const init = await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } }, null);
   assert.equal(init.status, 200);
-  assert.equal(init.body.result.serverInfo.name, 'mission-control');
+  assert.deepEqual(init.body.result.serverInfo, { name: 'focushq', title: 'FocusHQ', version: '2.1.0' });
   const { body } = await rpc('tools/list', {}, null);
   assert.equal(body.result.tools.length, 8);
   assert.deepEqual(body.result.tools.find((tool) => tool.name === 'save_workspace')._meta.ui.visibility, ['app']);
-  const open = body.result.tools.find((tool) => tool.name === 'open_mission_control');
+  const open = body.result.tools.find((tool) => tool.name === 'open_focushq');
+  assert.equal(open.title, 'Open FocusHQ');
   assert.deepEqual(open._meta['openai/ui'].entrypoints, [{ type: 'global' }, { type: 'thread' }]);
   assert.equal(open._meta.ui.resourceUri, UI_URI);
-  assert.equal((await rpc('resources/read', { uri: UI_URI }, null)).body.result.contents[0].mimeType, 'text/html;profile=mcp-app');
+  assert.equal(UI_URI, 'ui://focushq/workspace-v2.1.0.html');
+  const resources = (await rpc('resources/list', {}, null)).body.result.resources;
+  assert.deepEqual(resources.map(({ name, uri }) => ({ name, uri })), [{ name: 'focushq-workspace', uri: UI_URI }]);
+  const resource = (await rpc('resources/read', { uri: UI_URI }, null)).body.result.contents[0];
+  assert.equal(resource.mimeType, 'text/html;profile=mcp-app');
+  assert.equal(resource.text, '<html>FocusHQ</html>');
   assert.equal((await rpc('tools/call', { name: 'get_workspace', arguments: {} }, null)).status, 401);
 });
 

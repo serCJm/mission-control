@@ -1,5 +1,5 @@
-import MissionControl from "./mission-control";
+import FocusHQ from "./focus-hq";
 
 export default function Home() {
-  return <MissionControl />;
+  return <FocusHQ />;
 }

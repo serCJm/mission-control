@@ -2,7 +2,7 @@
 
 ## Job and audience
 
-A solo Mission Control user opens Today to see the shape of the week, protect broad area time, and choose the next meaningful action without maintaining a second planning queue. This is an Operate surface used repeatedly throughout the day and lightly during weekly shaping.
+A solo FocusHQ user opens Today to see the shape of the week, protect broad area time, and choose the next meaningful action without maintaining a second planning queue. This is an Operate surface used repeatedly throughout the day and lightly during weekly shaping.
 
 ## Outcome and proof
 

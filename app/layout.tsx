@@ -3,11 +3,11 @@ import "./globals.css";
 import "./interface.css";
 
 export const metadata: Metadata = {
-  title: "Mission Control — Direct the work that matters",
+  title: "FocusHQ — Direct the work that matters",
   description: "Organize, rename, sort, and reorder areas, projects, and tasks from one focused command center.",
-  metadataBase: new URL("https://bearing-weekly.scjmoro.chatgpt.site"),
-  openGraph: { title: "Mission Control", description: "Direct the work that matters.", images: [{ url: "/og.png", width: 1536, height: 1024 }] },
-  twitter: { card: "summary_large_image", title: "Mission Control", description: "Direct the work that matters.", images: ["/og.png"] },
+  metadataBase: new URL("https://focushq.work"),
+  openGraph: { title: "FocusHQ", siteName: "FocusHQ", description: "Direct the work that matters.", images: [{ url: "/focushq-og.png", width: 1536, height: 1024, alt: "FocusHQ — Direct the work that matters" }] },
+  twitter: { card: "summary_large_image", title: "FocusHQ", description: "Direct the work that matters.", images: ["/focushq-og.png"] },
   icons: { icon: "/favicon.svg" },
 };
 
