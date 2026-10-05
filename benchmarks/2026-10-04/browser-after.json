@@ -1,0 +1,404 @@
+{
+  "generatedAt": "2026-10-05T04:20:26.971Z",
+  "browser": "153.0.8010.12",
+  "iterations": 5,
+  "description": "Production React component lab with synthetic in-memory workspaces. No network or D1 latency; CPU throttling is emulation, not real mobile hardware. Timings are click-to-two-animation-frames, not field INP.",
+  "assets": [
+    {
+      "name": "app.js",
+      "bytes": 573920,
+      "gzipBytes": 176446
+    },
+    {
+      "name": "app.css",
+      "bytes": 154068,
+      "gzipBytes": 26887
+    }
+  ],
+  "results": [
+    {
+      "profile": "desktop",
+      "size": "small",
+      "tasks": 100,
+      "inboxTasks": 30,
+      "cpuRate": 1,
+      "summary": {
+        "readyMs": {
+          "median": 161.7,
+          "p95": 165.7
+        },
+        "inboxMs": {
+          "median": 72.4,
+          "p95": 103.5
+        },
+        "togglePaintMs": {
+          "median": 33.4,
+          "p95": 39.5
+        },
+        "toggleScriptMs": {
+          "median": 8.84,
+          "p95": 11.98
+        },
+        "toggleLayoutMs": {
+          "median": 1.89,
+          "p95": 2.1
+        },
+        "intlConstructors": {
+          "median": 9,
+          "p95": 9
+        },
+        "elements": {
+          "median": 1116,
+          "p95": 1116
+        }
+      },
+      "idle": {
+        "durationMs": 4000,
+        "geometryReads": 64,
+        "observerCreates": 64,
+        "taskMs": 68.69999999999999
+      },
+      "samples": [
+        {
+          "readyMs": 165.69999980926514,
+          "inboxMs": 89.09999990463257,
+          "togglePaintMs": 33.40000009536743,
+          "toggleScriptMs": 7.977999999999999,
+          "toggleLayoutMs": 1.8900000000000028,
+          "intlConstructors": 9,
+          "elements": 1116,
+          "idle": {
+            "durationMs": 4000,
+            "geometryReads": 64,
+            "observerCreates": 64,
+            "taskMs": 68.69999999999999
+          }
+        },
+        {
+          "readyMs": 165.2000002861023,
+          "inboxMs": 103.5,
+          "togglePaintMs": 28,
+          "toggleScriptMs": 8.839,
+          "toggleLayoutMs": 0.7699999999999998,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 155.40000009536743,
+          "inboxMs": 72.40000009536743,
+          "togglePaintMs": 31.90000009536743,
+          "toggleScriptMs": 11.982999999999993,
+          "toggleLayoutMs": 1.9890000000000012,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 156.2999997138977,
+          "inboxMs": 66.09999990463257,
+          "togglePaintMs": 39.5,
+          "toggleScriptMs": 10.508000000000003,
+          "toggleLayoutMs": 2.0960000000000005,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 161.69999980926514,
+          "inboxMs": 42.09999990463257,
+          "togglePaintMs": 33.5,
+          "toggleScriptMs": 6.379000000000009,
+          "toggleLayoutMs": 1.564000000000003,
+          "intlConstructors": 9,
+          "elements": 1116
+        }
+      ]
+    },
+    {
+      "profile": "desktop",
+      "size": "large",
+      "tasks": 1000,
+      "inboxTasks": 300,
+      "cpuRate": 1,
+      "summary": {
+        "readyMs": {
+          "median": 212,
+          "p95": 242.3
+        },
+        "inboxMs": {
+          "median": 175.2,
+          "p95": 191.4
+        },
+        "togglePaintMs": {
+          "median": 48.1,
+          "p95": 52
+        },
+        "toggleScriptMs": {
+          "median": 20.03,
+          "p95": 21
+        },
+        "toggleLayoutMs": {
+          "median": 2.68,
+          "p95": 2.96
+        },
+        "intlConstructors": {
+          "median": 9,
+          "p95": 9
+        },
+        "elements": {
+          "median": 10566,
+          "p95": 10566
+        }
+      },
+      "idle": {
+        "durationMs": 4000,
+        "geometryReads": 614,
+        "observerCreates": 614,
+        "taskMs": 450.368
+      },
+      "samples": [
+        {
+          "readyMs": 212,
+          "inboxMs": 191.40000009536743,
+          "togglePaintMs": 43.30000019073486,
+          "toggleScriptMs": 21.004000000000023,
+          "toggleLayoutMs": 2.9560000000000004,
+          "intlConstructors": 9,
+          "elements": 10566,
+          "idle": {
+            "durationMs": 4000,
+            "geometryReads": 614,
+            "observerCreates": 614,
+            "taskMs": 450.368
+          }
+        },
+        {
+          "readyMs": 242.30000019073486,
+          "inboxMs": 164.30000019073486,
+          "togglePaintMs": 42,
+          "toggleScriptMs": 18.512,
+          "toggleLayoutMs": 2.9620000000000064,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 214.2000002861023,
+          "inboxMs": 175.19999980926514,
+          "togglePaintMs": 48.09999990463257,
+          "toggleScriptMs": 20.086999999999993,
+          "toggleLayoutMs": 2.488000000000004,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 207.90000009536743,
+          "inboxMs": 175.80000019073486,
+          "togglePaintMs": 52,
+          "toggleScriptMs": 17.381000000000007,
+          "toggleLayoutMs": 2.451000000000002,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 206.59999990463257,
+          "inboxMs": 171.40000009536743,
+          "togglePaintMs": 50.09999990463257,
+          "toggleScriptMs": 20.025000000000016,
+          "toggleLayoutMs": 2.681999999999997,
+          "intlConstructors": 9,
+          "elements": 10566
+        }
+      ]
+    },
+    {
+      "profile": "mobile-4x",
+      "size": "small",
+      "tasks": 100,
+      "inboxTasks": 30,
+      "cpuRate": 4,
+      "summary": {
+        "readyMs": {
+          "median": 399.1,
+          "p95": 485.7
+        },
+        "inboxMs": {
+          "median": 145.2,
+          "p95": 146.7
+        },
+        "togglePaintMs": {
+          "median": 42.2,
+          "p95": 44.7
+        },
+        "toggleScriptMs": {
+          "median": 11.6,
+          "p95": 13.38
+        },
+        "toggleLayoutMs": {
+          "median": 1.29,
+          "p95": 1.6
+        },
+        "intlConstructors": {
+          "median": 9,
+          "p95": 9
+        },
+        "elements": {
+          "median": 1116,
+          "p95": 1116
+        }
+      },
+      "idle": {
+        "durationMs": 4000,
+        "geometryReads": 64,
+        "observerCreates": 64,
+        "taskMs": 26.971999999999994
+      },
+      "samples": [
+        {
+          "readyMs": 395.59999990463257,
+          "inboxMs": 145.2000002861023,
+          "togglePaintMs": 44.59999990463257,
+          "toggleScriptMs": 10.392999999999986,
+          "toggleLayoutMs": 1.6030000000000073,
+          "intlConstructors": 9,
+          "elements": 1116,
+          "idle": {
+            "durationMs": 4000,
+            "geometryReads": 64,
+            "observerCreates": 64,
+            "taskMs": 26.971999999999994
+          }
+        },
+        {
+          "readyMs": 485.7000002861023,
+          "inboxMs": 146.7000002861023,
+          "togglePaintMs": 44.69999980926514,
+          "toggleScriptMs": 12.288999999999994,
+          "toggleLayoutMs": 0.22800000000000598,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 396.40000009536743,
+          "inboxMs": 144.39999961853027,
+          "togglePaintMs": 39.89999961853027,
+          "toggleScriptMs": 13.37900000000003,
+          "toggleLayoutMs": 1.3750000000000013,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 404.19999980926514,
+          "inboxMs": 146.69999980926514,
+          "togglePaintMs": 42.19999980926514,
+          "toggleScriptMs": 11.604999999999976,
+          "toggleLayoutMs": 1.2869999999999964,
+          "intlConstructors": 9,
+          "elements": 1116
+        },
+        {
+          "readyMs": 399.09999990463257,
+          "inboxMs": 143.5,
+          "togglePaintMs": 27.899999618530273,
+          "toggleScriptMs": 9.805000000000009,
+          "toggleLayoutMs": 1.0380000000000111,
+          "intlConstructors": 9,
+          "elements": 1116
+        }
+      ]
+    },
+    {
+      "profile": "mobile-4x",
+      "size": "large",
+      "tasks": 1000,
+      "inboxTasks": 300,
+      "cpuRate": 4,
+      "summary": {
+        "readyMs": {
+          "median": 697.8,
+          "p95": 734.5
+        },
+        "inboxMs": {
+          "median": 550.9,
+          "p95": 584.5
+        },
+        "togglePaintMs": {
+          "median": 90.4,
+          "p95": 118.7
+        },
+        "toggleScriptMs": {
+          "median": 59.16,
+          "p95": 72.49
+        },
+        "toggleLayoutMs": {
+          "median": 4.27,
+          "p95": 5.38
+        },
+        "intlConstructors": {
+          "median": 9,
+          "p95": 9
+        },
+        "elements": {
+          "median": 10566,
+          "p95": 10566
+        }
+      },
+      "idle": {
+        "durationMs": 4000,
+        "geometryReads": 604,
+        "observerCreates": 604,
+        "taskMs": 107.67000000000016
+      },
+      "samples": [
+        {
+          "readyMs": 697.8000001907349,
+          "inboxMs": 584.5,
+          "togglePaintMs": 88.80000019073486,
+          "toggleScriptMs": 60.39800000000006,
+          "toggleLayoutMs": 3.0179999999999927,
+          "intlConstructors": 9,
+          "elements": 10566,
+          "idle": {
+            "durationMs": 4000,
+            "geometryReads": 604,
+            "observerCreates": 604,
+            "taskMs": 107.67000000000016
+          }
+        },
+        {
+          "readyMs": 734.5,
+          "inboxMs": 551.5,
+          "togglePaintMs": 93,
+          "toggleScriptMs": 56.28500000000003,
+          "toggleLayoutMs": 4.269999999999996,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 673.8000001907349,
+          "inboxMs": 546.2000002861023,
+          "togglePaintMs": 90.40000009536743,
+          "toggleScriptMs": 46.560999999999964,
+          "toggleLayoutMs": 4.360000000000003,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 666.1000003814697,
+          "inboxMs": 518.2000002861023,
+          "togglePaintMs": 118.7000002861023,
+          "toggleScriptMs": 72.48999999999994,
+          "toggleLayoutMs": 5.380000000000024,
+          "intlConstructors": 9,
+          "elements": 10566
+        },
+        {
+          "readyMs": 730.4000000953674,
+          "inboxMs": 550.9000000953674,
+          "togglePaintMs": 84.09999990463257,
+          "toggleScriptMs": 59.163999999999994,
+          "toggleLayoutMs": 3.1829999999999914,
+          "intlConstructors": 9,
+          "elements": 10566
+        }
+      ]
+    }
+  ]
+}

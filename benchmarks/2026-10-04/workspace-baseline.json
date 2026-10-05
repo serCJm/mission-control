@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-10-05T04:13:16.158Z",
+  "runtime": "v22.23.2",
+  "environment": "Node handler with in-memory Miniflare D1; excludes authentication, network and edge latency",
+  "iterations": 60,
+  "warmups": 10,
+  "persistence": false,
+  "results": [
+    {
+      "name": "starter",
+      "tasks": 8,
+      "storedBytes": 4649,
+      "responseBytes": 4757,
+      "timings": {
+        "databaseRead": {
+          "medianMs": 20.998,
+          "p95Ms": 27.715
+        },
+        "parseAndValidate": {
+          "medianMs": 0.11,
+          "p95Ms": 0.46
+        },
+        "fullGet": {
+          "medianMs": 16.772,
+          "p95Ms": 23.278
+        },
+        "unchangedGet": {
+          "medianMs": 16.603,
+          "p95Ms": 26.64
+        }
+      }
+    },
+    {
+      "name": "large",
+      "tasks": 2000,
+      "storedBytes": 1482145,
+      "responseBytes": 1482253,
+      "timings": {
+        "databaseRead": {
+          "medianMs": 69.639,
+          "p95Ms": 111.237
+        },
+        "parseAndValidate": {
+          "medianMs": 2.874,
+          "p95Ms": 6.974
+        },
+        "fullGet": {
+          "medianMs": 74.345,
+          "p95Ms": 126.433
+        },
+        "unchangedGet": {
+          "medianMs": 81.091,
+          "p95Ms": 132.416
+        }
+      }
+    }
+  ]
+}

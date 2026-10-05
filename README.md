@@ -111,8 +111,25 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `docker-compose run --rm app npm run build`: verify the vinext build output
 - `docker-compose run --rm app npm test`: build and run the test suite
 - `docker-compose run --rm app npm run lint`: run ESLint
+- `docker-compose exec -T app npm run benchmark:workspace`: benchmark the workspace API against disposable D1 data
+- `docker-compose exec -T app npm run benchmark:dates`: benchmark calendar and routine date formatting
 - `docker-compose run --rm app npm run db:generate`: generate Drizzle migrations
   after schema changes
+
+For production React rendering benchmarks, install Chromium inside the running
+container, then run the browser benchmark. Repeat the installation after
+recreating the container.
+
+```bash
+docker-compose exec -T --user root -e PLAYWRIGHT_BROWSERS_PATH=/opt/playwright app npx playwright install --with-deps chromium
+docker-compose exec -T -e PLAYWRIGHT_BROWSERS_PATH=/opt/playwright app npm run benchmark
+```
+
+The browser benchmark uses synthetic, in-memory workspaces; the API benchmark
+uses disposable D1 storage. Neither touches saved development or production data.
+See [Performance measurements](docs/performance.md) for methodology, results,
+and before/after commands. Keep the normal app preview running through Compose
+with development bindings enabled.
 
 ## Learn More
 

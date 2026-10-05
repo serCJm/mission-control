@@ -83,6 +83,10 @@ const PIXELS_PER_MINUTE = 1;
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const SHORT_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WORKBENCH_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+const WEEK_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+const WEEK_YEAR_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+const DATE_NUMBER_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", day: "numeric" });
+const CURRENT_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: PLANNER_TIME_ZONE, hour: "numeric", minute: "numeric", hourCycle: "h23" });
 const FOCUSABLE_SELECTOR = 'button:not(:disabled), summary, select:not(:disabled), textarea:not(:disabled), input:not(:disabled):not([type="hidden"]), [tabindex]:not([tabindex="-1"]):not(:disabled)';
 const CALENDAR_BLOCK_FILL_LABELS: Record<CalendarBlockFill, string> = {
   sage: "Sage",
@@ -101,12 +105,11 @@ function resizedCalendarBlockEnd(startTime: string, endTime: string, deltaMinute
 }
 
 function formatWeekRange(dates: string[]) {
-  const format = (value: string, includeYear = false) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", ...(includeYear ? { year: "numeric" } : {}) }).format(new Date(`${value}T00:00:00Z`));
-  return `${format(dates[0])} – ${format(dates[6], true)}`;
+  return `${WEEK_DATE_FORMATTER.format(new Date(`${dates[0]}T00:00:00Z`))} – ${WEEK_YEAR_DATE_FORMATTER.format(new Date(`${dates[6]}T00:00:00Z`))}`;
 }
 
 function formatDateNumber(value: string) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", day: "numeric" }).format(new Date(`${value}T00:00:00Z`));
+  return DATE_NUMBER_FORMATTER.format(new Date(`${value}T00:00:00Z`));
 }
 
 function formatWorkbenchDate(value: string) {
@@ -694,7 +697,7 @@ export function Planner({ areas, projects, tasks, routines, planner, onChange, o
   const editingDeadlineTask = editor?.kind === "deadline" ? tasks.find((task) => task.id === editor.taskId) : undefined;
   const selectedArea = areas.find((area) => area.id === selectedAreaId) ?? areas[0];
   const scheduleOpen = expandedScheduleAreaId === selectedAreaId;
-  const currentTimeParts = new Intl.DateTimeFormat("en-US", { timeZone: PLANNER_TIME_ZONE, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date());
+  const currentTimeParts = CURRENT_TIME_FORMATTER.formatToParts(new Date());
   const currentMinutes = Number(currentTimeParts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(currentTimeParts.find((part) => part.type === "minute")?.value ?? 0);
   const blockTarget = useMemo(() => selectedArea ? plannerBlockTarget(planner, selectedArea.id, today, currentMinutes) as { occurrence: CalendarOccurrence & { kind: "area"; areaId: string }; active: boolean } | null : null, [currentMinutes, planner, selectedArea, today]);
   const automaticOccurrence = !editor ? blockTarget?.occurrence : undefined;

@@ -1,3 +1,5 @@
+import { dateFormatterForTimeZone } from "./date-time.mjs";
+
 export const PLANNER_TIME_ZONE = "America/Los_Angeles";
 export const PLANNER_SNAP_MINUTES = 15;
 export const MIN_CALENDAR_BLOCK_MINUTES = 30;
@@ -69,7 +71,7 @@ export function plannerDragSelection(anchorMinutes, pointerMinutes) {
 }
 
 export function plannerDateKey(date = new Date(), timeZone = PLANNER_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
+  const parts = dateFormatterForTimeZone(timeZone).formatToParts(date);
   const value = (type) => Number(parts.find((part) => part.type === type)?.value);
   return `${value("year")}-${String(value("month")).padStart(2, "0")}-${String(value("day")).padStart(2, "0")}`;
 }

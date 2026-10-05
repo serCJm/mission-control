@@ -7,6 +7,7 @@ import { AREA_ICON_OPTIONS, changedAreaPatch, normalizeArea } from "./area-schem
 import { AreaIcon, type AreaIconName } from "./area-icon";
 import { createNavigationTransition } from "./navigation-transition.mjs";
 import { openDateInputPicker } from "./task-date-control.mjs";
+import { dateFormatterForTimeZone } from "./date-time.mjs";
 import { normalizeProject, sortProjectNotes } from "./project-note-schema.mjs";
 import { formatPlannerTime, isPlannerDeadline, materializeCalendarBlocks, normalizePlanner, plannerDateKey, plannerWeekDates } from "./planner-schema.mjs";
 import { RowActionMenu } from "./row-action-menu";
@@ -118,7 +119,7 @@ function makeId(prefix: string) {
 }
 
 function formatProjectCompletionDate(completedAt: number) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "short", day: "numeric", year: "numeric" }).format(completedAt);
+  return PROJECT_COMPLETION_DATE_FORMATTER.format(completedAt);
 }
 
 function normalizeClientWorkspace(value: unknown): Workspace | null {
@@ -204,9 +205,12 @@ function taskScope(task: Task) {
 }
 
 const PROJECT_TIME_ZONE = "America/Los_Angeles";
+const PROJECT_DATE_FORMATTER = dateFormatterForTimeZone(PROJECT_TIME_ZONE);
+const PROJECT_COMPLETION_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, month: "short", day: "numeric", year: "numeric" });
+const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
 
 function projectDateParts(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: PROJECT_TIME_ZONE, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
+  const parts = PROJECT_DATE_FORMATTER.formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
   return { year: value("year"), month: value("month"), day: value("day") };
 }
@@ -220,7 +224,7 @@ function dueLabel(value: string) {
   if (distance < 0) return "Overdue";
   if (distance === 0) return "Due today";
   if (distance === 1) return "Due tomorrow";
-  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(due));
+  return SHORT_DATE_FORMATTER.format(new Date(due));
 }
 
 function routineSchedulesEqual(left: RoutineSchedule, right: RoutineSchedule) {
@@ -1508,7 +1512,9 @@ function TaskCopy({ task, renameTask, updateTask, removeTask, onTaskNoteEditorCh
     setNotesOpen(false);
   }
 
-  return <div className="task-copy" ref={listMotionRef}>
+  // The containing task list animates row movement; Presence owns disclosures.
+  // A second auto-animate controller here would poll every child of every task.
+  return <div className="task-copy">
     {cardActions && <div className="kanban-card-actions"><div className="planner-row-actions"><RowActionMenu title={task.title} vertical buttonRef={taskEditButton}>{(choose) => <>
       <button type="button" role="menuitem" onClick={() => choose(cardActions.complete)}><ConfirmIcon /><span>{task.status === "done" ? "Mark incomplete" : "Complete task"}</span></button>
       <button type="button" role="menuitem" onClick={() => choose(() => setTaskEditing(true), false)}><EditIcon /><span>Edit task</span></button>
@@ -1701,7 +1707,7 @@ function RoutineCard({ routine, now, actions, management }: { routine: Routine; 
     {checklist.length > 0 && <div className="routine-checklist" aria-label={`Checklist for ${routine.name}`}>{checklist.map((item) => session ? <label key={item.id}><input type="checkbox" checked={item.checked} onChange={() => actions.toggleRoutineChecklist(routine.id, item.id)} /><span>{item.text}</span></label> : <div key={item.id}><i aria-hidden="true" /><span>{item.text}</span></div>)}</div>}
     <div className="routine-card-foot"><span className="routine-consistency">{consistency.total ? <><strong>{consistency.completed} of {consistency.total}</strong> recent sessions</> : "No sessions yet"}</span><div className="routine-primary-actions" role="group" aria-label={`Actions for ${routine.name}`}><button type="button" className="routine-icon-button routine-complete" aria-label={completedToday ? `Mark ${routine.name} incomplete today` : `Complete ${routine.name} today`} title={completedToday ? "Mark incomplete" : "Complete today"} aria-pressed={completedToday} onClick={() => actions.setRoutineSessionStatus(routine.id, "completed")}><ConfirmIcon /></button>{session && <button type="button" className="routine-icon-button" aria-label={session.status === "skipped" ? `Mark ${routine.name} pending today` : `Skip ${routine.name} today`} title={session.status === "skipped" ? "Mark pending" : "Skip today"} aria-pressed={session.status === "skipped"} onClick={() => actions.setRoutineSessionStatus(routine.id, "skipped")}><SkipIcon /></button>}<button type="button" className="routine-icon-button" aria-label={`${reviewOpen ? "Close" : "Open"} review for ${routine.name}`} title={reviewOpen ? "Close review" : "Open review"} aria-expanded={reviewOpen} onClick={() => setReviewOpen((open) => !open)}><ReviewIcon /></button></div></div>
     {management && <div className="routine-management" role="group" aria-label={`Manage ${routine.name}`}><button type="button" className="routine-icon-button" aria-label={`${editing ? "Close editor for" : "Edit"} ${routine.name}`} title={editing ? "Close editor" : "Edit routine"} aria-expanded={editing} onClick={() => editing ? closeEditor() : setEditing(true)}><EditIcon /></button><button type="button" className="routine-icon-button" aria-label={`${paused ? "Resume" : "Pause"} ${routine.name}`} title={paused ? "Resume routine" : "Pause routine"} aria-pressed={paused} onClick={() => management.toggleRoutinePause(routine.id)}><PauseIcon paused={paused} /></button><button type="button" className="routine-icon-button" aria-label={`${vacationOpen ? "Close vacation dates for" : "Set vacation dates for"} ${routine.name}`} title={vacationOpen ? "Close vacation dates" : "Set vacation dates"} aria-expanded={vacationOpen} onClick={() => setVacationOpen((open) => !open)}><VacationIcon /></button><button type="button" className="routine-icon-button routine-delete" aria-label={`Delete ${routine.name}`} title="Delete routine" onClick={() => management.removeRoutine(routine.id)}><DeleteIcon /></button></div>}</div>
-    <Presence show={reviewOpen} className="motion-collapse">{() => <section className="routine-review" aria-label={`Recent sessions for ${routine.name}`}><div><h4>Recent sessions</h4><span>{consistency.total ? `${consistency.completed}/${consistency.total} complete` : "No history"}</span></div>{history.length ? <ol>{history.map((item) => { const checked = item.checklist.filter((step) => step.checked).length; return <li key={item.date}><time dateTime={item.date}>{new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(`${item.date}T00:00:00Z`))}</time><span className={`history-status status-${item.status}`}>{routineStatusLabel(item.status)}</span><small>{item.checklist.length ? `${checked}/${item.checklist.length} steps` : "No checklist"}</small></li>; })}</ol> : <p>No scheduled sessions have closed yet.</p>}</section>}</Presence>
+    <Presence show={reviewOpen} className="motion-collapse">{() => <section className="routine-review" aria-label={`Recent sessions for ${routine.name}`}><div><h4>Recent sessions</h4><span>{consistency.total ? `${consistency.completed}/${consistency.total} complete` : "No history"}</span></div>{history.length ? <ol>{history.map((item) => { const checked = item.checklist.filter((step) => step.checked).length; return <li key={item.date}><time dateTime={item.date}>{SHORT_DATE_FORMATTER.format(new Date(`${item.date}T00:00:00Z`))}</time><span className={`history-status status-${item.status}`}>{routineStatusLabel(item.status)}</span><small>{item.checklist.length ? `${checked}/${item.checklist.length} steps` : "No checklist"}</small></li>; })}</ol> : <p>No scheduled sessions have closed yet.</p>}</section>}</Presence>
     {management && <Presence show={vacationOpen} className="motion-collapse">{() => <section className="routine-vacation-panel"><form onSubmit={(event) => { event.preventDefault(); if (vacationEnd < vacationStart) return; management.addRoutineVacation(routine.id, vacationStart, vacationEnd); setVacationOpen(false); }}><label><span>Vacation starts</span><input type="date" min={today} value={vacationStart} onChange={(event) => { setVacationStart(event.target.value); if (vacationEnd < event.target.value) setVacationEnd(event.target.value); }} /></label><label><span>Vacation ends</span><input type="date" min={vacationStart} value={vacationEnd} onChange={(event) => setVacationEnd(event.target.value)} /></label><button disabled={vacationEnd < vacationStart}>Save vacation</button></form>{vacations.length > 0 && <ul>{vacations.map((item) => <li key={item.id}><span>{item.startsOn === item.endsOn ? item.startsOn : `${item.startsOn} – ${item.endsOn}`}</span><button type="button" onClick={() => management.removeRoutineVacation(routine.id, item.id)}>Remove</button></li>)}</ul>}</section>}</Presence>}
     {management && <Presence show={editing} className="motion-collapse">{() => <div className="routine-form-shell"><RoutineForm key={editorFormVersion} routine={routine} onCancel={closeEditor} onSave={(draft) => { management.updateRoutine(routine.id, draft); closeEditor(); }} /></div>}</Presence>}
   </article>;

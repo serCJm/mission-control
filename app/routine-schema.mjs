@@ -1,3 +1,5 @@
+import { dateTimeFormatterForTimeZone } from "./date-time.mjs";
+
 export const ROUTINE_TIME_ZONE = "America/Los_Angeles";
 export const ROUTINE_STATUSES = ["pending", "completed", "skipped", "missed"];
 export const ROUTINE_FINAL_STATUSES = ["completed", "skipped", "missed"];
@@ -22,15 +24,7 @@ export function isRoutineTime(value) {
 }
 
 export function routineDateParts(date = new Date(), timeZone = ROUTINE_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-  }).formatToParts(date);
+  const parts = dateTimeFormatterForTimeZone(timeZone).formatToParts(date);
   const value = (type) => Number(parts.find((part) => part.type === type)?.value);
   const year = value("year");
   const month = value("month");

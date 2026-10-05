@@ -1,12 +1,9 @@
+import { dateFormatterForTimeZone } from "./date-time.mjs";
+
 export const REVIEW_STEP_COUNT = 5;
 
 export function currentWeekKey(date = new Date(), timeZone = "America/Los_Angeles") {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).formatToParts(date);
+  const parts = dateFormatterForTimeZone(timeZone).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const localDate = new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
   const weekday = localDate.getUTCDay() || 7;
